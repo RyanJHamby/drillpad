@@ -14,7 +14,8 @@ Everything runs on your own machine and your data stays there.
 
 ## Quick start
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/), on **macOS or Linux** (the runner uses POSIX resource limits; on Windows use WSL).
+C++ and Rust problems also need `clang++` and `rustc` on your PATH; without them those problems are skipped and everything else works.
 
 ```bash
 uv sync

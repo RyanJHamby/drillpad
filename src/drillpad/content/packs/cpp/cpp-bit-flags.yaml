@@ -208,7 +208,7 @@ tests:
   - duplicate
   code: |
     CHECK_EQ(popcount(0xAAAAAAAAAAAAAAAAull), 32);
-    for (u64 x : {u64{0}, ~u64{0}, 0xAAAAAAAAAAAAAAAAull, 0x5555555555555555ull, 0x0123456789ABCDEFull, 0xFFFFFFFF00000000ull}) {
+    for (u64 x : std::initializer_list<u64>{u64{0}, ~u64{0}, 0xAAAAAAAAAAAAAAAAull, 0x5555555555555555ull, 0x0123456789ABCDEFull, 0xFFFFFFFF00000000ull}) {
         int naive = 0;
         for (unsigned i = 0; i < 64; i++) naive += test_bit(x, i) ? 1 : 0;
         CHECK_EQ(popcount(x), naive);

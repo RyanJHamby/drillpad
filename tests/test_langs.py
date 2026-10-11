@@ -12,7 +12,7 @@ def cpp_problem():
         TestCase("adds", "CHECK_EQ(add(2, 3), 5);"),
         TestCase("fails", "CHECK_EQ(add(2, 2), 5);"),
         TestCase("crashes", "int* p = nullptr; volatile int x = *p; (void)x;"),
-        TestCase("hangs", "while (true) {}"),
+        TestCase("hangs", "volatile bool spin = true; while (spin) {}"),  # volatile: an empty infinite loop may legally be optimized away
         TestCase("throws", "throw std::runtime_error(\"boom\");"),
     ]
     return Problem(id="cpp-synth", title="t", statement="", starter="", tests=tests, language="cpp")

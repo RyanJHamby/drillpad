@@ -12,11 +12,13 @@ from drillpad.core.models import Problem, RunResult, TestCase, TestResult
 
 # Self-run only: rlimits + timeout + scrubbed env. This does NOT block network access;
 # a hosted/consumer version must run in a container or microVM instead.
-MEM_BYTES = 512 * 1024 * 1024
+MEM_BYTES = 1024 * 1024 * 1024  # Linux only (RLIMIT_AS is not enforced on macOS); roomy because each thread reserves stack and arena space
+ENV = {"PATH": "/usr/bin:/bin", "MALLOC_ARENA_MAX": "2"}  # glibc reserves ~64 MB of address space per thread arena otherwise
 CPU_SECONDS = 10
 
 HARNESS = """
-import json, sys, traceback
+import json, sys, threading, traceback
+threading.stack_size(1 << 20)  # 1 MiB thread stacks (Linux default is 8 MiB) so concurrency problems fit under the address-space limit
 _results = []
 def _run(name, hidden, fn, stage=0):
     try:
@@ -106,7 +108,7 @@ def run(code: str, problem: Problem, timeout_s: float = 10.0) -> RunResult:
             proc = subprocess.run(
                 [sys.executable, "-I", str(script)],
                 cwd=tmp,
-                env={"PATH": "/usr/bin:/bin"},
+                env=ENV,
                 capture_output=True,
                 text=True,
                 stdin=subprocess.DEVNULL,
@@ -132,7 +134,7 @@ def run_scratch(code: str, stdin: str = "", timeout_s: float = 10.0, prelude: st
         start = time.monotonic()
         try:
             proc = subprocess.run(
-                [sys.executable, "-I", str(script)], cwd=tmp, env={"PATH": "/usr/bin:/bin"}, input=stdin,
+                [sys.executable, "-I", str(script)], cwd=tmp, env=ENV, input=stdin,
                 capture_output=True, text=True, timeout=timeout_s, preexec_fn=_limits, check=False,
             )
         except subprocess.TimeoutExpired as e:

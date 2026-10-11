@@ -112,12 +112,29 @@ def test_real_manifest_withholds_personal_material():
             assert not [f for f in shipped if pc.matches(f, [pattern])], pattern
 
 
+def test_strip_modules_from_paths_yaml_removes_stage_entries_and_requires(tmp_path):
+    f = tmp_path / "paths.yaml"
+    f.write_text("stages:\n  - id: s1\n    modules:\n      - keep-a\n      - secret-mod\n      - keep-b\n"
+                 "requires:\n  keep-b:\n    - keep-a\n  secret-mod:\n    - keep-a\n    - keep-b\npaths: {}\n")
+    pc.strip_modules_from_paths(f, {"secret-mod"})
+    text = f.read_text()
+    assert "secret-mod" not in text
+    loaded = pc.yaml.safe_load(text)
+    assert loaded["stages"][0]["modules"] == ["keep-a", "keep-b"] and loaded["requires"] == {"keep-b": ["keep-a"]}
+
+
+def test_withheld_modules_are_those_with_no_shipped_file():
+    files = ["src/drillpad/content/modules/a/module.yaml", "src/drillpad/content/modules/b/module.yaml",
+             "src/drillpad/content/modules/b/lessons/x.md"]
+    pairs = [(files[0], files[0])]
+    assert pc.withheld_modules(files, pairs) == {"b"}
+
+
 @needs_private_repo
-def test_export_strips_withheld_modules_from_paths_yaml(tmp_path):
+def test_real_export_strips_whatever_it_withholds_from_paths_yaml(tmp_path):
     files = pc.tracked_files()
     pairs, _ = pc.plan(files, REAL)
     gone = pc.withheld_modules(files, pairs)
-    assert gone, "the private repo withholds at least one module"
     pc.materialize(tmp_path, pairs, files)
     shipped_paths = (tmp_path / pc.PATHS_YAML).read_text()
     assert not any(m in shipped_paths for m in gone)
