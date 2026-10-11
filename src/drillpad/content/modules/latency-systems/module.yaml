@@ -1,0 +1,35 @@
+id: latency-systems
+title: "Latency Architecture: Order Books & Temporal Joins"
+language: systems
+description: "Sub-microsecond order matching and point-in-time correct temporal joins. Lock-free queues, memory pools, streaming alignment with Arrow. Interview prep for infrastructure roles (sandboxing and inference context)."
+lessons:
+- id: 01-latency-fundamentals
+  title: "Latency fundamentals: what the numbers mean"
+  practice:
+  - leetcode-two-sum
+  - leetcode-best-time-buy-sell-stock
+- id: 02-order-book-architecture
+  title: "Order book engine: data structures and lock-free ingestion"
+  practice:
+  - cpp-spsc-ring-buffer
+  - cpp-spinlock-memory-order
+- id: 03-memory-pools-and-allocation
+  title: "Memory pools, RAII and latency predictability"
+  practice:
+  - cpp-arena-allocator
+  - cpp-vector-from-scratch
+- id: 04-temporal-joins
+  title: "Temporal joins: as-of alignment and watermarks"
+  practice:
+  - leetcode-merge-sorted-array
+  - leetcode-median-two-sorted-arrays
+- id: 05-profiling-for-latency
+  title: "Profiling for latency: flame graphs and tail distribution"
+  practice:
+  - leetcode-two-sum
+- id: 06-hedging-and-tail-at-scale
+  title: "Hedging & Tail-at-Scale: Backup Requests for P99 Latency"
+  practice: []
+- id: 07-spsc-ring-buffer
+  title: "SPSC Ring Buffer: Lock-Free IPC for Latency-Critical Systems"
+  practice: []

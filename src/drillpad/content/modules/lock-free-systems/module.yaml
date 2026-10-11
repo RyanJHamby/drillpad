@@ -1,0 +1,14 @@
+id: lock-free-systems
+title: "Lock-Free Systems: CAS, Memory Barriers & Correctness"
+language: systems
+description: "Compare-and-swap (CAS) primitives, memory barriers (acquire/release/sequential consistency), ABA problem, lock-free queues and stacks. Sub-microsecond trading systems."
+lessons:
+- id: 01-compare-and-swap
+  title: "Compare-and-Swap (CAS): The Foundation of Lock-Free Programming"
+  practice: []
+- id: 02-memory-barriers
+  title: "Memory Barriers: Acquire, Release, Sequential Consistency"
+  practice: []
+- id: 03-lock-free-queues
+  title: "Lock-Free Queues & Stacks: SPSC, MPMC, ABA Problem"
+  practice: []

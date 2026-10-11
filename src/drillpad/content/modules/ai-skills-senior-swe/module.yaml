@@ -1,0 +1,168 @@
+id: ai-skills-senior-swe
+title: AI Skills for Senior SWEs
+language: systems
+description: >
+  12-lesson deep dive into AI systems engineering. From mental models and agent architecture
+  through production patterns (MCP, safety, RAG) to advanced systems skills (distributed training,
+  unsafe code, team-scale adoption). Interview prep for trading, AI-infra, and systems roles.
+difficulty: advanced
+estimated_duration_minutes: 960
+target_roles:
+  - AI Infrastructure Engineer
+  - Systems Engineer
+  - Trading Systems Engineer
+  - AI Lab Research Engineer
+
+lessons:
+  - id: 01-agent-architecture-tier-ladder
+    title: Agent Architecture - The Tier Ladder
+    description: Know when NOT to use agents. Single call vs. workflow vs. agent vs. multi-agent.
+    estimated_duration_minutes: 60
+    status: complete
+    order: 1
+
+  - id: 02-model-selection-right-sizing
+    title: Model Selection and Right-Sizing
+    description: Decision tree for which model, effort levels, commodity tier patterns, cost reasoning.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 2
+
+  - id: 03-context-memory-prompt-caching
+    title: Context, Memory, and Prompt Caching
+    description: Making agents fast and cheap. Project instructions, memory files, caching economics.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 3
+
+  - id: 04-evals-observability-production
+    title: Evals, Observability, and Cost Control
+    description: Why evals matter more than model choice. Minimum viable eval suite, cost modeling, observability.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 4
+
+  - id: 05-spec-first-systems-code
+    title: Spec-First Development for Systems Code
+    description: Writing specs agents can't misinterpret. Race conditions, invariants, failure modes.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 5
+
+  - id: 06-building-judgment-under-uncertainty
+    title: Building Judgment - Pattern Recognition and Calibration
+    description: Fluent-but-wrong detection, domain-specific blindness, durable skills, predict-compare-revise.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 6
+
+  - id: 07-mcp-tool-design
+    title: MCP (Model Context Protocol) - Designing Tools Agents Can Use
+    description: Standard for agent tool access. Tool descriptions, resources, credentialing, versioning. Table-stakes for AI-infra.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 7
+
+  - id: 08-ai-safety-security
+    title: AI Safety & Security - Prompt Injection, Least-Privilege, Credentials
+    description: Untrusted input, isolation boundaries, tool escalation risks, credential handling patterns.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 8
+
+  - id: 09-unsafe-rust-review-agents
+    title: Unsafe Rust Review - Agent-Generated Code in Systems Context
+    description: Reviewing agent-generated unsafe blocks. Red flags, invariant verification, FFI safety. Systems-specific skill.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 9
+
+  - id: 10-distributed-training
+    title: Distributed Training Infrastructure - FSDP, ZeRO, Tensor Parallelism
+    description: Training parallelism strategies. Memory vs. compute vs. communication tradeoffs. AI-lab interview essential.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 10
+
+  - id: 11-rag-vector-databases
+    title: RAG and Vector Databases - When to Use, When to Avoid, Hybrid Search
+    description: RAG vs. long-context stuffing with caching. BM25 + semantic hybrid search. Production decision tree.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 11
+
+  - id: 12-scaling-review-meetings
+    title: Scaling Review & Meetings Without Firefighting - Team-Scale AI Adoption
+    description: Tiered review depth, automation gates, async decisions. Structural solutions to agent-driven PR volume.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 12
+
+  - id: 13-training-infra-checkpointing-recovery
+    title: Distributed Training - Checkpointing and Failure Recovery
+    description: Checkpoint formats, recovery strategies, cost-benefit analysis. Restart from step N, not step 0.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 13
+
+  - id: 14-agent-runtime-reliability
+    title: Agent Runtime Reliability - Durable Workflows, Idempotency, Tool Failure Handling
+    description: Tool idempotency, durable workflow state, sandbox isolation, permission models. Survive partial failures.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 14
+
+  - id: 15-retrieval-quality-and-evals
+    title: Retrieval Quality and Evals - Hybrid Search, Reranking, Metrics
+    description: BM25 + dense search, reranking, NDCG/MRR metrics, quality gates. Retrieval often the bottleneck.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 15
+
+interview_patterns:
+  - tier-selection-against-alternatives
+  - model-selection-cost-reasoning
+  - context-latency-tradeoffs
+  - eval-driven-debugging
+  - race-condition-in-agent-code
+  - judgment-under-incomplete-info
+
+trading_prep:
+  - latency-budget-aware-model-selection
+  - pnl-calculation-correctness
+  - order-processing-concurrency
+  - failure-mode-analysis-for-critical-paths
+
+ai_infra_prep:
+  - inference-cost-modeling
+  - distributed-systems-correctness
+  - spec-driven-development
+  - agent-orchestration-patterns
+
+systems_prep:
+  - unsafe-code-review
+  - invariant-specification
+  - toctou-race-detection
+  - judgment-calibration
+
+tags:
+  - agents
+  - model-selection
+  - context-management
+  - evals
+  - observability
+  - cost-optimization
+  - spec-first-development
+  - judgment
+  - systems-thinking
+  - production-patterns
+  - mcp-tool-design
+  - ai-safety-security
+  - prompt-injection
+  - unsafe-rust
+  - distributed-training
+  - rag-retrieval
+  - vector-databases
+  - team-scaling
+  - code-review
+  - team-coordination

@@ -1,0 +1,50 @@
+id: failure-diagnosis-methodology
+title: "Failure Diagnosis: Root Cause Analysis Under Uncertainty"
+language: systems
+description: "Systematic methodology for diagnosing failures with incomplete data: latency spikes (lock contention vs GC vs network), memory vs CPU vs I/O contention, cascading failure detection, graceful degradation playbooks. Interview scenario: 'System is slow—diagnose in 5 min.'"
+lessons:
+- id: 01-latency-spike-methodology
+  title: "Latency Spike Root Cause: Lock Contention vs GC vs Network"
+  practice: []
+- id: 02-resource-contention-triage
+  title: "Resource Contention Triage: CPU vs Memory vs I/O"
+  practice: []
+- id: 03-cascading-failure-detection
+  title: "Cascading Failure Detection: When Queue Buildup = Collapse"
+  practice: []
+- id: 04-graceful-degradation-playbook
+  title: "Graceful Degradation: What to Degrade and in What Order"
+  practice: []
+- id: 05-the-scientific-method-of-debugging
+  title: "The Scientific Method: Hypothesis Elimination and Debug Logs"
+  practice: []
+- id: 06-reproduce-and-minimize
+  title: "Reproduce and Minimize: From Flaky to Deterministic"
+  practice: []
+- id: 07-bisection-and-narrowing
+  title: "Bisection and Narrowing: Binary Search Over Commits, Config, Data"
+  practice: []
+- id: 08-reading-unfamiliar-code-and-systems
+  title: "Reading Unfamiliar Code: The Cold-Start Interview"
+  practice: []
+- id: 09-debugging-tools-by-layer
+  title: "Debugging Tools by Layer: Choosing the Right Instrument"
+  practice: []
+- id: 10-concurrency-and-heisenbugs
+  title: "Concurrency and Heisenbugs: Non-Determinism and Thread Sanitizers"
+  practice: []
+- id: 11-distributed-and-production-debugging
+  title: "Distributed and Production Debugging: Tracing and Rollback"
+  practice: []
+- id: 12-data-and-ml-system-debugging
+  title: "Data and ML System Debugging: Silent Bugs and Non-Determinism"
+  practice: []
+- id: 13-live-debugging-interview-rounds
+  title: "Live Debugging Interview Rounds: The Protocol and Common Bugs"
+  practice: []
+- id: 14-debugging-with-ai-tools
+  title: "Debugging with AI Tools: The Partner, Not the Replacement"
+  practice: []
+- id: 15-from-bug-to-prevention
+  title: "From Bug to Prevention: Root Cause, Tests, and Guardrails"
+  practice: []

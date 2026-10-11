@@ -1,0 +1,11 @@
+id: distributed-systems
+title: "Distributed Systems Fundamentals"
+language: systems
+description: "Consensus algorithms (Raft, Paxos), network fundamentals (TCP, latency, packet loss). Foundation for all distributed system design."
+lessons:
+- id: 01-consensus-algorithms
+  title: "Consensus Algorithms: Raft, Paxos, Quorum Voting"
+  practice: []
+- id: 02-network-fundamentals
+  title: "Network Fundamentals: Latency, Packet Loss, Congestion"
+  practice: []

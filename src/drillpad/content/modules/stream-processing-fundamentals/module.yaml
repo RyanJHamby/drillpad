@@ -1,0 +1,45 @@
+id: stream-processing-fundamentals
+title: Stream Processing & Event Systems - Kafka, Windowing, Stateful Pipelines
+language: systems
+description: >
+  Stream processing fundamentals for data pipelines and real-time systems.
+  Kafka architecture, partitioning, consumer groups. Windowing strategies, stateful processing,
+  late data handling. Why streams matter for training data prep, real-time inference, event-driven architectures.
+difficulty: advanced
+estimated_duration_minutes: 270
+target_roles:
+  - Data Engineer
+  - ML Infrastructure Engineer
+  - Systems Engineer
+  - Real-Time Systems Engineer
+
+lessons:
+  - id: 01-kafka-fundamentals
+    title: Kafka Fundamentals - Topics, Partitions, Consumer Groups
+    description: Kafka architecture, how data flows, partitioning strategy, offset management.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-stateful-processing-windowing
+    title: Stateful Processing & Windowing - Aggregations, Late Data
+    description: Stateful operators, windowing strategies (tumbling, sliding), handling late arrivals.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+  - id: 03-stream-processing-patterns
+    title: Stream Processing Patterns - Exactly-Once, Backpressure, Scaling
+    description: Exactly-once semantics, backpressure handling, scaling stateful streams, monitoring.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 3
+
+tags:
+  - stream-processing
+  - kafka
+  - event-systems
+  - data-pipelines
+  - real-time
+  - windowing
+  - exactly-once

@@ -1,0 +1,8 @@
+id: benchmarking-methodology
+title: "Benchmarking: Statistical Rigor & Avoiding Pitfalls"
+language: systems
+description: "Warmup runs (discard cold cache/JIT), run N times (20-100), report percentiles (P50/P99/P99.9), avoid cherry-picking, confidence intervals. Measurement artifacts, CPU scaling, cache pollution. How to prove your optimization claim."
+lessons:
+- id: 01-statistical-rigor
+  title: "Statistical Rigor: Warmup, Percentiles, Confidence Intervals"
+  practice: []

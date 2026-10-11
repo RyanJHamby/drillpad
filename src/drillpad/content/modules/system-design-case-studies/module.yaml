@@ -1,0 +1,25 @@
+id: system-design-case-studies
+title: "System Design Case Studies: Archetypes & Prototypical Problems"
+language: systems
+description: "Canonical system designs firms actually test: order books (trading), inference servers (AI), payment adapters (fintech), caching & sharding (general SWE)."
+lessons:
+- id: 01-trading-order-book
+  title: "Trading: Order Book Matching Engine (Sub-Microsecond Latency)"
+  practice:
+  - cpp-order-book
+  - leetcode-design-stock-market
+- id: 02-ai-inference-server
+  title: "AI Infrastructure: Inference Server (Batching, SLO, Cost Optimization)"
+  practice:
+  - system-design-inference-llm
+  - python-request-batching
+- id: 03-payments-adapter
+  title: "Payments: Payment Adapter (Exactly-Once, Idempotency, Reconciliation)"
+  practice:
+  - system-design-payment-system
+  - leetcode-design-transaction-system
+- id: 04-general-swe-patterns
+  title: "General SWE: Caching, Sharding, Replication (Scaling & Consistency)"
+  practice:
+  - system-design-distributed-cache
+  - leetcode-lru-cache

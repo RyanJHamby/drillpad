@@ -1,0 +1,21 @@
+{
+  "id": "system-design-expanded",
+  "title": "System Design: Extended Case Studies",
+  "description": "Real-time notifications, search/indexing, feed ranking. Covers common interview problems beyond trading/inference/payments.",
+  "language": "systems",
+  "lessons": [
+    {
+      "id": "01-notification-system",
+      "title": "Real-Time Notification System (Push, Email, In-App)"
+    },
+    {
+      "id": "02-search-indexing",
+      "title": "Search & Log Indexing (Distributed, Real-Time)"
+    },
+    {
+      "id": "03-feed-ranking",
+      "title": "Feed Ranking & Recommendation (Personalization, Scale)"
+    }
+  ],
+  "practice": []
+}

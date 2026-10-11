@@ -1,0 +1,46 @@
+id: distributed-transactions
+title: Distributed Transactions - Coordinating Changes Across Services
+language: systems
+description: >
+  How systems coordinate changes across multiple databases or services.
+  Two-phase commit (2PC) vs sagas vs event sourcing. ACID properties in distributed settings.
+  Compensation logic, failure scenarios, and why dual-write fails. Outbox pattern for correctness.
+difficulty: advanced
+estimated_duration_minutes: 180
+target_roles:
+  - Backend Engineer
+  - Systems Engineer
+  - Infrastructure Engineer
+  - Distributed Systems Engineer
+
+lessons:
+  - id: 01-distributed-transactions-2pc-sagas
+    title: "2PC & Sagas: Coordinating Multi-Service Transactions"
+    description: Two-phase commit vs saga orchestration. ACID in distributed systems. Compensation logic and failure modes.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-outbox-and-dual-write
+    title: "Outbox Pattern & Why Dual-Write Fails: Guaranteeing Exactly-Once"
+    description: The outbox pattern, dual-write failures, idempotent consumers, event sourcing as an alternative.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+  - id: 03-durable-execution-and-workflow-engines
+    title: "Durable Execution & Workflow Engines: Temporal-Style Orchestration"
+    description: Event-sourced workflows, deterministic replay, idempotency, versioning. Long-running saga execution with crash recovery.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 3
+
+tags:
+  - distributed-systems
+  - transactions
+  - saga
+  - 2pc
+  - outbox
+  - consistency
+  - microservices
+  - event-sourcing

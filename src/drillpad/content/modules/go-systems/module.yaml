@@ -1,0 +1,36 @@
+id: go-systems
+title: "Go for Systems: Goroutines, Channels, Context, GC, Common Gotchas"
+language: systems
+description: "Go runtime: goroutines and the scheduler, M:N threading, channels vs mutexes, context cancellation. Memory management: GC pauses, allocation efficiency. Common pitfalls: loop variable capture, nil interface, goroutine leaks, race conditions. Production systems in Go."
+difficulty: advanced
+estimated_duration_minutes: 270
+target_roles:
+  - Go Systems Engineer
+  - Infrastructure Engineer
+  - Backend Engineer
+  - Systems Engineer
+
+lessons:
+- id: 01-goroutines-and-scheduler
+  title: "Goroutines & the Go Scheduler: M:N Threading, Context Switching, Work Stealing"
+  estimated_duration_minutes: 90
+  status: complete
+  order: 1
+- id: 02-channels-and-concurrency
+  title: "Channels vs Mutexes: When to Use Each, Deadlocks, Blocking Semantics"
+  estimated_duration_minutes: 90
+  status: complete
+  order: 2
+- id: 03-context-gc-and-gotchas
+  title: "Context Cancellation, GC Tuning, Allocation, and Common Gotchas"
+  estimated_duration_minutes: 90
+  status: complete
+  order: 3
+
+tags:
+  - golang
+  - concurrency
+  - systems-programming
+  - goroutines
+  - channels
+  - memory-management

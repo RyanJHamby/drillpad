@@ -1,0 +1,14 @@
+id: infra-primitives-case-studies
+title: "Infrastructure Primitives: Case Studies"
+language: systems
+description: "Deep dives into critical infrastructure components: key-value stores, distributed coordination, job scheduling, workflow engines. How to build the pieces that other systems depend on."
+lessons:
+- id: 01-kv-store-design
+  title: "Key-Value Store Design: Partitioning, Replication, Consistency"
+  practice: []
+- id: 02-distributed-lock-and-coordination
+  title: "Distributed Lock & Coordination Service: Leases, Fencing, etcd-style"
+  practice: []
+- id: 03-job-scheduler-and-workflow-orchestrator
+  title: "Job Scheduler & Workflow Orchestrator: Queues, DAGs, Exactly-Once, Recovery"
+  practice: []

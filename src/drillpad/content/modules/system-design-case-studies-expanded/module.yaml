@@ -1,0 +1,32 @@
+id: system-design-case-studies-expanded
+title: "System Design Case Studies: Notifications, Search, Feed"
+language: systems
+description: "Notification system (push, email, in-app), distributed search indexing (1B+ documents), feed ranking (personalization, ML, cold start). AWS interview scale."
+lessons:
+- id: 01-notification-system
+  title: "Notification System: Multi-Channel Real-Time Delivery"
+  practice: []
+- id: 02-search-indexing
+  title: "Distributed Search & Indexing: Elasticsearch-Scale"
+  practice: []
+- id: 03-feed-ranking
+  title: "Feed Ranking: Personalization, ML, Cold Start Problem"
+  practice: []
+- id: 04-url-shortener-and-id-generation
+  title: "URL Shortener & Unique ID Generation: Snowflake, Collisions, Ordering"
+  practice: []
+- id: 05-chat-and-messaging
+  title: "Chat & Messaging: Delivery Semantics, Ordering, Presence, Offline Sync"
+  practice: []
+- id: 06-typeahead-autocomplete
+  title: "Typeahead & Autocomplete: Trie, Ranking, Sharding, Updates"
+  practice: []
+- id: 07-web-crawler
+  title: "Web Crawler: Frontier, Politeness, Dedup, Failure Recovery"
+  practice: []
+- id: 08-distributed-file-storage
+  title: "Distributed File Storage: Chunking, Sync, Dedup, Versioning"
+  practice: []
+- id: 09-geospatial-and-ride-hailing
+  title: "Geospatial & Ride-Hailing: S2 Cells, Matching, Surge Pricing"
+  practice: []

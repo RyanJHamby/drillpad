@@ -1,0 +1,228 @@
+# Learning Path Configuration
+# Defines stages, prerequisites, and role-specific paths for DrillPad curriculum
+# Every module on disk must appear in exactly one stage (tests/test_paths.py enforces it).
+# Add new modules with `python scripts/course.py new-module`, then run `python scripts/course.py docs`.
+
+stages:
+  - id: "0-thinking-tools"
+    title: "Thinking Tools: Frameworks for Problem Solving"
+    description: "First-principles reasoning, design methodology, cost modeling. Foundation for all domains."
+    modules:
+      - reasoning-under-constraints
+      - systems-design-process
+      - design-judgment-tradeoffs
+      - benchmarking-methodology
+
+  - id: "1-the-machine"
+    title: "The Machine: Hardware, Concurrency, Data Structures"
+    description: "CPU, memory, cache, threading, language runtime. Single-node foundations."
+    modules:
+      - os-fundamentals
+      - concurrency-fundamentals
+      - data-structures-production
+      - network-fundamentals-advanced
+      - network-protocols
+      - profiling-bottleneck-finding
+      - performance-engineering
+      - cpp-essentials
+      - modern-cpp-evolution
+      - memory-optimization
+      - lock-free-systems
+      - python-ai-infra
+      - go-systems
+      - rust-systems
+
+  - id: "2-single-node-services"
+    title: "Single-Node Services: Databases, Caching, APIs"
+    description: "Persistent storage, in-memory caching, API design, security. Local systems at scale."
+    modules:
+      - database-fundamentals
+      - caching-strategies
+      - api-design-fundamentals
+      - message-queues
+      - security-fundamentals
+      - cost-modeling-ai-inference
+
+  - id: "3-distributed-core"
+    title: "Distributed Core: Consensus, Replication, Fault Tolerance"
+    description: "Distributed systems fundamentals. Consensus, quorums, replication, reliability across failure."
+    modules:
+      - distributed-systems
+      - consistency-models-fundamentals
+      - consensus-algorithms
+      - distributed-transactions
+      - exactly-once-semantics
+      - failure-modes-resilience
+      - fault-tolerance
+      - load-balancing
+      - stream-processing-fundamentals
+
+  - id: "4-operating-it"
+    title: "Operating It: Observability, Testing, Deployment"
+    description: "Production operations. Monitoring, testing distributed systems, incident response, infrastructure."
+    modules:
+      - observability-debugging
+      - testing-observability-fundamentals
+      - testing-distributed-systems
+      - deployment-and-incidents
+      - failure-diagnosis-methodology
+
+  - id: "5-design-synthesis"
+    title: "Design Synthesis: System Design Case Studies"
+    description: "Applying all fundamentals. Real-world architecture patterns, tradeoffs, at scale."
+    modules:
+      - system-design-case-studies
+      - system-design-case-studies-expanded
+      - infra-primitives-case-studies
+      - aws-services-for-design
+      - design-communication-under-pressure
+
+  - id: "6-ai-infrastructure"
+    title: "AI Infrastructure: Models, Serving, Pipelines"
+    description: "ML systems end-to-end. Training, inference, data pipelines, evaluation, platforms."
+    modules:
+      - ml-training-fundamentals
+      - gpu-fundamentals
+      - llm-inference-systems
+      - distributed-inference
+      - ai-platform-orchestration
+      - ml-evaluation-metrics
+      - data-pipeline-architecture
+      - data-quality-validation
+      - feature-stores
+      - ai-skills-senior-swe
+
+  - id: "7-low-latency-trading"
+    title: "Low-Latency & Trading Systems: Specialized Domains"
+    description: "High-frequency trading systems, matching engines, market data. Microsecond precision."
+    modules:
+      - trading-and-market-data
+      - latency-systems
+
+  - id: "8-staff-founder"
+    title: "Staff & Founder: Leadership & Business"
+    description: "Senior leadership, organizational skills, founding skills. Career and company building."
+    modules:
+      - staff-engineering
+      - founder-fundamentals
+      - founder-engineering
+
+  - id: "9-always-on"
+    title: "Always On: Interview Mechanics & AI-Augmented Work"
+    description: "Not a final stage: use alongside every other stage. Interview execution, timed mocks, and working with AI tooling."
+    modules:
+      - interview-execution-playbook
+      - mock-interview-scenarios
+      - ai-augmented-engineering
+
+# Prerequisite edges: module -> list of required modules
+requires:
+  consensus-algorithms:
+    - consistency-models-fundamentals
+  distributed-transactions:
+    - distributed-systems
+    - consistency-models-fundamentals
+  exactly-once-semantics:
+    - distributed-transactions
+    - stream-processing-fundamentals
+  failure-modes-resilience:
+    - distributed-systems
+  fault-tolerance:
+    - failure-modes-resilience
+  load-balancing:
+    - distributed-systems
+    - network-fundamentals-advanced
+  testing-distributed-systems:
+    - testing-observability-fundamentals
+    - distributed-systems
+  deployment-and-incidents:
+    - observability-debugging
+  system-design-case-studies-expanded:
+    - system-design-case-studies
+  distributed-inference:
+    - llm-inference-systems
+    - distributed-systems
+  ai-platform-orchestration:
+    - gpu-fundamentals
+  ai-skills-senior-swe:
+    - llm-inference-systems
+    - distributed-inference
+  data-pipeline-architecture:
+    - database-fundamentals
+    - distributed-systems
+  data-quality-validation:
+    - data-pipeline-architecture
+  feature-stores:
+    - data-pipeline-architecture
+    - ml-evaluation-metrics
+  trading-and-market-data:
+    - distributed-systems
+    - latency-systems
+  infra-primitives-case-studies:
+    - consensus-algorithms
+    - consistency-models-fundamentals
+  aws-services-for-design:
+    - database-fundamentals
+    - message-queues
+  founder-engineering:
+    - security-fundamentals
+    - api-design-fundamentals
+  mock-interview-scenarios:
+    - system-design-case-studies
+
+# Role-specific learning paths
+paths:
+  ai-infra:
+    stages:
+      - "0-thinking-tools"
+      - "1-the-machine"
+      - "2-single-node-services"
+      - "3-distributed-core"
+      - "4-operating-it"
+      - "5-design-synthesis"
+      - "6-ai-infrastructure"
+      - "9-always-on"
+    extra_modules: []
+
+  trading:
+    stages:
+      - "0-thinking-tools"
+      - "1-the-machine"
+      - "2-single-node-services"
+      - "3-distributed-core"
+      - "4-operating-it"
+      - "5-design-synthesis"
+      - "7-low-latency-trading"
+      - "9-always-on"
+    extra_modules:
+      - gpu-fundamentals
+      - cost-modeling-ai-inference
+
+  staff-founder:
+    stages:
+      - "0-thinking-tools"
+      - "3-distributed-core"
+      - "4-operating-it"
+      - "5-design-synthesis"
+      - "8-staff-founder"
+      - "9-always-on"
+    extra_modules:
+      - api-design-fundamentals
+      - database-fundamentals
+      - deployment-and-incidents
+
+  aws-sde2:
+    stages:
+      - "0-thinking-tools"
+      - "2-single-node-services"
+      - "3-distributed-core"
+      - "4-operating-it"
+      - "5-design-synthesis"
+      - "9-always-on"
+    extra_modules:
+      - performance-engineering
+      - os-fundamentals
+
+# Modules shown in every path (foundational)
+always:
+  - interview-execution-playbook

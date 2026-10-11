@@ -1,0 +1,17 @@
+{
+  "id": "distributed-systems",
+  "title": "Distributed Systems: Consensus, Network Fundamentals",
+  "description": "Consensus algorithms (Raft, Paxos), network layer understanding (TCP, latency, packet loss). Critical for replication, quorum voting, and ultra-low-latency systems.",
+  "language": "systems",
+  "lessons": [
+    {
+      "id": "01-consensus-algorithms",
+      "title": "Consensus Algorithms (Raft, Paxos, Quorum Voting)"
+    },
+    {
+      "id": "02-network-fundamentals",
+      "title": "Network Fundamentals (TCP, Latency, Packet Loss, Congestion)"
+    }
+  ],
+  "practice": []
+}

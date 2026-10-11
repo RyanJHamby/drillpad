@@ -1,0 +1,20 @@
+id: api-design-fundamentals
+title: "API Design: REST vs gRPC vs GraphQL, Idempotency, Versioning"
+language: systems
+description: "REST, gRPC, GraphQL: tradeoffs. Idempotency keys, versioning, rate limiting. Pagination, filtering, error handling standards. Protocol design decisions. Common mistakes."
+lessons:
+- id: 01-rest-grpc-graphql
+  title: "REST vs gRPC vs GraphQL: When to Use Each"
+  practice: []
+- id: 02-idempotency-versioning
+  title: "Idempotency Keys & Versioning: Handling Retries & Evolution"
+  practice: []
+- id: 03-pagination-filtering
+  title: "Pagination, Filtering, Rate Limiting: Common Patterns"
+  practice: []
+- id: 04-error-handling
+  title: "Error Handling Standards: Status Codes, Messages, Retry Semantics"
+  practice: []
+- id: 05-grpc-protobuf-and-compatibility
+  title: "gRPC & Protocol Buffers: Wire Format, Schema Evolution, Performance"
+  practice: []

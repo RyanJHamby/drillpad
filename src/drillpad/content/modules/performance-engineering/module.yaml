@@ -1,0 +1,14 @@
+id: performance-engineering
+title: "Performance Engineering: Profiling, Benchmarking & Data Structures"
+language: systems
+description: "Profiling tools (perf, flamegraph, TSAN), benchmarking methodology, data structure choices (consistent hashing, bloom filters, skip lists). How to find and prove bottlenecks."
+lessons:
+- id: 01-profiling-tools
+  title: "Profiling Tools: perf, Flamegraph, ThreadSanitizer"
+  practice: []
+- id: 02-benchmarking-methodology
+  title: "Benchmarking Methodology: Statistical Rigor, Avoiding Pitfalls"
+  practice: []
+- id: 03-hashing-data-structures
+  title: "Data Structures: Consistent Hashing, Bloom Filters, Skip Lists"
+  practice: []

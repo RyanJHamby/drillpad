@@ -1,0 +1,14 @@
+id: aws-services-for-design
+title: "AWS Services for System Design"
+language: systems
+description: "DynamoDB schema design, SQS/SNS/EventBridge patterns, Lambda cold starts, S3 consistency, IAM in multi-tenant systems. Interview-focused for AWS/Stripe roles."
+lessons:
+- id: 01-dynamodb-data-modeling
+  title: "DynamoDB Data Modeling: Partition Keys, GSIs, Single-Table Design"
+  practice: []
+- id: 02-aws-messaging-and-streaming-choices
+  title: "AWS Messaging: SQS vs SNS vs EventBridge, Retention, Fan-Out"
+  practice: []
+- id: 03-lambda-s3-iam-design-implications
+  title: "Lambda, S3, IAM: Cold Starts, Consistency, Boundaries in Designs"
+  practice: []

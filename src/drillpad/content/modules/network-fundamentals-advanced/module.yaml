@@ -1,0 +1,36 @@
+id: network-fundamentals-advanced
+title: Network Fundamentals - Connection Pooling, Backpressure, Congestion
+language: systems
+description: >
+  Advanced networking: connection pooling (managing scarce connections),
+  backpressure (flow control), packet loss handling, congestion control.
+  How networks actually work under load.
+difficulty: advanced
+estimated_duration_minutes: 180
+target_roles:
+  - Infrastructure Engineer
+  - Systems Engineer
+  - Trading Systems Engineer
+
+lessons:
+  - id: 01-connection-pooling-and-backpressure
+    title: Connection Pooling & Backpressure - Managing Scarce Resources
+    description: Why connection pools exist, sizing them, detecting exhaustion, backpressure mechanisms.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-packet-loss-and-congestion-control
+    title: Packet Loss & Congestion Control - When Networks Get Full
+    description: Packet loss causes and impact, congestion control mechanisms, detecting and handling congestion.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+tags:
+  - networking
+  - connection-pooling
+  - backpressure
+  - congestion-control
+  - flow-control
+  - production

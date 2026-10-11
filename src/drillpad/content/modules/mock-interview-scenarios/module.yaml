@@ -1,0 +1,17 @@
+id: mock-interview-scenarios
+title: "Mock Interview Scenarios: Practice with Real Problems"
+language: systems
+description: "30-min system design, 20-min debugging, 15-min reasoning problems with complete rubrics, probes, and time plans. Aligned to FIRM_SPECIFIC_INTERVIEW_RUBRICS.md."
+lessons:
+- id: 01-design-scenario-instagram-feed
+  title: "Scenario: Design Instagram Feed (30-min system design)"
+  practice: []
+- id: 02-design-scenario-payment-processor
+  title: "Scenario: Design Payment Processor (30-min system design)"
+  practice: []
+- id: 03-debug-scenario-slow-inference
+  title: "Scenario: Debug Slow LLM Inference (20-min debugging)"
+  practice: []
+- id: 04-reasoning-scenario-capacity-math
+  title: "Scenario: Model Capacity Math (15-min reasoning under constraints)"
+  practice: []

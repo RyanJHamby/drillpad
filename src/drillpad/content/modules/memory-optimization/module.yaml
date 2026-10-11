@@ -1,0 +1,30 @@
+id: memory-optimization
+title: "Memory Optimization: Quantization, Compression, Inference Efficiency"
+language: systems
+description: "Fitting 70B models on consumer GPUs: quantization (INT8, INT4), pruning, LoRA, distillation, memory-latency tradeoffs."
+lessons:
+- id: 01-quantization-basics
+  title: "Quantization: INT8, INT4, calibration, and accuracy loss"
+  practice:
+  - cpp-vector-from-scratch
+  - cpp-arena-allocator
+- id: 02-kv-cache-quantization
+  title: "KV-cache quantization: per-token scaling, grouped quantization"
+  practice:
+  - cpp-spinlock-memory-order
+  - cpp-lru-cache
+- id: 03-weight-pruning
+  title: "Structural vs unstructured pruning, sparsity patterns"
+  practice:
+  - cpp-matrix-multiply-blocked
+  - leetcode-lfu-cache
+- id: 04-lora-and-adapters
+  title: "LoRA and adapters: efficient fine-tuning, inference cost"
+  practice:
+  - cpp-shared-ptr-refcount
+  - leetcode-median-two-sorted-arrays
+- id: 05-inference-optimization-tradeoffs
+  title: "Accuracy vs latency vs memory: choosing the right optimization"
+  practice:
+  - cpp-order-book
+  - leetcode-best-time-buy-sell-stock

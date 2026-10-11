@@ -1,0 +1,30 @@
+id: ai-platform-orchestration
+title: "AI Platform Orchestration: Kubernetes, Scheduling, Autoscaling"
+language: systems
+description: "Kubernetes essentials for AI workloads: pod/node scheduling, GPU device plugins, bin-packing, gang scheduling, inference autoscaling (queue depth, cold start, warm pools). Why GPU scheduling differs from CPU. Scaling models to zero and latency cost."
+difficulty: advanced
+estimated_duration_minutes: 270
+target_roles:
+  - ML Infrastructure Engineer
+  - Systems Engineer
+  - Platform Engineer
+  - ML Systems Engineer
+
+lessons:
+- id: 01-kubernetes-scheduling-and-gpu-binpacking
+  title: "Kubernetes Scheduling: Pod/Node Placement, GPU Binpacking, Gang Scheduling"
+  estimated_duration_minutes: 90
+  status: complete
+  order: 1
+- id: 02-inference-autoscaling-and-cold-start
+  title: "Inference Autoscaling: Signals, Cold Start, Warm Pools, Scaling to Zero"
+  estimated_duration_minutes: 90
+  status: complete
+  order: 2
+
+tags:
+  - kubernetes
+  - gpu-scheduling
+  - ai-infrastructure
+  - autoscaling
+  - platform-engineering

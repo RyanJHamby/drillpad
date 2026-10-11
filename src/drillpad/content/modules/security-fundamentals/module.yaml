@@ -1,0 +1,29 @@
+id: security-fundamentals
+title: "Security Fundamentals: Auth, Encryption, Validation"
+language: systems
+description: "Authentication vs authorization. Encryption in transit vs at rest. Input validation & injection attacks. Common vulnerabilities. Not deep cryptography, but production security awareness. How to think about security in system design."
+lessons:
+- id: 01-auth-authz
+  title: "Authentication vs Authorization: Patterns & Implementation"
+  practice: []
+- id: 02-encryption
+  title: "Encryption: In Transit vs At Rest, Key Management"
+  practice: []
+- id: 03-input-validation
+  title: "Input Validation & Injection: SQL, XSS, Command Injection"
+  practice: []
+- id: 04-common-vulns
+  title: "Common Vulnerabilities: OWASP Top 10 in Context"
+  practice: []
+- id: 05-ai-security-prompt-injection
+  title: "AI Security: Prompt Injection, Jailbreaks, and Defense"
+  practice: []
+- id: 06-threat-modeling
+  title: "Threat Modeling: STRIDE, Data Flow Diagrams, Identifying Vulnerabilities"
+  practice: []
+- id: 07-secrets-and-key-management
+  title: "Secrets & Key Management: Storage, Rotation, Envelope Encryption"
+  practice: []
+- id: 08-zero-trust-and-service-identity
+  title: "Zero Trust & Service Identity: mTLS, Workload Identity, IRSA"
+  practice: []

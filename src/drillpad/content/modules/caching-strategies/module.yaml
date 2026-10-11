@@ -1,0 +1,14 @@
+id: caching-strategies
+title: "Caching Strategies: LRU, LFU & ARC Eviction"
+language: systems
+description: "Cache eviction policies: LRU (temporal locality, simple), LFU (skewed workloads, cold item problem), ARC (adaptive, combines both). Real systems: Redis/Memcached (LRU), Netflix CDN (LFU), Java ConcurrentHashMap (W-TinyLFU)."
+lessons:
+- id: 01-eviction-policies
+  title: "LRU, LFU & ARC: Eviction Policies & Tradeoffs"
+  practice: []
+- id: 02-cache-patterns-and-invalidation
+  title: "Cache Patterns: Aside, Write-Through, Write-Back & Invalidation"
+  practice: []
+- id: 03-stampedes-and-warming
+  title: "Cache Stampedes & Cache Warming: Thundering Herds & Cold Starts"
+  practice: []

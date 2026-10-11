@@ -1,0 +1,14 @@
+id: systems-design-process
+title: "Systems Design Process & Communication"
+language: systems
+description: "The system design framework: requirements → constraints → architecture → bottleneck → scale. How to communicate your design decisions and handle clarifying questions."
+lessons:
+- id: 01-framework
+  title: "The Framework: Requirements, Constraints, Architecture, Bottleneck, Scale"
+  practice: []
+- id: 02-communication
+  title: "Communication: Explaining Decisions & Defending Tradeoffs"
+  practice: []
+- id: 03-back-of-envelope-estimation
+  title: "Back-of-Envelope Estimation: From Users to Infrastructure"
+  practice: []

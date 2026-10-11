@@ -1,0 +1,44 @@
+id: llm-inference-systems
+title: "LLM Inference Systems: vLLM & Sandboxing"
+language: systems
+description: "LLM serving at scale: PagedAttention memory, prefill/decode batching, continuous batching, Firecracker sandbox isolation. Real depth for inference-infrastructure roles."
+lessons:
+- id: 01-kv-cache-and-paged-attention
+  title: "KV-cache bottleneck and PagedAttention memory optimization"
+  practice:
+  - cpp-vector-from-scratch
+  - cpp-arena-allocator
+- id: 02-prefill-decode-scheduling
+  title: "Prefill vs decode: scheduling, batching, and latency"
+  practice:
+  - cpp-spsc-ring-buffer
+  - leetcode-task-scheduler
+- id: 03-continuous-batching
+  title: "Continuous batching: request overlap and tail latency"
+  practice:
+  - cpp-thread-pool
+  - leetcode-lfu-cache
+- id: 04-sandboxing-with-firecracker
+  title: "Firecracker for agent isolation: boot time, resource limits, networking"
+  practice:
+  - cpp-spinlock-memory-order
+  - leetcode-binary-tree-level-order
+- id: 05-production-tradeoffs
+  title: "Production inference: SLOs, autoscaling, cost vs latency"
+  practice:
+  - leetcode-median-two-sorted-arrays
+- id: 06-flash-attention-and-kernels
+  title: "FlashAttention & GPU Kernels: I/O Efficiency and Memory Optimization"
+  practice:
+  - cpp-matrix-multiply-blocked
+  - gpu-kernel-optimization
+- id: 07-speculative-decoding
+  title: "Speculative Decoding: Latency Reduction via Draft Models & Verification"
+  practice:
+  - cpp-thread-pool
+  - leetcode-task-scheduler
+- id: 08-prefix-caching-and-routing
+  title: "Prefix Caching & Multi-Model Routing: Shared Prefixes and Cache Management"
+  practice:
+  - cpp-hash-table
+  - leetcode-lru-cache

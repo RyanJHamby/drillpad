@@ -1,0 +1,47 @@
+id: distributed-inference
+title: "Distributed Inference: Tensor Parallelism & Multi-GPU"
+language: systems
+description: "Multi-GPU scaling: tensor parallelism, pipeline parallelism, ring allreduce, data parallelism. Real communication costs and ring topology for 70B+ models."
+lessons:
+- id: 01-tensor-parallelism-basics
+  title: "Tensor parallelism: weight sharding and GEMM decomposition"
+  practice:
+  - cpp-matrix-multiply-blocked
+  - cpp-thread-pool
+- id: 02-ring-allreduce
+  title: "Ring allreduce: communication pattern for distributed training"
+  practice:
+  - cpp-spsc-ring-buffer
+  - cpp-spinlock-memory-order
+- id: 03-pipeline-parallelism
+  title: "Pipeline parallelism: GPipe, micro-batching, bubble overhead"
+  practice:
+  - cpp-thread-pool
+  - leetcode-task-scheduler
+- id: 04-communication-bottleneck
+  title: "Communication vs computation: PCIe, NVLink, Infiniband bandwidth"
+  practice:
+  - cpp-order-book
+  - leetcode-median-two-sorted-arrays
+- id: 05-system-design-tradeoffs
+  title: "Scaling decisions: topology, latency, throughput, cost per token"
+  practice:
+  - cpp-shared-ptr-refcount
+  - leetcode-lfu-cache
+- id: 06-moe-and-expert-parallelism
+  title: "Mixture-of-Experts (MoE) & Expert Parallelism: Load Balancing, Routing, and Scaling"
+  practice:
+  - cpp-hash-table
+  - python-load-balancer-simulation
+- id: 07-pipeline-parallelism-bubbles-and-3d
+  title: "Pipeline Parallelism Bubbles & 3D Parallelism: Micro-Batching, Efficiency"
+  practice: []
+- id: 08-mqa-gqa-and-kv-cache-math
+  title: "MQA/GQA/MLA and KV-Cache Size: Attention Optimization for Throughput"
+  practice: []
+- id: 09-structured-output-and-constrained-decoding
+  title: "Structured Output & Constrained Decoding: Logit Masking, JSON Schema"
+  practice: []
+- id: 10-multi-lora-adapter-serving
+  title: "Multi-LoRA Adapter Serving: Batching by Adapter Type"
+  practice: []

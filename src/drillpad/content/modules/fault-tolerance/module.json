@@ -1,0 +1,17 @@
+{
+  "id": "fault-tolerance",
+  "title": "Fault Tolerance: Circuit Breakers, Retries, Rate Limiting",
+  "description": "Production patterns for handling failures: circuit breakers, exponential backoff, rate limiting algorithms. Tested at every trading/payment/infra company.",
+  "language": "systems",
+  "lessons": [
+    {
+      "id": "01-circuit-breakers-retry",
+      "title": "Circuit Breakers & Retry Patterns (Fail Fast, Exponential Backoff)"
+    },
+    {
+      "id": "02-rate-limiting",
+      "title": "Rate Limiting (Token Bucket, Sliding Window, Load Shedding)"
+    }
+  ],
+  "practice": []
+}

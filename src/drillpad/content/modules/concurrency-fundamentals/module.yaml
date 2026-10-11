@@ -1,0 +1,20 @@
+id: concurrency-fundamentals
+title: "Concurrency Fundamentals: Locks, Atomics, Memory Ordering"
+language: systems
+description: "Mutexes vs RW locks vs atomics vs CAS. Memory ordering (acquire/release/sequential consistency). Deadlock, livelock, priority inversion. When to use each. Production patterns: thread pools, work stealing. Interview prep for concurrency questions."
+lessons:
+- id: 01-mutexes-rwlocks
+  title: "Mutexes vs RW Locks vs Semaphores: When to Use Each"
+  practice: []
+- id: 02-atomics-cas
+  title: "Atomics & Compare-and-Swap: Lock-Free Primitives"
+  practice: []
+- id: 03-memory-ordering
+  title: "Memory Ordering: Acquire/Release vs Sequential Consistency"
+  practice: []
+- id: 04-deadlock-livelock
+  title: "Deadlock & Livelock: Detection & Prevention"
+  practice: []
+- id: 05-production-patterns
+  title: "Production Patterns: Thread Pools, Work Stealing, Backpressure"
+  practice: []

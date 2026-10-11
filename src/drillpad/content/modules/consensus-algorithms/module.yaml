@@ -1,0 +1,14 @@
+id: consensus-algorithms
+title: "Consensus Algorithms: Raft & Quorum Voting"
+language: systems
+description: "Consensus fundamentals: Byzantine generals, Raft leader election, log replication, split-brain prevention via quorum voting, recovery from network partitions. Real systems: etcd, Consul, CockroachDB."
+lessons:
+- id: 01-raft-basics
+  title: "Raft Basics: Leader Election, Log Replication, Commit Protocol"
+  practice: []
+- id: 02-split-brain-recovery
+  title: "Split-Brain Prevention & Recovery: Quorum, Fencing, Partition Scenarios"
+  practice: []
+- id: 03-raft-snapshots-and-membership
+  title: "Raft Snapshots, Log Compaction & Membership Changes"
+  practice: []

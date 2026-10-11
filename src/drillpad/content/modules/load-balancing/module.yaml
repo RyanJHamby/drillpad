@@ -1,0 +1,14 @@
+id: load-balancing
+title: "Load Balancing: Algorithms, Health Checks & Failover"
+language: systems
+description: "Load balancing algorithms (round-robin, least-loaded, consistent hashing), health checks vs graceful shutdown, fail-closed/fail-open, circuit breaker pattern, cascading failures. AWS, service mesh (Envoy/Istio), production reliability."
+lessons:
+- id: 01-algorithms-and-tradeoffs
+  title: "Load Balancing Algorithms: Round-Robin, Least-Loaded, Consistent Hashing"
+  practice: []
+- id: 02-health-checks-failover
+  title: "Health Checks, Graceful Shutdown & Failover Strategies"
+  practice: []
+- id: 03-service-mesh-and-l7-routing
+  title: "Service Mesh: Sidecars, L7 Routing, Observability & Load Balancing"
+  practice: []

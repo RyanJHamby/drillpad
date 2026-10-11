@@ -1,0 +1,21 @@
+{
+  "id": "lock-free-systems",
+  "title": "Lock-Free Systems: CAS, Memory Barriers, ABA Problem",
+  "description": "Sub-microsecond concurrency: compare-and-swap, memory barriers, atomic operations. Essential for ultra-low latency trading systems.",
+  "language": "systems",
+  "lessons": [
+    {
+      "id": "01-compare-and-swap",
+      "title": "Compare-and-Swap (CAS): The Foundation of Lock-Free Programming"
+    },
+    {
+      "id": "02-memory-barriers",
+      "title": "Memory Barriers & Ordering (Acquire/Release, Sequential Consistency)"
+    },
+    {
+      "id": "03-lock-free-queues",
+      "title": "Lock-Free Data Structures (Queues, Stacks, ABA Problem)"
+    }
+  ],
+  "practice": []
+}

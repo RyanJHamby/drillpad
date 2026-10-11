@@ -1,0 +1,20 @@
+id: testing-observability-fundamentals
+title: "Testing & Observability: When to Test, How to Measure"
+language: systems
+description: "Unit vs integration vs E2E: when to write each. Load testing, chaos engineering. Metrics vs logs vs traces. SLOs, SLIs, error budgets. Alert design, on-call automation. Production thinking for senior engineers."
+lessons:
+- id: 01-testing-pyramid
+  title: "Testing Pyramid: Unit vs Integration vs E2E"
+  practice: []
+- id: 02-load-testing-chaos
+  title: "Load Testing & Chaos Engineering: When to Use"
+  practice: []
+- id: 03-metrics-logs-traces
+  title: "Metrics vs Logs vs Traces: 3 Pillars of Observability"
+  practice: []
+- id: 04-slos-budgets
+  title: "SLOs, SLIs & Error Budgets: Defining Success"
+  practice: []
+- id: 05-alert-design
+  title: "Alert Design & On-Call: Automation, Fatigue Prevention"
+  practice: []

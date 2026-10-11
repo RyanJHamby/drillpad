@@ -1,0 +1,14 @@
+id: founder-engineering
+title: "Founder Engineering: Building Products & Platforms"
+language: systems
+description: "Technical decisions for founders: payments integration, auth systems, frontend architecture, infrastructure choices. Tradeoffs between DIY and outsource for early startups."
+lessons:
+- id: 01-payments-integration
+  title: "Payments Integration: Stripe, Webhooks, Reconciliation, PCI Compliance"
+  practice: []
+- id: 02-auth-flows-for-products
+  title: "Auth Flows: OAuth2, OIDC, Sessions, SSO, Multi-Tenant AuthZ"
+  practice: []
+- id: 03-web-frontend-for-backend-engineers
+  title: "Web/Frontend Fundamentals: SSR, CSR, Core Web Vitals, CDN, Accessibility"
+  practice: []

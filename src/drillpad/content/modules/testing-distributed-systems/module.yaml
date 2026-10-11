@@ -1,0 +1,17 @@
+id: testing-distributed-systems
+title: "Testing Distributed Systems: Determinism & Failure Injection"
+language: systems
+description: "Deterministic testing (controlled time, reproducibility), failure injection (network, Byzantine, timing), observability in tests, integration vs E2E patterns."
+lessons:
+- id: 01-deterministic-testing
+  title: "Deterministic Testing: Controlled Time, Reproducibility"
+  practice: []
+- id: 02-failure-injection
+  title: "Failure Injection: Network, Byzantine, Timing Failures"
+  practice: []
+- id: 03-observability-in-tests
+  title: "Observability in Tests: Logging, Tracing, Debugging"
+  practice: []
+- id: 04-integration-testing-patterns
+  title: "Integration Testing Patterns: Unit vs Integration vs E2E"
+  practice: []

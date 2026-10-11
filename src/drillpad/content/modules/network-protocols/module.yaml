@@ -1,0 +1,14 @@
+id: network-protocols
+title: "Network Protocols: TCP & Latency"
+language: systems
+description: "TCP slow start, congestion control (AIMD), latency variance. Why first request is slow, how persistent connections optimize, real latency measurement. Critical for trading (market data) and AWS (cross-region)."
+lessons:
+- id: 01-tcp-slow-start
+  title: "TCP Slow Start & Congestion Control: Why First RTT Matters"
+  practice: []
+- id: 02-dns-tls-http
+  title: "DNS, TLS, HTTP: Name Resolution to Encrypted Requests"
+  practice: []
+- id: 03-cdn-and-edge
+  title: "CDN & Edge: Caching Strategies, Cache Invalidation, Latency Optimization"
+  practice: []

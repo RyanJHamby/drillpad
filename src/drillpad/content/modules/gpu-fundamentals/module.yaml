@@ -1,0 +1,11 @@
+id: gpu-fundamentals
+title: "GPU Fundamentals: Architecture & Optimization"
+language: systems
+description: "GPU architecture (SMs, warps, memory hierarchy), roofline model (compute vs memory bound), optimization techniques (quantization, sparsity, kernel fusion, tensor cores, batching). Understand why prefill ≠ decode, when GPUs shine."
+lessons:
+- id: 01-gpu-architecture-and-roofline
+  title: "GPU Architecture, Memory Hierarchy & Roofline Model"
+  practice: []
+- id: 02-gpu-optimization-techniques
+  title: "GPU Optimization: Quantization, Sparsity, Fusion, Tensor Cores"
+  practice: []

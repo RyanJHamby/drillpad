@@ -1,0 +1,23 @@
+id: database-fundamentals
+title: "Database Fundamentals: Indexing, Sharding, Consistency"
+language: systems
+description: "B-tree/LSM indexing strategies, sharding patterns (range/hash/directory), consistency models (strong/eventual), transactions & isolation levels (ACID, CAP theorem). AWS scale."
+lessons:
+- id: 01-indexing-strategies
+  title: "Indexing Strategies: B-tree, Hash, LSM Trees"
+  practice: []
+- id: 02-sharding-patterns
+  title: "Sharding Patterns: Range, Hash, Directory-Based"
+  practice: []
+- id: 03-consistency-models
+  title: "Consistency Models: Strong vs Eventual Consistency"
+  practice: []
+- id: 04-transactions-and-isolation
+  title: "Transactions & Isolation Levels: ACID, CAP Theorem"
+  practice: []
+- id: 05-storage-engines-lsm-vs-btree
+  title: "Storage Engines: LSM Trees vs B-Trees — Write Amplification & Space Trade-Offs"
+  practice: []
+- id: 06-wal-mvcc-internals
+  title: "Write-Ahead Logging & MVCC: Consistency Without Blocking"
+  practice: []

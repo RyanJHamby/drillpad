@@ -1,0 +1,11 @@
+id: ml-training-fundamentals
+title: "ML Training Fundamentals"
+language: systems
+description: "Backpropagation and automatic differentiation, optimizers, learning rate schedules, batch size effects, data loading pipelines. The mechanics of training neural networks."
+lessons:
+- id: 01-backprop-and-autodiff
+  title: "Backpropagation & Automatic Differentiation: The Math of Training"
+  practice: []
+- id: 02-data-loading-and-input-pipelines
+  title: "Data Loading & Input Pipelines: Throughput, Sampling, Prefetching, Resume"
+  practice: []

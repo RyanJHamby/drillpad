@@ -1,0 +1,53 @@
+id: ml-evaluation-metrics
+title: ML Evaluation Metrics - Choosing, Computing, and Improving
+language: systems
+description: >
+  How to measure if a model is "better". Precision, recall, F1, AUC, custom metrics.
+  When to use each. How to detect when metrics don't capture reality.
+  Crucial for ML infrastructure roles: evaluating new models, comparing architectures,
+  proving improvement. Applies to tone-quality evaluation and general ML systems.
+difficulty: intermediate
+estimated_duration_minutes: 120
+target_roles:
+  - ML Infrastructure Engineer
+  - Data Engineer
+  - ML Systems Engineer
+  - AI Infrastructure Engineer
+
+lessons:
+  - id: 01-metrics-choosing-and-computing
+    title: Choosing the Right Metric - Precision, Recall, F1, AUC, Custom
+    description: When to use each metric. Binary classification, multiclass, ranking. Custom metrics for domain.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-metrics-pitfalls-and-calibration
+    title: Metric Pitfalls - When Metrics Lie, How to Validate
+    description: Class imbalance, metric gaming, distribution shift. Validating metrics on held-out test sets.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+  - id: 03-eval-harness-engineering
+    title: Evaluation Harness Engineering - Building Regression Test Suites for ML
+    description: Test datasets, automated scoring, regression testing, stratified evaluation for production safety.
+    estimated_duration_minutes: 120
+    status: complete
+    order: 3
+
+  - id: 04-judge-bias-and-drift-gating
+    title: LLM-as-Judge Reliability - Bias, Drift, and Deployment Gating
+    description: Judge consistency, position bias, drift detection, multi-judge voting, confidence gating.
+    estimated_duration_minutes: 120
+    status: complete
+    order: 4
+
+tags:
+  - ml-evaluation
+  - metrics
+  - precision-recall
+  - f1
+  - auc
+  - model-comparison
+  - speech-emotion

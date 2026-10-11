@@ -1,0 +1,25 @@
+id: staff-engineering
+title: "Staff Engineering: Design, Trade-offs, and Leadership"
+language: systems
+description: "First principles for technical decision-making at scale: design documents and RFCs, build-vs-buy evaluation, error budgets and prioritization, leading without authority. How to drive decisions, build consensus, and manage complexity across organizations."
+lessons:
+- id: 01-design-docs-and-rfcs
+  title: "Design Docs & RFCs: Capturing Decisions, Building Alignment"
+  practice:
+  - leetcode-lru-cache
+  - system-design-cache-layer
+- id: 02-build-vs-buy-migrations
+  title: "Build vs Buy & Migrations: Trade-off Analysis, Data Consistency, Cutover Planning"
+  practice:
+  - system-design-payment-system
+  - distributed-transaction-simulation
+- id: 03-error-budgets-and-prioritization
+  title: "Error Budgets & Prioritization: SLOs, Customer Impact, Resource Allocation"
+  practice:
+  - resource-allocation-simulator
+  - incident-response-triage
+- id: 04-leading-without-authority
+  title: "Leading Without Authority: Influence, Consensus, Decision Velocity"
+  practice:
+  - cross-team-alignment-case-study
+  - disagreement-resolution-framework

@@ -1,0 +1,26 @@
+id: observability-debugging
+title: "Observability & Debugging: Instrumentation, Attribution, Production Tracing"
+language: systems
+description: "How to find the bottleneck in production: NVML, NCCL, flame graphs, distributed tracing. From latency spike to root cause."
+lessons:
+- id: 01-instrumentation-strategy
+  title: "What to Measure: NVML, NCCL, Hardware Counters, Network Metrics"
+  practice:
+  - gpu-metrics-collection
+  - leetcode-design-metrics-system
+- id: 02-attribution-and-tracing
+  title: "Finding the Culprit: Flame Graphs, Hardware Counters, Distributed Tracing"
+  practice:
+  - distributed-tracing-simulation
+  - leetcode-design-distributed-log
+- id: 03-debugging-production
+  title: "Production Debugging: Low-Overhead Sampling, Post-Hoc Analysis, Root Cause"
+  practice:
+  - production-debugging-case-study
+  - leetcode-design-log-analysis-system
+- id: 04-metrics-and-time-series-systems
+  title: "Metrics & Time-Series Systems: Ingestion, Compression, Retention"
+  practice: []
+- id: 05-gpu-profiling-and-nccl-debugging
+  title: "GPU Profiling & NCCL Debugging: NVML, Utilization, Ring Topology"
+  practice: []

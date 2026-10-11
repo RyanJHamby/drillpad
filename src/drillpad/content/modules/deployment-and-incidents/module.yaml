@@ -1,0 +1,45 @@
+id: deployment-and-incidents
+title: Deployment Strategies & Incident Response
+language: systems
+description: >
+  Blue-green, canary, rolling deployments. Feature flags. Incident response, blameless postmortems,
+  severity classification, communication during incidents, root cause analysis. How to ship safely
+  and respond to failures.
+difficulty: advanced
+estimated_duration_minutes: 180
+target_roles:
+  - Infrastructure Engineer
+  - SRE
+  - Systems Engineer
+  - Engineering Manager
+
+lessons:
+  - id: 01-deployment-strategies
+    title: Deployment Strategies - Blue-Green, Canary, Rolling, Feature Flags
+    description: How to ship safely. Blue-green, canary rollouts, feature flags for A/B testing, rollback strategies.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-incident-response-and-postmortems
+    title: Incident Response & Blameless Postmortems
+    description: On-call playbook, severity classification, communication, root cause analysis, prevention.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+  - id: 03-multi-region-dr-rpo-rto
+    title: Multi-Region Disaster Recovery - RPO, RTO, and Data Consistency
+    description: Replication strategies, RTO/RPO targets, active-active vs warm standby, cross-region consistency.
+    estimated_duration_minutes: 120
+    status: complete
+    order: 3
+
+tags:
+  - deployment
+  - safety
+  - canary
+  - feature-flags
+  - incident-response
+  - postmortems
+  - oncall

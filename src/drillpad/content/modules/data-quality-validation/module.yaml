@@ -1,0 +1,36 @@
+id: data-quality-validation
+title: Data Quality & Validation - Schema, Anomalies, Constraints
+language: systems
+description: >
+  Data quality as a first-class concern. Schema validation, constraint checking,
+  anomaly detection. Drift detection and monitoring. Great data pipelines assume
+  good data; building that assumption into the system.
+difficulty: advanced
+estimated_duration_minutes: 180
+target_roles:
+  - Data Engineer
+  - ML Infrastructure Engineer
+  - Analytics Engineer
+  - Data Scientist
+
+lessons:
+  - id: 01-schema-validation-constraints
+    title: Schema Validation - Types, Constraints, Null Handling
+    description: Type checking, field constraints, null policies, schema evolution, column validation.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-anomaly-detection-monitoring
+    title: Anomaly Detection & Data Quality Monitoring
+    description: Detecting bad data, distribution drift, outliers. Alerting and data observability.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+tags:
+  - data-quality
+  - validation
+  - schema
+  - anomaly-detection
+  - data-observability

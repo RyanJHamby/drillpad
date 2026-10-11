@@ -1,0 +1,20 @@
+id: exactly-once-semantics
+title: "Exactly-Once Semantics: Payment Systems, Idempotency, Deduplication"
+language: systems
+description: "What does 'exactly-once' mean? SQS FIFO + DynamoDB deduplication. End-to-end guarantees for payment systems."
+lessons:
+- id: 01-definitions-and-guarantees
+  title: "Delivery Guarantees: At-Most-Once, At-Least-Once, Exactly-Once"
+  practice:
+  - system-design-message-queue
+  - leetcode-design-unique-id-generator
+- id: 02-sqs-fifo-dynamodb
+  title: "SQS FIFO & DynamoDB: Implementing Exactly-Once with Idempotency Keys"
+  practice:
+  - aws-payment-idempotency
+  - leetcode-design-rate-limiter
+- id: 03-end-to-end-semantics
+  title: "End-to-End Exactly-Once: Watermarks, Offsets, Checkpointing"
+  practice:
+  - kafka-exactly-once-simulation
+  - leetcode-design-log-storage-system

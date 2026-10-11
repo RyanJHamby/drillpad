@@ -1,0 +1,25 @@
+id: rust-systems
+title: "Rust for Systems: Async, Concurrency, Lock-Free Data Structures"
+language: rust
+description: "Rust for production systems: tokio, async/await, Arc/Mutex, lock-free channels, SPSC, memory safety guarantees at scale."
+lessons:
+- id: 01-async-await-runtime
+  title: "Async/await and Tokio: spawning tasks, buffered channels, latency"
+  practice:
+  - rs-lru-cache
+- id: 02-arc-mutex-contention
+  title: "Arc<Mutex<T>>: contention patterns, parking_lot vs std::sync"
+  practice:
+  - cpp-spinlock-memory-order
+- id: 03-mpsc-bounded-channels
+  title: "MPSC channels: bounded queues, backpressure, error handling"
+  practice:
+  - cpp-spsc-ring-buffer
+- id: 04-lock-free-structures
+  title: "Lock-free queues and stacks: crossbeam, Treiber stack, correctness"
+  practice:
+  - cpp-thread-pool
+- id: 05-memory-safety-and-performance
+  title: "Rust guarantees in systems: zero-cost abstractions, UNSAFE boundaries, auditing"
+  practice:
+  - cpp-arena-allocator

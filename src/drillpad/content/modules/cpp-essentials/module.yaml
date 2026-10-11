@@ -1,0 +1,25 @@
+id: cpp-essentials
+title: "C++ Essentials: Performance, CUDA, and Interview Pitfalls"
+language: languages
+description: "Modern C++ for trading systems and AI inference: move semantics, RAII, CUDA fundamentals, cache locality, profiling, and common pitfalls."
+lessons:
+- id: 01-modern-cpp-performance
+  title: "Modern C++ for Performance: RAII, Move Semantics, Stack Allocation"
+  practice:
+  - cpp-vector-from-scratch
+  - cpp-thread-pool
+- id: 02-cuda-fundamentals
+  title: "CUDA Basics: GPU Memory, Kernels, Occupancy, and Profiling"
+  practice:
+  - cpp-matrix-multiply-blocked
+  - cpp-spinlock-memory-order
+- id: 03-performance-pitfalls
+  title: "Undefined Behavior, Data Races, and Interview Traps"
+  practice:
+  - cpp-arc-mutex-contention
+  - cpp-order-book
+- id: 04-cpp-gotchas-edge-cases
+  title: "C++ Gotchas: Rule of 5, Allocators, Templates, Smart Pointers, Memory Model"
+  practice:
+  - cpp-custom-allocator
+  - leetcode-median-two-sorted-arrays

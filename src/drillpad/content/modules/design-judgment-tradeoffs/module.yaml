@@ -1,0 +1,20 @@
+id: design-judgment-tradeoffs
+title: "Design Judgment: Trade-Off Frameworks & Decision Trees"
+language: systems
+description: "How to make sharp design choices: consistency vs availability (domain-specific), latency vs throughput (which lever first?), vertical vs horizontal scaling, caching strategy selection, hardware choices. Real decision trees for trading, AI-infrastructure, and cloud contexts."
+lessons:
+- id: 01-consistency-vs-availability
+  title: "Consistency vs Availability: When CAP Matters (Firm-Specific)"
+  practice: []
+- id: 02-latency-vs-throughput
+  title: "Latency vs Throughput: Which Lever to Pull First"
+  practice: []
+- id: 03-scaling-decision-tree
+  title: "Scaling Decision Tree: Vertical vs Horizontal (When Each Breaks)"
+  practice: []
+- id: 04-caching-strategy-selection
+  title: "Caching Strategy Selection: Pick LRU/LFU/ARC from Data"
+  practice: []
+- id: 05-hardware-selection
+  title: "Hardware Selection: A100 vs H100, Cost-Per-FLOP, Upgrade ROI"
+  practice: []

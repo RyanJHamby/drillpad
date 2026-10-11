@@ -1,0 +1,23 @@
+id: modern-cpp-evolution
+title: "Modern C++: Evolution, Features & Expertise Signals"
+language: cpp
+description: "What is Modern C++? C++11 watershed moment onwards. Key features by release. Marquee features that signal expertise (move semantics, smart pointers, constexpr, concepts). Most effective for production code (RAII, ownership, compile-time guarantees). Interview prep for trading firms."
+lessons:
+- id: 01-modern-cpp-timeline
+  title: "Modern C++: C++11 Watershed & Evolution Through C++23"
+  practice: []
+- id: 02-move-semantics-rvalue-refs
+  title: "Move Semantics & Rvalue References: Performance & RAII"
+  practice: []
+- id: 03-smart-pointers-ownership
+  title: "Smart Pointers & Ownership Semantics: Memory Safety"
+  practice: []
+- id: 04-constexpr-compile-time
+  title: "Constexpr & Compile-Time Evaluation: When to Use"
+  practice: []
+- id: 05-cpp17-features
+  title: "C++17: Structured Bindings, Optional, Variant, If Constexpr"
+  practice: []
+- id: 06-cpp20-concepts-ranges
+  title: "C++20 & Beyond: Concepts, Ranges, Coroutines (Overview)"
+  practice: []

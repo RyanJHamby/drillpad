@@ -1,0 +1,17 @@
+{
+  "id": "systems-design-process",
+  "title": "Systems Design Process: How to Approach Any Problem",
+  "description": "Framework for solving unfamiliar systems design problems: requirements → constraints → architecture → tradeoffs → failure modes. Used at every interview.",
+  "language": "systems",
+  "lessons": [
+    {
+      "id": "01-framework",
+      "title": "The Framework (Requirements → Architecture → Bottleneck → Scale)"
+    },
+    {
+      "id": "02-communication",
+      "title": "Communicating Design (How to Explain & Defend)"
+    }
+  ],
+  "practice": []
+}

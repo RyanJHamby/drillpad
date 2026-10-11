@@ -1,0 +1,37 @@
+id: profiling-bottleneck-finding
+title: Profiling & Bottleneck Finding - Tactics & Tools
+language: systems
+description: >
+  How to find where 1000ms actually goes. Profiling tools (perf, vtune, py-spy, flamegraph),
+  reading results, interpreting bottlenecks. Production debugging techniques and common pitfalls.
+difficulty: advanced
+estimated_duration_minutes: 180
+target_roles:
+  - Systems Engineer
+  - Performance Engineer
+  - Infrastructure Engineer
+  - C++ / Python Developer
+
+lessons:
+  - id: 01-profiling-tools-and-techniques
+    title: Profiling Tools & Techniques - perf, vtune, py-spy, Flamegraph
+    description: How to profile different languages (C++, Python, Go), tools for each, when to use each.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-reading-flamegraphs-and-bottleneck-diagnosis
+    title: Reading Flamegraphs & Diagnosing Bottlenecks
+    description: Interpreting flamegraph output, finding hot spots, common patterns (locks, I/O, GC).
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+tags:
+  - profiling
+  - performance
+  - bottleneck-finding
+  - debugging
+  - flamegraph
+  - perf
+  - production

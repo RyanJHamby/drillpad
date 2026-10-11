@@ -1,0 +1,11 @@
+id: message-queues
+title: "Message Queues: Semantics, Kafka & Lag"
+language: systems
+description: "Queue guarantees (at-least-once, exactly-once), idempotency keys, Kafka partitions, consumer groups, consumer lag, retention policy. AWS SQS/Kafka, stream processing, payment systems, audit trails."
+lessons:
+- id: 01-queue-semantics
+  title: "Message Queue Semantics: At-Least-Once vs Exactly-Once"
+  practice: []
+- id: 02-kafka-partitions-lag
+  title: "Kafka Partitions, Consumer Groups & Lag Monitoring"
+  practice: []

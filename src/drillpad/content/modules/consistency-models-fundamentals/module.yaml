@@ -1,0 +1,26 @@
+id: consistency-models-fundamentals
+title: "Consistency Models: Strong, Eventual, Causal"
+language: systems
+description: "Strong consistency definition. Eventual consistency: what it means. Causal consistency. Read-your-writes. When to use which. Real-world implications. CAP theorem applied to actual problems."
+lessons:
+- id: 01-strong-consistency
+  title: "Strong Consistency: Definition, Cost, When You Need It"
+  practice: []
+- id: 02-eventual-consistency
+  title: "Eventual Consistency: Variants, Guarantees, Pitfalls"
+  practice: []
+- id: 03-causal-consistency
+  title: "Causal Consistency: Between Strong & Eventual"
+  practice: []
+- id: 04-choosing-model
+  title: "Choosing Your Model: Framework for Decision"
+  practice: []
+- id: 05-paxos-and-multi-paxos
+  title: "Paxos & Multi-Paxos: Consensus for Replicated State Machines"
+  practice: []
+- id: 06-replication-quorums-membership
+  title: "Replication Quorums & Membership: Dynamic Replication with Safety"
+  practice: []
+- id: 07-vector-clocks-and-crdts
+  title: "Vector Clocks & CRDTs: Causality Without Consensus"
+  practice: []

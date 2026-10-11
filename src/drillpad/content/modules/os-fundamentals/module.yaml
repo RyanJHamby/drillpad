@@ -1,0 +1,17 @@
+id: os-fundamentals
+title: "OS Fundamentals: Processes, Threads, Memory, Scheduling"
+language: systems
+description: "Process vs thread vs coroutine, context switch cost (200ns-5µs), CPU affinity, preemptive scheduling, memory layout (stack/heap/BSS), virtual memory (paging, TLB, page faults 5-10ms), mmap, huge pages. Trading latency critical."
+lessons:
+- id: 01-processes-threads-scheduling
+  title: "Processes, Threads, Context Switching & CPU Affinity"
+  practice: []
+- id: 02-memory-layout-virtual-memory
+  title: "Memory Layout, Virtual Memory, TLB & Page Faults"
+  practice: []
+- id: 03-io-models-and-page-cache
+  title: "I/O Models & Page Cache: epoll, io_uring, fsync Costs, Zero-Copy"
+  practice: []
+- id: 04-numa-and-memory-placement
+  title: "NUMA & Memory Placement: Locality, Pinning, Cache Coherence Costs"
+  practice: []

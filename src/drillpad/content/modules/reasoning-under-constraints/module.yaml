@@ -1,0 +1,31 @@
+id: reasoning-under-constraints
+title: "Reasoning Under Constraints: Hardware Limits, Trade-offs, and Scaling Laws"
+language: systems
+description: "First principles: CPU cycles, memory hierarchy, Amdahl's law, roofline model. Why 2x resources ≠ 2x speedup. When is your bottleneck compute vs bandwidth vs network?"
+lessons:
+- id: 01-cpu-cycles-and-hardware
+  title: "CPU Cycles & Hardware Hierarchy: From Clock Speed to Latency"
+  practice:
+  - cpp-microbenchmark-cache
+  - leetcode-best-time-buy-sell-stock
+- id: 02-memory-bandwidth-roofline
+  title: "Memory Hierarchy & Bandwidth: Cache, Arithmetic Intensity, Roofline Model"
+  practice:
+  - cpp-matrix-multiply-blocked
+  - python-numpy-performance
+- id: 03-amdahl-law-scaling
+  title: "Amdahl's Law & Scaling: Why 2x GPUs ≠ 2x Speedup"
+  practice:
+  - distributed-inference-scaling
+  - gpu-allreduce-simulation
+- id: 04-cost-latency-tradeoffs
+  title: "Cost-Latency Frontier: SLA, Hardware Choice, Operating Points"
+  practice:
+  - system-design-inference-cost
+  - leetcode-median-two-sorted-arrays
+- id: 05-queueing-theory-and-capacity-planning
+  title: "Queueing Theory & Capacity Planning: Little's Law, Utilization, Tail Latency"
+  practice: []
+- id: 06-model-memory-and-flops-math
+  title: "Model Memory & FLOPs Math: Parameters, Activations, KV Cache, Throughput"
+  practice: []

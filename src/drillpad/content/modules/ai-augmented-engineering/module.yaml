@@ -1,0 +1,94 @@
+id: ai-augmented-engineering
+title: "AI-Augmented Engineering: Leverage, Verification, and Governance"
+language: systems
+description: >
+  How to use AI tooling autonomously and safely: delegation vs. ownership trade-offs,
+  specification patterns agents can execute, repo setup for collaboration, verification
+  as the bottleneck, context management, and playbooks for large teams, small teams, and
+  solo projects. Candidate-ready for senior/staff roles and founding engineering.
+difficulty: advanced
+estimated_duration_minutes: 660
+target_roles:
+  - Senior Software Engineer
+  - Staff Engineer
+  - Systems Engineer
+  - Founding Engineer
+  - AI Infrastructure Engineer
+
+lessons:
+  - id: 01-the-leverage-model
+    title: "The Leverage Model: Delegation, Autonomy Ladders, and Verification as Bottleneck"
+    description: What to delegate vs. own. Time-to-verified-merge as the metric. Evidence-based autonomy (suggest → edit → run → merge → deploy).
+    estimated_duration_minutes: 45
+    status: complete
+    order: 1
+
+  - id: 02-task-specs-agents-can-finish
+    title: "Task Specs Agents Can Finish: Acceptance Criteria, Test-First, Scope Boundaries"
+    description: Writing specs that agents execute without ambiguity. Definition of done. Diff size as a forcing function.
+    estimated_duration_minutes: 45
+    status: complete
+    order: 2
+
+  - id: 03-repo-setup-for-agents
+    title: "Repo Setup for Agents: CLAUDE.md, Permissions, Hooks, Safe Defaults"
+    description: Instruction files, permission models, what belongs in repo docs vs. prompt context, automation boundaries.
+    estimated_duration_minutes: 45
+    status: complete
+    order: 3
+
+  - id: 04-parallel-and-background-agents
+    title: "Parallel and Background Agents: Worktrees, Subagents, Isolation, Coordination"
+    description: Running multiple agents in parallel without merge conflicts. Scheduled/background work. Coordination limits and failure modes.
+    estimated_duration_minutes: 45
+    status: complete
+    order: 4
+
+  - id: 05-verification-and-evals-for-your-workflow
+    title: "Verification & Evals for Your Workflow: Tests, Types, CI, Review Tiers"
+    description: Using tests/types/lint/CI as the verifier, not the agent. Review tiers by blast radius. Building personal benchmarks for regression detection.
+    estimated_duration_minutes: 60
+    status: complete
+    order: 5
+
+  - id: 06-personal-operating-system
+    title: "Personal Operating System: Capture, Weekly Review, Triage, Async Queuing"
+    description: Notes and knowledge base patterns. Weekly review ritual. Triage and context switching. Queuing agent work to protect focus.
+    estimated_duration_minutes: 60
+    status: complete
+    order: 6
+
+  - id: 07-playbook-large-company-team
+    title: "Playbook: Large Company Teams — Governance, Compliance, Adoption"
+    description: Approved tooling, data classification, compliance constraints, review norms. Proposing adoption without friction. Week-one setup.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 7
+
+  - id: 08-playbook-small-bootstrapped-team-or-solo
+    title: "Playbook: Small/Bootstrapped Teams & Solo — Speed with Guardrails"
+    description: CI as safety net, cheap rollbacks, feature flags, cost discipline. Onboarding agents and humans with one set of docs. What to automate first.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 8
+
+  - id: 09-playbook-personal-and-open-source
+    title: "Playbook: Personal & Open-Source Projects — Disclosure, Provenance, Licensing"
+    description: Honest AI-disclosure in READMEs. Reproducibility and provenance. Contribution etiquette. Building a visible track record with AI tooling.
+    estimated_duration_minutes: 60
+    status: complete
+    order: 9
+
+  - id: 10-security-cost-and-failure-modes
+    title: "Security, Cost, and Failure Modes: Prompt Injection, Secrets, Runaway Spend, Deskilling"
+    description: Untrusted content and injection risks. Least-privilege and secrets management. Quota limits. Over-trust and quality drift. Deskilling counter-measures.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 10
+
+  - id: 11-staying-at-the-frontier
+    title: "Staying at the Frontier: Benchmarking, Routine, Rules, Track Record"
+    description: Repeatable routine, not hype. Personal benchmarks (10-15 real tasks). Weekly primary-source reading. Quarterly scaffolding reviews. Measuring merged-not-reverted outcomes.
+    estimated_duration_minutes: 60
+    status: complete
+    order: 11

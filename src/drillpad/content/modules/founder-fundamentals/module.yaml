@@ -1,0 +1,28 @@
+id: founder-fundamentals
+title: "Founder Fundamentals: From Idea to Sustainable Unit Economics"
+language: business
+description: "First principles: customer discovery, pricing models, AI unit economics, defensibility. How to validate problems, price products, and scale past unit economics cliffs."
+lessons:
+- id: 01-customer-discovery-and-validation
+  title: "Customer Discovery & Validation: Problem/Solution Fit Before MVP"
+  practice:
+  - founder-research-template
+  - customer-interview-scoring
+- id: 02-pricing-and-unit-economics
+  title: "Pricing Models & Unit Economics: CAC, LTV, Margins, Expansion Loops"
+  practice:
+  - saas-unit-economics-model
+  - pricing-sensitivity-analysis
+- id: 03-ai-unit-economics
+  title: "AI-Specific Unit Economics: Token Costs, Latency, Margin Constraints"
+  practice:
+  - token-cost-calculator
+  - ai-saas-breakeven-analysis
+- id: 04-defensibility-and-moats
+  title: "Defensibility & Moats: Data, Network Effects, Switching Costs, Bundling"
+  practice:
+  - moat-framework-exercise
+  - competitive-positioning-war-game
+- id: 05-startup-equity-basics
+  title: "Startup Equity Basics: Options, RSUs, Vesting, Dilution, Liquidation Preference"
+  practice: []

@@ -1,0 +1,25 @@
+id: python-ai-infra
+title: "Python for AI Infrastructure: Async, Profiling, and Production Patterns"
+language: languages
+description: "High-performance Python for inference orchestration: asyncio, async batching, type hints, profiling (cProfile, flamegraph), and common pitfalls."
+lessons:
+- id: 01-asyncio-concurrency
+  title: "Asyncio Fundamentals: Event Loop, Coroutines, Producer-Consumer Patterns"
+  practice:
+  - python-async-http-client
+  - python-queue-batching
+- id: 02-python-performance
+  title: "Profiling and Optimization: cProfile, Flamegraph, Numba, Type Hints"
+  practice:
+  - python-matrix-multiply
+  - python-inference-profiling
+- id: 03-async-inference
+  title: "Async Inference Patterns: Batching, Backpressure, Graceful Shutdown"
+  practice:
+  - python-inference-server
+  - python-request-batching
+- id: 04-python-gotchas-edge-cases
+  title: "Python Gotchas: Mutable Defaults, Iterators, Late Binding, GIL Surprises"
+  practice:
+  - python-cache-ordering
+  - python-iterator-patterns

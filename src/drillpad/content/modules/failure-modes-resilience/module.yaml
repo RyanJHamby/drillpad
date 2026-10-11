@@ -1,0 +1,30 @@
+id: failure-modes-resilience
+title: "Failure Modes & Resilience: Cascading, Byzantine, Partitions"
+language: systems
+description: "Why systems break under load: cascading failures, Byzantine failures, network partitions. How to detect and defend."
+lessons:
+- id: 01-cascading-failures
+  title: "Cascading Failures: One Slow Component Brings Down Everything"
+  practice:
+  - system-design-load-balancer
+  - leetcode-lru-cache
+- id: 02-byzantine-failures
+  title: "Byzantine Failures: Silent Corruption, Replication Lag, Divergent State"
+  practice:
+  - distributed-consensus-simulation
+  - leetcode-design-twitter
+- id: 03-network-partitions
+  title: "Network Partitions: Split Brain, Stale Reads, Divergent Data"
+  practice:
+  - consensus-quorum-voting
+  - leetcode-design-search-autocomplete
+- id: 04-cell-architecture-blast-radius
+  title: "Cell Architecture: Blast Radius Containment and Independent Failure Domains"
+  practice:
+  - multi-region-failover
+  - distributed-state-consistency
+- id: 05-multi-tenancy-noisy-neighbors
+  title: "Multi-Tenancy & Noisy Neighbors: Isolation, Resource Contention, SLAs"
+  practice:
+  - resource-quota-enforcement
+  - tenant-isolation-design

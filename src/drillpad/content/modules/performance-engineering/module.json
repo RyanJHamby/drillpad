@@ -1,0 +1,21 @@
+{
+  "id": "performance-engineering",
+  "title": "Performance Engineering: Profiling, Benchmarking, Data Structures",
+  "description": "Measure, benchmark, and optimize: perf profilers, statistical rigor, consistent hashing, bloom filters, skip lists. From first-principles profiling to production insights.",
+  "language": "systems",
+  "lessons": [
+    {
+      "id": "01-profiling-tools",
+      "title": "Profiling Tools (perf, flamegraph, TSAN, NVIDIA Profiler)"
+    },
+    {
+      "id": "02-benchmarking-methodology",
+      "title": "Benchmarking Methodology (Statistical Rigor, Avoiding Pitfalls)"
+    },
+    {
+      "id": "03-hashing-data-structures",
+      "title": "Hashing & Data Structures (Consistent Hashing, Bloom Filters, Skip Lists)"
+    }
+  ],
+  "practice": []
+}

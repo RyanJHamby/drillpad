@@ -1,0 +1,43 @@
+id: cost-modeling-ai-inference
+title: Cost Modeling for AI Inference - Economics & Tradeoffs
+language: systems
+description: >
+  Cost per token, cost-latency frontiers, and decision frameworks. How to estimate
+  inference costs, when to trade latency for cost (smaller models, quantization, batching),
+  and why cost thinking matters in production AI systems.
+difficulty: advanced
+estimated_duration_minutes: 240
+target_roles:
+  - AI Infrastructure Engineer
+  - ML Systems Engineer
+  - Infrastructure Architect
+
+lessons:
+  - id: 01-token-economics
+    title: Token Economics - Cost Per Inference
+    description: Cost per token math, accounting for everything (compute, memory, bandwidth). Real numbers from production.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-cost-latency-tradeoffs
+    title: Cost-Latency Tradeoffs - Smaller Models, Quantization, Batching
+    description: When smaller model < larger model. Quantization cost-accuracy. Batching latency-throughput. Decision tree.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 2
+
+  - id: 03-cost-latency-frontier
+    title: Cost-Latency Frontier - Pareto & Decision Framework
+    description: Pareto frontier, hardware selection, operating points. How to reason about tradeoffs under constraints.
+    estimated_duration_minutes: 75
+    status: complete
+    order: 3
+
+tags:
+  - cost-modeling
+  - inference
+  - economics
+  - tradeoffs
+  - hardware-selection
+  - production-decisions

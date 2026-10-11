@@ -1,0 +1,36 @@
+id: trading-and-market-data
+title: "Trading Systems: Market Data, Matching Engines, Backtesting, Risk"
+language: systems
+description: "Matching engine semantics, market data feeds (sequence gaps, snapshot recovery), order lifecycle. Backtesting pitfalls (lookahead, survivorship bias, data quality). PnL calculation, Greeks, risk metrics (VaR, Sharpe). Real-time systems constraints."
+difficulty: advanced
+estimated_duration_minutes: 270
+target_roles:
+  - Quantitative Developer
+  - Trading Systems Engineer
+  - Infrastructure Engineer
+  - Systems Engineer
+
+lessons:
+- id: 01-matching-engine-and-market-data
+  title: "Matching Engines & Market Data: Order Matching, Feed Handling, Snapshot Recovery"
+  estimated_duration_minutes: 90
+  status: complete
+  order: 1
+- id: 02-backtesting-pitfalls
+  title: "Backtesting Pitfalls: Lookahead Bias, Survivorship, Data Quality, Realism"
+  estimated_duration_minutes: 90
+  status: complete
+  order: 2
+- id: 03-pnl-and-risk-basics
+  title: "PnL & Risk Basics: Greeks, VaR, Sharpe Ratio, Mark-to-Market"
+  estimated_duration_minutes: 90
+  status: complete
+  order: 3
+
+tags:
+  - trading-systems
+  - market-data
+  - matching-engine
+  - backtesting
+  - risk-management
+  - quantitative-trading

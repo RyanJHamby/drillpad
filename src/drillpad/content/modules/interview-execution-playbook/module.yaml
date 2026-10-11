@@ -1,0 +1,26 @@
+id: interview-execution-playbook
+title: "Interview Execution: Patterns, Scoring, Real-Time Reasoning"
+language: systems
+description: "The missing piece: pattern recognition library (5 patterns solve 90% of problems), handling ambiguity in real time, time management in 45-min window, scoring yourself accurately (70 vs 85 vs 90), decision frameworks for incomplete information, war story analysis. How good candidates actually think under pressure."
+lessons:
+- id: 01-pattern-library
+  title: "Pattern Library: 5 Patterns That Solve 90% of Design Problems"
+  practice: []
+- id: 02-handling-ambiguity
+  title: "Handling Ambiguity: Clarifying Questions, Assumptions, Constraint Evolution"
+  practice: []
+- id: 03-time-boxing
+  title: "Time Boxing: 45-Minute Breakdown (Requirements, Design, Deep Dive, Wrap)"
+  practice: []
+- id: 04-scoring-yourself
+  title: "Scoring Yourself: What Separates 70 from 85 from 90"
+  practice: []
+- id: 05-decision-frameworks
+  title: "Decision Frameworks: Reasoning Under Incomplete Information"
+  practice: []
+- id: 06-projects-dissected
+  title: "Your Projects Dissected: OrderBook, Payment, vLLM, FlowState Analysis"
+  practice: []
+- id: 07-offers-and-negotiation
+  title: "Offers & Negotiation: Comp Strategy, Competing Offers, Decision Framework"
+  practice: []

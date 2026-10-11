@@ -1,0 +1,17 @@
+id: design-communication-under-pressure
+title: "Design Communication: Thinking Out Loud Under Pressure"
+language: systems
+description: "Interview delivery skills: design red flags & smell tests, handling 'but what if X fails?' follow-ups, self-scoring mid-interview (are you over/under-selling?), ranking tradeoffs under challenge. Go from 'I have ideas' to 'I can defend them.'"
+lessons:
+- id: 01-design-red-flags
+  title: "Design Red Flags: Smell Tests & Anti-Patterns"
+  practice: []
+- id: 02-handling-follow-ups
+  title: "Handling Follow-Ups: 'But What If X Fails?' Strategies"
+  practice: []
+- id: 03-self-scoring-mid-interview
+  title: "Self-Scoring During Interview: Am I Going Too Deep?"
+  practice: []
+- id: 04-defending-tradeoffs-under-challenge
+  title: "Defending Tradeoffs Under Challenge: How to Rank When Pressured"
+  practice: []

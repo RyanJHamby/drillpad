@@ -1,0 +1,36 @@
+id: feature-stores
+title: Feature Stores - Centralized Feature Management
+language: systems
+description: >
+  Feature Stores as infrastructure for ML. Consistent features across train/serve.
+  Real-time vs batch feature serving. Online and offline stores. Ecosystem tools
+  (Feast, Tecton, Featureform). Reducing training-serving skew.
+difficulty: advanced
+estimated_duration_minutes: 180
+target_roles:
+  - ML Infrastructure Engineer
+  - Data Engineer
+  - ML Systems Engineer
+  - Analytics Engineer
+
+lessons:
+  - id: 01-feature-store-architecture
+    title: Feature Store Architecture - Online & Offline Serving
+    description: Why feature stores, train/serve skew problem, online vs offline stores, serving latency.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-feature-store-operations
+    title: Feature Store Operations - Freshness, Validation, Versioning
+    description: Computing features, updating stores, feature validation, versioning, A/B testing.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+tags:
+  - feature-stores
+  - ml-infrastructure
+  - feature-engineering
+  - online-serving
+  - training-serving-skew

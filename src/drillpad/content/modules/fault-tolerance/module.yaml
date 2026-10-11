@@ -1,0 +1,14 @@
+id: fault-tolerance
+title: "Fault Tolerance: Circuit Breakers & Rate Limiting"
+language: systems
+description: "Circuit breaker pattern (CLOSED/OPEN/HALF_OPEN), retry strategies (exponential backoff), rate limiting (token bucket, sliding window). Prevent cascading failures."
+lessons:
+- id: 01-circuit-breakers-retry
+  title: "Circuit Breakers & Retry Patterns: Fail Fast, Exponential Backoff"
+  practice: []
+- id: 02-rate-limiting
+  title: "Rate Limiting: Token Bucket, Sliding Window, Load Shedding"
+  practice: []
+- id: 03-distributed-rate-limiting
+  title: "Distributed Rate Limiting: Shared Counters, GCRA, Per-Region Budgets"
+  practice: []

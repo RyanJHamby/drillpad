@@ -1,0 +1,17 @@
+id: data-structures-production
+title: "Data Structures for Production: Hash Tables, Trees, Tradeoffs"
+language: systems
+description: "Hash tables: collision handling, load factor. B-trees, LSM trees, skiplists: when to use. Trade-offs for production. Benchmarking & measurement. Not just theory, but real-world choices."
+lessons:
+- id: 01-hash-tables
+  title: "Hash Tables: Collision Handling, Load Factor, Resizing"
+  practice: []
+- id: 02-tree-structures
+  title: "Tree Variants: B-tree, LSM, Skiplist, Tries"
+  practice: []
+- id: 03-tradeoffs-production
+  title: "Production Tradeoffs: Memory vs Speed vs Complexity"
+  practice: []
+- id: 04-benchmarking-ds
+  title: "Benchmarking Data Structures: When Theory Fails"
+  practice: []

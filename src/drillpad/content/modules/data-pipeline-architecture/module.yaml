@@ -1,0 +1,45 @@
+id: data-pipeline-architecture
+title: Data Pipeline Architecture - DAGs, Orchestration, Fault Tolerance
+language: systems
+description: >
+  How to build scalable data pipelines. DAG (directed acyclic graph) concept.
+  Orchestration frameworks (Airflow, Dagster). Idempotency and exactly-once semantics
+  for ETL. Fault tolerance and recovery. Why pipelines fail and how to prevent it.
+difficulty: advanced
+estimated_duration_minutes: 270
+target_roles:
+  - Data Engineer
+  - ML Infrastructure Engineer
+  - Data Pipeline Engineer
+  - ML Systems Engineer
+
+lessons:
+  - id: 01-dag-orchestration-airflow
+    title: DAG Orchestration - Tasks, Dependencies, Airflow Patterns
+    description: Why DAGs, task graphs, dependencies, scheduling. Airflow architecture and patterns.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 1
+
+  - id: 02-fault-tolerance-idempotency
+    title: Fault Tolerance & Idempotency - Building Reliable Pipelines
+    description: Idempotent tasks, exactly-once semantics, retry logic, checkpointing, recovery.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 2
+
+  - id: 03-scaling-pipelines
+    title: Scaling Data Pipelines - Bottlenecks, Parallelization, Cost
+    description: Finding bottlenecks, parallelizing task runs, cost optimization, monitoring.
+    estimated_duration_minutes: 90
+    status: complete
+    order: 3
+
+tags:
+  - data-pipelines
+  - dag
+  - orchestration
+  - airflow
+  - etl
+  - idempotency
+  - fault-tolerance
