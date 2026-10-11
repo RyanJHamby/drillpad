@@ -1,0 +1,87 @@
+id: two-sum
+title: Two Sum
+bar_level: 1
+target_minutes: 12
+patterns:
+- hash-map
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+- trading
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Two Sum (LC 1)"
+statement: |
+  Given a list of integers `nums` and an integer `target`, return the indices `[i, j]` (with `i < j`) of the two entries that add up to `target`. Exactly one valid pair exists in every input. You may not use the same element twice.
+
+  Example: `two_sum([2, 7, 11, 15], 9)` returns `[0, 1]` because `2 + 7 == 9`.
+starter: |
+  def two_sum(nums, target):
+      pass
+hints:
+- For each number, what single value would complete the pair?
+- Checking 'have I seen the complement?' in a hash map is O(1) instead of rescanning the list.
+- Look up the complement before inserting the current element so an element can't pair with itself.
+follow_ups:
+- What if the array is sorted and you must use O(1) space?
+- What if several pairs may exist and you must return all of them?
+tests:
+- name: basic
+  tags:
+  - ordering
+  code: |
+    assert two_sum([2,7,11,15],9)==[0,1]
+- name: pair not at the front
+  tags:
+  - boundary
+  code: |
+    assert two_sum([3,2,4],6)==[1,2]
+- name: duplicate values form the pair
+  tags:
+  - duplicate
+  code: |
+    assert two_sum([3,3],6)==[0,1]
+- name: negatives and zero
+  tags:
+  - invalid
+  code: |
+    assert two_sum([-3,4,3,90],0)==[0,2]
+- name: large input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    nums=list(range(1,200001))
+    r=two_sum(nums,399999)
+    assert r==[199998,199999]
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Sorted input and O(1) extra space?
+  kind: design
+  key_points:
+  - Two pointers from both ends
+  - Move left up when sum too small, right down when too large
+  - O(n) time, O(1) space, but returns values/positions only in sorted order
+- q: Why is the one-pass hash map O(n)?
+  kind: complexity
+  key_points:
+  - Each element does one O(1) average lookup and one insert
+  - Worst-case hash collisions degrade to O(n^2) in theory
+  - Space is O(n) for the map
+- q: Return all distinct pairs instead?
+  kind: reasoning
+  key_points:
+  - Track seen values and a set of emitted pairs to avoid duplicates
+  - Counts matter when the complement equals the element itself
+  - Output size can be O(n^2) so complexity changes
+narration: []
+state_aloud:
+- Duplicates that pair with each other (3+3).
+- Negative numbers and zeros.
+- Same index must not be reused.
+- Whether a guaranteed answer exists; what to return otherwise.
+walkthrough: |
+  Scan once, keeping a map from value to index for everything seen so far. For each element compute the complement `target - x`; if it is already in the map, the stored index and the current index are the answer. Otherwise record the current element. Looking up before inserting prevents pairing an element with itself and still handles duplicate pairs like `[3, 3]`.

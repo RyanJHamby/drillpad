@@ -1,0 +1,202 @@
+id: minhash-dedup
+title: MinHash Near-duplicate Detection
+bar_level: 3
+target_minutes: 40
+patterns:
+- minhash
+- locality-sensitive-hashing
+- jaccard-similarity
+- deduplication
+- banding
+- data-pipeline
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Training-data pipelines remove near-duplicate documents. Exact pairwise Jaccard comparison is O(N^2),
+  so use MinHash signatures with LSH banding. Everything is specified so results are deterministic.
+
+  - `shingles(text, k=3) -> set[str]`: split `text` on whitespace; the k-word shingles are the windows of
+    `k` consecutive words joined by one space. No words -> empty set; fewer than `k` words -> a set with
+    the single shingle made of all words. `ValueError` if `k < 1`.
+  - Hashing: `P = 2**61 - 1`. `base(s) = int.from_bytes(hashlib.blake2b(s.encode(), digest_size=8).digest(), "big")`.
+    Hash function `i` is `h_i(x) = (a_i * base(x) + b_i) % P` where, with `rng = random.Random(seed)`, the
+    pairs are drawn in order `for i in range(num_perm): a_i = rng.randrange(1, P); b_i = rng.randrange(0, P)`.
+  - `minhash_signature(shingle_set, num_perm=64, seed=0) -> list[int]`: element `i` is the minimum of `h_i`
+    over the set. The signature of the empty set is `[P] * num_perm`. `ValueError` if `num_perm < 1`.
+  - `estimate_jaccard(sig_a, sig_b) -> float`: the fraction of positions that are equal; `ValueError` if
+    the lengths differ or are 0.
+  - `near_duplicates(docs, k=3, num_perm=64, bands=16, threshold=0.5, seed=0) -> list[(i, j)]`: indices
+    `i < j` of document pairs that share at least one LSH band (a band is `num_perm // bands` consecutive
+    signature entries and two documents collide in band `b` when those entries are identical) AND whose
+    estimated Jaccard is `>= threshold`. Documents with no shingles are ignored. Result sorted ascending.
+    `ValueError` if `bands < 1` or `bands` does not divide `num_perm`.
+
+  With 1,500 documents all-pairs comparison is too slow for the time limit; use band buckets to find
+  candidates and compute the shingle hashes once per shingle, not once per hash function.
+starter: |
+  def shingles(text, k=3):
+      pass
+
+
+  def minhash_signature(shingle_set, num_perm=64, seed=0):
+      pass
+
+
+  def estimate_jaccard(sig_a, sig_b):
+      pass
+
+
+  def near_duplicates(docs, k=3, num_perm=64, bands=16, threshold=0.5, seed=0):
+      pass
+hints:
+- Compute base(s) once per shingle, then each of the num_perm minima is a tight loop over those integers.
+- Bucket key = (band index, tuple of that band's signature rows); only documents in the same bucket are
+  candidate pairs.
+- Verify candidates with estimate_jaccard so a single lucky band does not create a false positive.
+follow_ups:
+- Choose bands and rows from a target similarity threshold (the S-curve 1 - (1 - s^r)^b).
+- Streaming/union-find clustering of the duplicate pairs into groups.
+- Sharded dedup across machines by band bucket.
+tests:
+- name: word shingles
+  code: |
+    assert shingles("a b c d", 2) == {"a b", "b c", "c d"}
+    assert shingles("a b", 3) == {"a b"}, "fewer words than k: the whole text is one shingle"
+    assert shingles("   ", 3) == set() and shingles("", 1) == set()
+    assert shingles("x  y\nz", 2) == {"x y", "y z"}
+    try:
+        shingles("a", 0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+  hidden: false
+  tags:
+  - boundary
+  - empty
+- name: 'signatures: deterministic, right length, identical sets collide'
+  code: |
+    s = shingles("the quick brown fox jumps over the lazy dog", 2)
+    a = minhash_signature(s, 32, seed=1)
+    assert len(a) == 32 and a == minhash_signature(set(s), 32, seed=1)
+    assert a != minhash_signature(s, 32, seed=2)
+    assert estimate_jaccard(a, a) == 1.0
+    assert minhash_signature(set(), 4) == [(1 << 61) - 1] * 4
+  hidden: false
+  tags:
+  - duplicate
+  - boundary
+- name: estimate tracks real jaccard
+  code: |
+    A = {f"w{i}" for i in range(100)}
+    B = {f"w{i}" for i in range(50, 150)}          # jaccard 50/150 = 1/3
+    C = {f"z{i}" for i in range(100)}
+    sa, sb, sc = (minhash_signature(x, 256, seed=3) for x in (A, B, C))
+    assert abs(estimate_jaccard(sa, sb) - 1 / 3) < 0.1
+    assert estimate_jaccard(sa, sc) < 0.05
+    try:
+        estimate_jaccard([1, 2], [1])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+  hidden: false
+  tags:
+  - ordering
+- name: finds exact and near duplicates, skips unrelated and empty docs
+  code: |
+    base = " ".join(f"tok{i}" for i in range(40))
+    near = base.replace("tok20", "CHANGED")
+    docs = [base, "completely different words appear here for sure and then some more words follow", base, near, "", "   "]
+    assert near_duplicates(docs, k=3, num_perm=64, bands=16, threshold=0.5, seed=0) == [(0, 2), (0, 3), (2, 3)]
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: threshold filters weak candidates
+  code: |
+    base = " ".join(f"tok{i}" for i in range(40))
+    near = base.replace("tok20", "CHANGED")
+    assert near_duplicates([base, near], threshold=0.99) == []
+    assert near_duplicates([base, near], threshold=0.1) == [(0, 1)]
+  hidden: true
+  tags:
+  - boundary
+- name: invalid banding and tiny inputs
+  code: |
+    for bands in [0, 5]:
+        try:
+            near_duplicates(["a b c"], num_perm=64, bands=bands)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bands)
+    assert near_duplicates([]) == [] and near_duplicates(["only one doc here"]) == []
+  hidden: true
+  tags:
+  - invalid
+  - empty
+  - zero-capacity
+- name: '1500 documents: LSH finds the planted duplicates without comparing all pairs'
+  code: |
+    import random
+    rng = random.Random(12)
+    vocab = [f"v{i}" for i in range(5000)]
+    docs = [" ".join(rng.choice(vocab) for _ in range(32)) for _ in range(1400)]
+    planted = []
+    for src in rng.sample(range(1400), 100):
+        docs.append(docs[src])
+        planted.append((src, len(docs) - 1))
+    found = near_duplicates(docs, k=3, num_perm=64, bands=16, threshold=0.8, seed=5)
+    assert found == sorted(planted)
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: minhash_signature
+  time: O(S * H)
+  space: O(H)
+- op: near_duplicates
+  time: O(N * S * H + candidates)
+  space: O(N * H)
+extensions:
+- q: 'Level 2: turn the duplicate pairs into clusters and keep one representative per cluster (the lowest
+    index).'
+  kind: code
+  key_points:
+  - Union-find with path compression over the pair list
+  - 'Transitivity: A~B and B~C puts A, B, C together even if A and C were not paired directly'
+  - Return the kept indices in ascending order and document the behaviour for singletons
+- q: How do you choose bands and rows for a similarity threshold, and what are the error modes?
+  kind: design
+  key_points:
+  - Probability that two docs of similarity s share a band is 1 - (1 - s^r)^b; the threshold is near (1/b)^(1/r)
+  - More rows per band means fewer false positives but more false negatives; the verification step removes
+    false positives only
+  - Pick parameters from the acceptable miss rate for near-duplicates and measure on a labelled sample
+- q: Why does dedup matter for LLM training and what else would you dedup on?
+  kind: design
+  key_points:
+  - Repeated text is memorised, wastes compute and contaminates evaluation sets
+  - Exact-hash dedup first (cheap), then MinHash for near-duplicates, and substring/suffix methods for
+    repeated boilerplate
+  - Dedup against benchmark data to avoid test-set leakage
+- q: Where does the time go and what bounds candidate generation?
+  kind: complexity
+  key_points:
+  - Signature generation is O(total shingles * num_perm); bucket insertion is O(N * bands)
+  - Candidate pairs within a bucket are quadratic in bucket size, so huge buckets (boilerplate) need a
+    cap or a separate pass
+  - Space O(N * num_perm) for signatures
+narration: []
+state_aloud:
+- Define shingle size, the empty-document policy and the hash family up front.
+- MinHash estimates Jaccard; it does not compute it exactly.
+- LSH gives candidates; verify with the signature estimate.
+- bands must divide num_perm.
+- Documents with no words are ignored.
+walkthrough: |
+  Each document becomes a set of word shingles whose 64-bit base hashes are computed once. For each of num_perm affine hash functions mod 2^61-1 the signature keeps the minimum over the set; the chance two signatures agree at a position equals the sets' Jaccard similarity, so the fraction of equal positions is an unbiased estimate. LSH splits signatures into bands, buckets documents by identical band contents and only compares documents that collide in some band, avoiding the all-pairs scan. Candidates are verified against the threshold. Standard MinHash + LSH formulation; no source note applies.
+categories:
+- ai-infra

@@ -1,0 +1,102 @@
+id: number-of-islands
+title: Number of Islands
+bar_level: 2
+target_minutes: 20
+patterns:
+- graph-bfs-dfs
+firm_tags:
+- ai-infra
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Number of Islands (LC 200)"
+statement: |
+  A grid contains `1` (land) and `0` (water). An island is a maximal group of land cells connected horizontally or vertically. Return the number of islands.
+
+  Example: `num_islands([[1,1,0],[0,1,0],[0,0,1]])` returns `2`.
+starter: |
+  def num_islands(grid):
+      pass
+hints:
+- Scan every cell; when you find unvisited land you've found a new island.
+- Flood fill from it (BFS or DFS) marking all connected land as visited.
+- Use an explicit stack/queue; deep recursion on a big grid hits Python's limit.
+follow_ups:
+- What about diagonal connectivity?
+- Count islands as land cells are added dynamically (Union-Find).
+tests:
+- name: two islands
+  tags:
+  - ordering
+  code: |
+    assert num_islands([[1,1,0],[0,1,0],[0,0,1]])==2
+- name: empty grid
+  tags:
+  - empty
+  code: |
+    assert num_islands([])==0
+    assert num_islands([[]])==0
+- name: single land cell
+  tags:
+  - single
+  code: |
+    assert num_islands([[1]])==1
+    assert num_islands([[0]])==0
+- name: snake touches the boundary
+  tags:
+  - boundary
+  code: |
+    assert num_islands([[1,0,1],[1,0,1],[1,1,1]])==1
+- name: checkerboard of isolated cells
+  tags:
+  - duplicate
+  code: |
+    g=[[(i+j)%2 for j in range(4)] for i in range(4)]
+    assert num_islands(g)==8
+- name: does not mutate input
+  tags:
+  - state-reuse
+  code: |
+    g=[[1,1],[0,1]]
+    assert num_islands(g)==1
+    assert g==[[1,1],[0,1]]
+- name: large all-land grid
+  tags:
+  - scale
+  hidden: true
+  code: |
+    g=[[1]*400 for _ in range(400)]
+    assert num_islands(g)==1
+    g[200]=[0]*400
+    assert num_islands(g)==2
+complexity:
+- op: overall
+  time: O(r * c)
+  space: O(r * c)
+extensions:
+- q: Diagonal connections?
+  kind: reasoning
+  key_points:
+  - Use 8 neighbor offsets
+  - Complexity is unchanged
+  - Clarify the connectivity rule up front
+- q: Space complexity and mutation
+  kind: complexity
+  key_points:
+  - Visited set or in-place marking costs O(r*c)
+  - Worst-case DFS/BFS frontier O(r*c)
+  - In-place marking changes the caller's grid, so copy or restore
+- q: Dynamic land additions
+  kind: design
+  key_points:
+  - Union-Find over cells with a component counter
+  - Each add is near O(1) amortized
+  - Answers the count after every update
+narration: []
+state_aloud:
+- Empty grid or empty rows.
+- Island touching the border.
+- Whether mutating input is allowed.
+- Recursion depth on large islands.
+walkthrough: |
+  Iterate over every cell and start a flood fill whenever an unvisited land cell is found, incrementing the island counter. The fill uses an explicit stack to visit all four-directional land neighbors and records them as visited so each cell is processed once. The answer is the number of fills started.

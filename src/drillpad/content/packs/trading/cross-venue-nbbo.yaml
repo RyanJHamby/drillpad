@@ -1,0 +1,190 @@
+id: cross-venue-nbbo
+title: Cross-venue NBBO Aggregator
+bar_level: 3
+target_minutes: 35
+patterns:
+- order-book
+- lazy-heap
+- market-data
+- aggregation
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Aggregate the top of book from several venues into a National Best Bid and Offer (NBBO).
+
+  `NBBO()` consumes per-venue quote updates:
+
+  `update(venue, side, price, qty)` sets that venue's quote on `side` (`"buy"` = its bid, `"sell"` = its offer) to
+  `qty` shares at `price` (positive int ticks). A new update REPLACES that venue's previous quote on that side.
+  `qty == 0` withdraws the venue's quote on that side (price is ignored). `ValueError` for a bad side, empty venue
+  name, negative qty, or (when qty > 0) a non-positive/non-int price.
+
+  `nbbo() -> (bid, ask)`: each is `None` (no venue quotes that side) or `(price, total_qty, venues)` where `price` is the
+  best (highest bid / lowest offer) across venues, `total_qty` is the SUM of the quantities of all venues quoting exactly that
+  price, and `venues` is a tuple of those venue names sorted alphabetically.
+
+  `status() -> str`: `"empty"` (no quotes), `"one-sided"` (only bid or only ask), `"crossed"` (bid price > ask price),
+  `"locked"` (equal), else `"normal"`. Crossed and locked books are reported, not repaired.
+
+  Updates arrive at feed rate: each must be O(log V) or better in the number of distinct price levels; do not
+  rescan every venue to recompute the best.
+starter: |
+  class NBBO:
+      def __init__(self):
+          pass
+hints:
+- 'Two indexes: venue -> its current (price, qty) per side, and price -> {venue: qty}. An update removes
+  the old entry from both before inserting the new one.'
+- A lazy heap of prices finds the best price; when the top price has no venues left, pop it. Sum quantities
+  of the venues at that price on read.
+- status() just compares the best bid and ask prices; None on either side means empty / one-sided.
+follow_ups:
+- How would Reg NMS trade-through protection use this?
+- How do you avoid the O(venues at best) sum on every read?
+- How would you model stale quotes (a venue whose feed went quiet)?
+tests:
+- name: best across venues with aggregated size
+  code: |
+    n = NBBO()
+    n.update("NYSE", "buy", 100, 300)
+    n.update("NASDAQ", "buy", 100, 200)
+    n.update("ARCA", "buy", 99, 1000)
+    n.update("NYSE", "sell", 102, 500)
+    n.update("ARCA", "sell", 101, 100)
+    assert n.nbbo() == ((100, 500, ("NASDAQ", "NYSE")), (101, 100, ("ARCA",)))
+    assert n.status() == "normal"
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: empty and one-sided
+  code: |
+    n = NBBO()
+    assert n.nbbo() == (None, None) and n.status() == "empty"
+    n.update("A", "sell", 105, 10)
+    assert n.nbbo() == (None, (105, 10, ("A",))) and n.status() == "one-sided"
+  hidden: false
+  tags:
+  - empty
+  - single
+- name: update replaces the venues previous quote
+  code: |
+    n = NBBO()
+    n.update("A", "buy", 100, 10)
+    n.update("B", "buy", 100, 10)
+    n.update("A", "buy", 99, 7)
+    assert n.nbbo()[0] == (100, 10, ("B",)), "A moved away from 100"
+    n.update("B", "buy", 98, 5)
+    assert n.nbbo()[0] == (99, 7, ("A",))
+    n.update("A", "buy", 99, 20)
+    assert n.nbbo()[0] == (99, 20, ("A",)), "same price: replaced, not added"
+  hidden: false
+  tags:
+  - state-reuse
+  - duplicate
+- name: withdrawal with qty 0
+  code: |
+    n = NBBO()
+    n.update("A", "buy", 100, 10); n.update("B", "buy", 99, 10)
+    n.update("A", "buy", 0, 0)
+    assert n.nbbo()[0] == (99, 10, ("B",))
+    n.update("B", "buy", 5, 0)
+    assert n.nbbo() == (None, None)
+    n.update("C", "buy", 0, 0)
+    assert n.nbbo() == (None, None), "withdrawing a venue that never quoted is a no-op"
+  hidden: false
+  tags:
+  - empty
+  - state-reuse
+- name: locked and crossed markets are reported
+  code: |
+    n = NBBO()
+    n.update("A", "buy", 100, 1)
+    n.update("B", "sell", 100, 1)
+    assert n.status() == "locked"
+    n.update("C", "buy", 101, 1)
+    assert n.status() == "crossed"
+    assert n.nbbo() == ((101, 1, ("C",)), (100, 1, ("B",)))
+    n.update("C", "buy", 0, 0)
+    assert n.status() == "locked"
+  hidden: false
+  tags:
+  - boundary
+- name: rejects bad input
+  code: |
+    n = NBBO()
+    for args in [("A", "hold", 100, 1), ("", "buy", 100, 1), ("A", "buy", 0, 1), ("A", "buy", 100, -1)]:
+        try:
+            n.update(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    assert n.nbbo() == (None, None)
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: 'scale: 300k updates across 20 venues'
+  code: |
+    n = NBBO()
+    venues = [f"V{i:02d}" for i in range(20)]
+    for i in range(300000):
+        v = venues[i % 20]
+        side = "buy" if (i // 20) % 2 else "sell"
+        n.update(v, side, 10000 + (i * 7919) % 500, 0 if i % 7 == 0 else 100)
+        if i % 50 == 0:
+            n.nbbo()
+    bid, ask = n.nbbo()
+    assert bid is not None and ask is not None
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: update
+  time: O(log P) amortized
+  space: O(V + P)
+- op: nbbo
+  time: O(k) amortized
+  space: O(1)
+extensions:
+- q: 'Level 2: keep a running total per price level so nbbo() is O(1) amortized, and add a `stale(venue)`
+    that withdraws both sides.'
+  key_points:
+  - Maintain level totals on add/remove instead of summing venues on read
+  - stale() removes the venue from both sides atomically so nbbo never shows half-stale data
+  - Locked/crossed detection still derived from the best prices
+  kind: code
+- q: 'Level 3: given an incoming marketable order, return the routing plan (venue, qty) that sweeps the
+    NBBO then next levels.'
+  key_points:
+  - Walk levels best-first across venues, tie-breaking venues deterministically (e.g. alphabetical or
+    fee-aware)
+  - Never exceed any venue quoted size; stop at limit price
+  - Return remaining unrouted quantity
+  kind: code
+- q: Compare lazy heap vs sorted container vs recomputing max over venues.
+  key_points:
+  - Recompute over V venues is O(V) per read; fine for tens of venues but wasteful at feed rate
+  - Lazy heap keeps updates O(log P) and best reads O(1) amortized
+  - Both indexes must be updated together or reads see ghost quotes
+  kind: complexity
+- q: 'Design: how would a smart order router consume this and what are the consistency risks?'
+  key_points:
+  - Venue feeds have different latencies; the aggregate is a view at slightly different times for each
+    venue
+  - Publish immutable snapshots with a version so consumers never see a half-applied update
+  - Locked or crossed states are real and transient; the router must handle them rather than assume bid
+    < ask
+  kind: design
+narration: []
+state_aloud:
+- Each venue has at most one quote per side; a new update replaces it, qty 0 withdraws it.
+- Total qty at the best price sums across venues; venue list is sorted for determinism.
+- Crossed and locked books are reported, not repaired; integer ticks.
+walkthrough: |
+  Per-venue top-of-book quotes are merged: a venue-to-quote map and a price-to-venues map are kept in sync, with a lazy heap locating the best price. Locked/crossed detection reflects that real NBBOs can transiently cross. Source: standard formulation.
+categories:
+- trading

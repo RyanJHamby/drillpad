@@ -1,0 +1,97 @@
+id: kth-largest-element
+title: Kth Largest Element in an Array
+bar_level: 2
+target_minutes: 20
+patterns:
+- heap-top-k
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+- trading
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Kth Largest in Array (LC 215)"
+statement: |
+  Return the k-th largest element of an unsorted list (the k-th in sorted descending order, counting duplicates). `1 <= k <= len(nums)`.
+
+  Example: `kth_largest([3,2,1,5,6,4], 2)` returns `5`.
+starter: |
+  def kth_largest(nums, k):
+      pass
+hints:
+- Sorting works in O(n log n); can you do better when k is small?
+- Keep a min-heap of the k largest seen so far; its root is the answer.
+- Quickselect partitions around a pivot for O(n) average.
+follow_ups:
+- Implement quickselect and discuss worst case.
+- How would you maintain the k-th largest as numbers stream in?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert kth_largest([3,2,1,5,6,4],2)==5
+- name: with duplicates
+  tags:
+  - duplicate
+  code: |
+    assert kth_largest([3,2,3,1,2,4,5,5,6],4)==4
+- name: single element
+  tags:
+  - single
+  code: |
+    assert kth_largest([9],1)==9
+- name: k is length (minimum)
+  tags:
+  - boundary
+  code: |
+    assert kth_largest([5,1,9,3],4)==1
+    assert kth_largest([5,1,9,3],1)==9
+- name: negatives
+  tags:
+  - invalid
+  code: |
+    assert kth_largest([-1,-5,-3],2)==-3
+- name: large input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import random
+    r=random.Random(1)
+    a=[r.randrange(10**6) for _ in range(200000)]
+    assert kth_largest(a,100)==sorted(a,reverse=True)[99]
+complexity:
+- op: heap
+  time: O(n log k)
+  space: O(k)
+- op: quickselect
+  time: O(n) expected
+  space: O(1)
+extensions:
+- q: Quickselect worst case
+  kind: complexity
+  key_points:
+  - Bad pivots give O(n^2)
+  - Randomized pivot or median-of-medians fixes expectation or worst case
+  - Average O(n), in-place
+- q: Streaming kth largest
+  kind: design
+  key_points:
+  - Maintain a size-k min-heap
+  - 'Each new value: push and pop if size exceeds k'
+  - Query is heap[0] in O(1), update O(log k)
+- q: Heap vs sort tradeoff
+  kind: reasoning
+  key_points:
+  - Sort is simplest but O(n log n)
+  - Heap wins when k << n
+  - Quickselect wins on a fixed array but mutates it
+narration: []
+state_aloud:
+- k = 1 and k = n.
+- Duplicates count separately.
+- Negative numbers.
+- Mutating the input may be forbidden.
+walkthrough: |
+  Maintain a min-heap holding the k largest values seen so far: push each number and pop the smallest whenever the heap grows beyond k. After the scan, the root is exactly the k-th largest. This costs O(n log k) time and O(k) space, and is the same structure used for a streaming k-th largest.

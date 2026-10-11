@@ -1,0 +1,180 @@
+id: elevator-controller
+title: Elevator Controller
+bar_level: 3
+target_minutes: 35
+patterns:
+- state-machine
+- scan-algorithm
+- simulation
+firm_tags: []
+statement: |
+  Implement `ElevatorController(num_floors, start=0)` for one elevator serving floors
+  `0..num_floors-1` using the SCAN (elevator) policy.
+
+  - `request(floor)`: add a stop (from a hall button or the cabin; no difference). Duplicate
+    requests collapse into one. `floor` outside the range raises `ValueError`.
+  - `step()` advances time by one unit and returns a tuple:
+    - `("open", f)` if the elevator is at floor `f` and `f` is a requested stop: serve it (remove
+      the stop).
+    - else `("idle", f)` if there are no stops at all (direction becomes `"idle"`).
+    - else move one floor and return `("move", new_floor)`.
+  - Direction rule when choosing where to move: keep the current direction while any stop remains
+    ahead in that direction; otherwise reverse if stops remain behind; when idle, head toward the
+    nearest stop (ties go up).
+  - Attributes: `floor` (current floor), `direction` in `"up"|"down"|"idle"`, `stops` (sorted
+    list of pending floors).
+
+  Example
+  ```python
+  e = ElevatorController(10); e.request(3); e.request(1)
+  steps: move 1, open 1, move 2, move 3, open 3, then ("idle", 3)
+  ```
+starter: |
+  class ElevatorController:
+      def __init__(self, num_floors, start=0):
+          pass
+
+      def request(self, floor):
+          pass
+
+      def step(self):
+          pass
+hints:
+- Model state as (floor, direction, set of stops); step is a pure state transition.
+- 'Serve the current floor first, then decide direction: continue if stops ahead, else reverse.'
+- When idle pick the nearest stop; make the tie-break explicit.
+follow_ups:
+- How would you test fairness/starvation?
+- How do you handle emergency stop or maintenance mode?
+tests:
+- name: serves stops on the way
+  tags:
+  - ordering
+  - boundary
+  code: |
+    e = ElevatorController(10)
+    e.request(3); e.request(1)
+    out = [e.step() for _ in range(7)]
+    assert out == [("move", 1), ("open", 1), ("move", 2), ("move", 3), ("open", 3), ("idle", 3), ("idle", 3)]
+    assert e.direction == "idle" and e.stops == []
+- name: scan keeps direction before reversing
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    e = ElevatorController(10, start=4)
+    e.request(6); e.request(8)
+    assert e.step() == ("move", 5) and e.direction == "up"
+    e.request(2)                         # behind: must wait until the upward sweep is done
+    served = []
+    for _ in range(30):
+        kind, f = e.step()
+        if kind == "open": served.append(f)
+        if kind == "idle": break
+    assert served == [6, 8, 2]
+- name: invalid floor and duplicates
+  tags:
+  - invalid
+  - duplicate
+  code: |
+    e = ElevatorController(5)
+    for bad in (-1, 5, 99):
+        try:
+            e.request(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+    e.request(2); e.request(2); e.request(2)
+    assert e.stops == [2]
+    assert [e.step() for _ in range(3)] == [("move", 1), ("move", 2), ("open", 2)]
+- name: request at current floor and idle start
+  tags:
+  - empty
+  - single
+  code: |
+    e = ElevatorController(3, start=1)
+    assert e.step() == ("idle", 1) and e.direction == "idle"
+    e.request(1)
+    assert e.step() == ("open", 1)
+    assert e.step() == ("idle", 1)
+- name: idle picks nearest stop with ties up
+  hidden: true
+  tags:
+  - ordering
+  - boundary
+  code: |
+    e = ElevatorController(10, start=5)
+    e.request(3); e.request(7)
+    assert e.step() == ("move", 6) and e.direction == "up"
+    e2 = ElevatorController(10, start=5)
+    e2.request(2); e2.request(7)
+    assert e2.step() == ("move", 6)
+    e3 = ElevatorController(10, start=5)
+    e3.request(4); e3.request(9)
+    assert e3.step() == ("move", 4) and e3.direction == "down"
+- name: many requests terminate and visit all
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    import random
+    r = random.Random(8)
+    e = ElevatorController(50, start=25)
+    wanted = set()
+    for _ in range(30):
+        f = r.randrange(50); wanted.add(f); e.request(f)
+    served = set()
+    for _ in range(500):
+        kind, f = e.step()
+        if kind == "open": served.add(f)
+        if kind == "idle": break
+    else:
+        raise AssertionError("never went idle")
+    assert served == wanted
+complexity:
+- op: request
+  time: O(1)
+  space: O(n)
+- op: step
+  time: O(s)
+  space: O(s)
+extensions:
+- q: Cost of step with s pending stops, and how to make it O(log s)?
+  kind: complexity
+  key_points:
+  - Scanning for stops above/below is O(s) per step with a set
+  - Keep two heaps or a sorted structure (bisect) so the next stop in each direction is O(log s)
+  - Space is O(s) pending stops
+- q: Extend to several elevators with a dispatcher.
+  kind: design
+  key_points:
+  - Dispatcher assigns each hall call to the elevator with the lowest cost (distance, direction fit, load)
+  - Separate Elevator state machines from the Scheduler strategy so policies can be swapped
+  - Zoning/destination dispatch reduce stops in tall buildings
+- q: Add direction-specific hall calls, capacity and door timing.
+  kind: design
+  key_points:
+  - A hall call is (floor, direction); only stop when the elevator is heading that way
+  - Cabin requests have no direction; capacity makes the elevator skip pickups when full
+  - Model door open/close as explicit states with timers driven by the simulation clock
+- q: Why SCAN rather than FCFS or nearest-first?
+  kind: reasoning
+  key_points:
+  - FCFS zigzags and wastes travel
+  - Nearest-first can starve far floors
+  - SCAN bounds waiting time to about two sweeps and has good throughput
+narration: []
+state_aloud:
+- Stop at current floor is served on the next step.
+- Duplicate requests collapse.
+- Direction only reverses when nothing remains ahead.
+- Out-of-range request is invalid.
+walkthrough: State is the current floor, a direction and a set of pending stops. step first serves the
+  current floor if it is a stop, returns idle when the set is empty, and otherwise chooses a direction
+  (continue while stops lie ahead, reverse when only stops behind remain, nearest-first with ties up when
+  idle) and moves one floor. SCAN guarantees every stop is served within two sweeps.
+anki_queries: []
+categories:
+- systems-impl

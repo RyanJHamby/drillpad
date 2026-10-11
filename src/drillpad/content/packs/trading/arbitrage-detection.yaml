@@ -1,0 +1,176 @@
+id: arbitrage-detection
+title: Currency Arbitrage Detection (Bellman-Ford)
+bar_level: 3
+target_minutes: 35
+patterns:
+- bellman-ford
+- negative-cycle
+- graph
+- log-transform
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  A currency table lists directed exchange rates: `(src, dst, rate)` means 1 unit of `src` buys `rate` units of `dst`
+  (`rate > 0`, float). Reverse rates are NOT implied: only the listed directions exist. Duplicate pairs are allowed.
+
+  `find_arbitrage(rates) -> list` returns a cycle of currencies `[c0, c1, ..., ck]` with `ck == c0` such that following the
+  listed edges `c0 -> c1 -> ... -> ck` multiplies money by MORE than `1 + 1e-9`. Any profitable cycle is accepted (tests verify
+  that the returned cycle is closed, uses only listed edges, and its best-case product beats 1 + 1e-9; for duplicate pairs use the best
+  rate). If no arbitrage exists return `[]` (a `list`, not None). A self-loop with rate > 1 is the cycle `[c, c]`.
+  `ValueError` if any rate is not positive.
+
+  Use Bellman-Ford on edge weights `-log(rate)`: a negative cycle is an arbitrage. Rates in the tests are chosen so that
+  profitable cycles beat 1 by a clear margin and non-arbitrage tables lose to fees by a clear margin, but you should compare with a tiny
+  epsilon when relaxing so float noise on exactly-consistent rates does not create a phantom cycle. The scale test has 100 currencies and
+  about 10k edges: an exponential search over cycles will time out.
+starter: |
+  def find_arbitrage(rates):
+      pass
+hints:
+- A cycle with product of rates > 1 has sum of -log(rate) < 0, so arbitrage = negative cycle in a graph
+  with weights -log(rate).
+- Run Bellman-Ford from a virtual source (start every distance at 0) for n rounds; if round n still relaxes
+  an edge, a negative cycle is reachable.
+- To extract it, remember the predecessor of the last relaxed vertex, walk back n steps to land inside
+  the cycle, then follow predecessors until you return to that vertex. Use a small epsilon when relaxing
+  to avoid float noise.
+follow_ups:
+- How would you handle bid/ask spreads and fees?
+- Why use Floyd-Warshall for many queries instead?
+- How does this differ from a DFS for the best conversion rate?
+tests:
+- name: simple triangle arbitrage
+  code: |
+    rates = [("USD", "EUR", 0.9), ("EUR", "GBP", 0.9), ("GBP", "USD", 1.3)]
+    cyc = find_arbitrage(rates)
+    assert isinstance(cyc, list) and len(cyc) >= 3 and cyc[0] == cyc[-1]
+    best = {}
+    for a, b, r in rates:
+        best[(a, b)] = max(best.get((a, b), 0), r)
+    prod = 1.0
+    for a, b in zip(cyc, cyc[1:]):
+        prod *= best[(a, b)]
+    assert prod > 1 + 1e-9, prod
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: no arbitrage returns an empty list
+  code: |
+    rates = [("USD", "EUR", 0.9), ("EUR", "USD", 1.1), ("EUR", "GBP", 0.85), ("GBP", "EUR", 1.15)]
+    assert find_arbitrage(rates) == []
+    assert find_arbitrage([]) == []
+    assert find_arbitrage([("A", "B", 2.0)]) == []
+  hidden: false
+  tags:
+  - empty
+  - boundary
+- name: exactly consistent rates are not arbitrage
+  code: |
+    rates = [("A", "B", 2.0), ("B", "A", 0.5), ("B", "C", 3.0), ("C", "B", 1 / 3), ("A", "C", 6.0), ("C", "A", 1 / 6)]
+    assert find_arbitrage(rates) == []
+  hidden: false
+  tags:
+  - boundary
+  - duplicate
+- name: self loop and two-node cycle
+  code: |
+    assert find_arbitrage([("A", "A", 1.01)]) == ["A", "A"]
+    cyc = find_arbitrage([("A", "B", 2.0), ("B", "A", 0.6)])
+    assert cyc[0] == cyc[-1] and set(cyc) == {"A", "B"} and len(cyc) == 3
+  hidden: false
+  tags:
+  - single
+  - boundary
+- name: cycle is found away from the first node and duplicates use the best rate
+  code: |
+    rates = [("X", "A", 1.0), ("A", "B", 0.5), ("B", "C", 4.0), ("C", "B", 0.4), ("B", "C", 1.0), ("C", "A", 0.8), ("A", "B", 1.0)]
+    cyc = find_arbitrage(rates)
+    assert cyc and cyc[0] == cyc[-1]
+    best = {}
+    for a, b, r in rates:
+        best[(a, b)] = max(best.get((a, b), 0), r)
+    prod = 1.0
+    for a, b in zip(cyc, cyc[1:]):
+        assert (a, b) in best, (a, b)
+        prod *= best[(a, b)]
+    assert prod > 1 + 1e-9
+  hidden: false
+  tags:
+  - duplicate
+  - ordering
+- name: rejects non-positive rates
+  code: |
+    for bad in ([("A", "B", 0.0)], [("A", "B", -1.0)]):
+        try:
+            find_arbitrage(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: 'scale: 100 currencies, 9900 edges, with and without an arbitrage'
+  code: |
+    n = 100
+    val = [1.0 + (i * 7919) % 97 / 10 for i in range(n)]
+    rates = [(f"C{i}", f"C{j}", val[i] / val[j] * 0.999) for i in range(n) for j in range(n) if i != j]
+    assert find_arbitrage(rates) == []
+    rates.append(("C0", "C1", val[0] / val[1] * 1.05))
+    rates.append(("C1", "C0", val[1] / val[0] * 1.05))
+    cyc = find_arbitrage(rates)
+    assert cyc and cyc[0] == cyc[-1]
+    best = {}
+    for a, b, r in rates:
+        best[(a, b)] = max(best.get((a, b), 0), r)
+    prod = 1.0
+    for a, b in zip(cyc, cyc[1:]):
+        prod *= best[(a, b)]
+    assert prod > 1 + 1e-9
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: find_arbitrage
+  time: O(V * E)
+  space: O(V + E)
+extensions:
+- q: 'Level 2: return the cycle with the highest profit among those found, and report its multiplier.'
+  key_points:
+  - Compute the product along the extracted cycle and compare candidates across starting points or SPFA
+    runs
+  - Maximum-profit cycle is NP-hard in general; document that you return a good cycle, not necessarily
+    the best
+  - Return (cycle, multiplier) and handle none found
+  kind: code
+- q: 'Level 3: use exact arithmetic (Fraction) so there are no epsilon decisions.'
+  key_points:
+  - Compare products of Fractions directly instead of summing logs
+  - Bellman-Ford on logs is replaced by a multiplicative relaxation dist[b] < dist[a] * rate
+  - 'Cost: arbitrary-precision numbers make every relaxation slower'
+  kind: code
+- q: Complexity of Bellman-Ford here and practical speed-ups.
+  key_points:
+  - O(V * E) worst case; with early exit when a round relaxes nothing it is often far faster
+  - SPFA (queue-based) is typically near O(E) on real data but O(V * E) worst case
+  - Floyd-Warshall is O(V^3), better for dense graphs with many queries
+  kind: complexity
+- q: 'Design: why does real arbitrage rarely look like this in production?'
+  key_points:
+  - 'Rates change faster than you can execute: latency and stale quotes dominate'
+  - Fees, spreads and liquidity (size at the quoted price) usually eliminate small cycles
+  - You need atomic or near-atomic execution across legs or you are taking leg risk
+  kind: design
+narration: []
+state_aloud:
+- Rates are directed; no reverse edges are implied. Return [] when none exists.
+- Cycle is a closed list [c0, ..., c0] and must exceed 1 + 1e-9 using listed edges.
+- Epsilon when relaxing to avoid float noise; rates must be positive.
+walkthrough: |
+  Standard formulation: take -log(rate) as the edge weight and run Bellman-Ford, which also detects arbitrage (cycle product > 1). This problem asks for the arbitrage cycle itself.
+categories:
+- trading

@@ -1,0 +1,96 @@
+id: valid-parentheses
+title: Valid Parentheses
+bar_level: 1
+target_minutes: 10
+patterns:
+- stack
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Valid Parentheses (LC 20)"
+statement: |
+  Given a string made only of the characters `()[]{}`, decide whether the brackets are balanced: every opener is closed by the matching type, in the correct nesting order, and nothing is left open.
+
+  Example: `is_valid("([]{})")` is `True`; `is_valid("(]")` is `False`.
+starter: |
+  def is_valid(s):
+      pass
+hints:
+- The most recent unclosed opener must be the first one closed.
+- Push openers on a stack; on a closer, the top must be its partner.
+- At the end the stack must be empty.
+follow_ups:
+- Return the index of the first mismatch.
+- Support a stream and constant memory for only one bracket type.
+tests:
+- name: nested valid
+  tags:
+  - ordering
+  code: |
+    assert is_valid('([]{})') is True
+- name: mismatched type
+  tags:
+  - invalid
+  code: |
+    assert is_valid('(]') is False
+    assert is_valid('([)]') is False
+- name: empty string
+  tags:
+  - empty
+  code: |
+    assert is_valid('') is True
+- name: unclosed opener
+  tags:
+  - boundary
+  code: |
+    assert is_valid('((') is False
+- name: closer first / extra closer
+  tags:
+  - boundary
+  code: |
+    assert is_valid(')') is False
+    assert is_valid('())') is False
+- name: single char
+  tags:
+  - single
+  code: |
+    assert is_valid('[') is False
+- name: deep nesting
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert is_valid('('*100000+')'*100000) is True
+    assert is_valid('('*100000+')'*99999) is False
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: One bracket type only, O(1) space?
+  kind: complexity
+  key_points:
+  - Keep a single depth counter
+  - Fail if it goes negative or is nonzero at the end
+  - Doesn't work with multiple types, which need ordering
+- q: Report the first error position
+  kind: code
+  key_points:
+  - Push (char, index) pairs
+  - On mismatch return the closer's index; at the end return the oldest unclosed index
+  - Handle empty stack on a closer
+- q: 'Design: validate a multi-GB stream'
+  kind: design
+  key_points:
+  - Process in chunks keeping the stack across chunks
+  - Stack depth bounds the memory
+  - Reject early when depth exceeds a limit
+narration: []
+state_aloud:
+- Empty string is balanced.
+- Closer with an empty stack.
+- Odd-length strings can never balance.
+- Leftover openers.
+walkthrough: |
+  Scan left to right with a stack of expected closers or openers. An opener is pushed; a closer must match the stack's top, otherwise the string is invalid (including when the stack is empty). After the scan the stack must be empty, which catches unclosed openers. Each character is handled once.

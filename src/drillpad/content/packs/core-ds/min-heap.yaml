@@ -1,0 +1,134 @@
+id: min-heap
+title: Binary min-heap from scratch
+bar_level: 2
+target_minutes: 20
+patterns: [heap, priority-queue, sift-up-down]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:11 - *"'
+statement: |
+  Implement `MinHeap` backed by a plain list (no heapq): `push(val)`, `pop()` (removes and
+  returns the minimum), `peek()`. `pop` and `peek` on an empty heap raise IndexError.
+  push and pop are O(log n), peek is O(1). Values only need to support `<`.
+starter: |
+  class MinHeap:
+      def __init__(self):
+          pass
+hints:
+  - parent(i) = (i-1)//2, children 2i+1 and 2i+2.
+  - To pop, take the root, move the last element to the root, then sift it down.
+follow_ups:
+  - Why is heapify O(n) and not O(n log n)?
+  - How would you support decrease_key (position map)?
+  - k-way merge of sorted lists with this heap.
+  - Heap versus balanced BST for this use case?
+tests:
+  - name: pops in sorted order
+    tags: [ordering]
+    code: |
+      h = MinHeap()
+      for v in (5, 3, 8, 1, 9, 2, 7): h.push(v)
+      assert h.peek() == 1
+      assert [h.pop() for _ in range(7)] == [1, 2, 3, 5, 7, 8, 9]
+  - name: empty raises
+    tags: [empty, invalid]
+    code: |
+      h = MinHeap()
+      for fn in (h.pop, h.peek):
+          try: fn()
+          except IndexError: pass
+          else: raise AssertionError("empty should raise IndexError")
+  - name: duplicates and tuples
+    tags: [duplicate, ordering]
+    code: |
+      h = MinHeap()
+      for t in [(2, "b"), (1, "z"), (2, "a"), (1, "y")]: h.push(t)
+      assert [h.pop() for _ in range(4)] == [(1, "y"), (1, "z"), (2, "a"), (2, "b")]
+  - name: randomized interleaved against sorted model
+    tags: [scale, ordering]
+    hidden: true
+    code: |
+      import random, bisect
+      rng = random.Random(3)
+      h, model = MinHeap(), []
+      for _ in range(2000):
+          if model and rng.random() < 0.4:
+              assert h.pop() == model.pop(0)
+          else:
+              v = rng.randrange(100)
+              h.push(v); bisect.insort(model, v)
+          if model: assert h.peek() == model[0]
+      while model: assert h.pop() == model.pop(0)
+  - name: single element and reuse
+    tags: [single, state-reuse, boundary]
+    hidden: true
+    code: |
+      h = MinHeap()
+      h.push(4)
+      assert h.peek() == 4 and h.pop() == 4
+      try: h.peek()
+      except IndexError: pass
+      else: raise AssertionError("emptied heap should raise")
+      h.push(2); h.push(1)
+      assert h.pop() == 1 and h.pop() == 2
+complexity:
+- op: push
+  time: O(log n)
+  space: O(n)
+- op: pop
+  time: O(log n)
+  space: O(n)
+- op: peek
+  time: O(1)
+  space: O(n)
+- op: heapify (from array)
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why is heapify O(n) and not O(n log n)?
+  kind: reasoning
+  key_points:
+  - Bottom-up sift-down from the last parent
+  - Most nodes are near the bottom and do almost no work
+  - Sum over levels is a geometric series that telescopes to O(n)
+- q: How would you support decrease_key?
+  kind: design
+  key_points:
+  - Keep a map from element id to its array index
+  - Update the map on every swap
+  - Sift up from that index after lowering the key
+  - Cost O(log n)
+- q: Merge k sorted lists with this heap.
+  kind: code
+  key_points:
+  - Push (value, list_idx, elem_idx) tuples
+  - Pop the min, push that list's next element
+  - O(N log k) total for N elements
+  - Tie-break on index so non-comparable payloads never compare
+- q: Heap versus balanced BST for this use case?
+  kind: reasoning
+  key_points:
+  - 'Heap: O(1) peek-min and lower overhead'
+  - 'BST: O(log n) search and ordered iteration'
+  - Heap is only a partial order; not stable for equal priorities (add a sequence counter)
+- q: What is the space cost and how do you handle ties?
+  kind: complexity
+  key_points:
+  - Array-backed O(n) with no per-node pointers
+  - Index math parent (i-1)//2, children 2i+1 and 2i+2
+  - Duplicates fine; break ties with (priority, seq) if insertion order matters
+narration:
+- I'll use a plain array with implicit tree indexing — parent at `(i-1)//2`, children at `2i+1`/`2i+2` — so I don't need pointer nodes.
+- Push appends then sifts up; pop swaps the root with the last element, shrinks, then sifts down.
+- Both are O(log n) since we only ever walk one path root-to-leaf or leaf-to-root.
+- Let me trace a push that violates the invariant to make sure the swap logic terminates.
+- For max-heap I'd just flip the two comparisons.
+state_aloud:
+- Popping from an empty heap — raise, don't return `None` silently (ambiguous with a valid sentinel value).
+- Single-element heap — sift-down loop must terminate immediately (no children).
+- Duplicate priorities — heap only guarantees partial order, not stability; if insertion order among equal priorities matters, break ties with a secondary counter (`(priority, seq_num)`).
+- Building a heap from an existing array (`heapify`) is O(n), not O(n log n) — bottom-up sift-down from the last parent index.
+- Decrease-key / arbitrary deletion isn't native to array-backed heaps — needs an index map (heap position lookup) if required, e.g. Dijkstra with decrease-key.
+walkthrough: |
+  The heap is a plain array with implicit tree indexing: parent at `(i-1)//2` and children at `2i+1` and `2i+2`. The invariant is that every parent is less than or equal to both children, restored after each mutation. Push appends and sifts up; pop swaps the root with the last element, shrinks, then sifts down. Both walk a single root-to-leaf path, so they are O(log n), peek is O(1), and space is O(n). Popping an empty heap raises, and ties between equal priorities are not stable unless a secondary sequence counter is added.
+categories: [systems-impl]

@@ -1,0 +1,201 @@
+id: feed-handler-gap-recovery
+title: Market data feed handler with sequence-gap buffering
+bar_level: 3
+target_minutes: 25
+patterns:
+- sequence-numbers
+- reorder-buffer
+- order-book-reconstruction
+- gap-detection
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `FeedHandler`, which rebuilds an aggregated order book from an exchange feed whose
+  messages carry sequence numbers and may arrive out of order, duplicated, or with gaps
+  (the UDP-multicast situation: you would request retransmission of the gaps).
+
+  - `on_message(seq, msg) -> int`: sequence numbers start at 1. Messages are applied strictly in
+    sequence order. A message with `seq > next_seq` is buffered (not applied); a `seq` that was
+    already applied or is already buffered is ignored (returns 0). Returns how many messages were
+    applied by this call (including any buffered ones that became contiguous).
+  - Message formats: `("A", ref, side, price, qty)` adds an order (side `"B"` or `"S"`);
+    `("D", ref)` deletes the order; `("E", ref, qty)` executes `qty` against it (removes the order
+    when its remaining quantity hits 0).
+  - A message that references an unknown ref, re-adds a live ref, or executes more than the
+    remaining quantity is an anomaly: it is not applied to the book, `self.anomalies` is
+    incremented, but it still consumes its sequence number.
+  - `next_seq` (attribute): the next sequence number expected.
+  - `missing() -> [(lo, hi), ...]`: inclusive ranges of sequence numbers that are skipped
+    between `next_seq` and the highest buffered number, in ascending order.
+  - `best_bid()`, `best_ask()` (None if empty) and `depth(side) -> [(price, total_qty)]` for
+    side `"B"`/`"S"`, best price first, aggregated per price level.
+starter: |
+  class FeedHandler:
+      def __init__(self):
+          pass
+hints:
+- Keep next_seq and a dict seq -> msg for buffered messages; after storing, loop while next_seq is in
+  the dict.
+- Aggregate quantity per price level in a dict and delete a level when it reaches 0; keep a ref -> [side,
+  price, remaining] map for D/E.
+- 'missing(): walk the sorted buffered sequence numbers and emit a range whenever one is more than expect.'
+follow_ups:
+- What if the gap never fills? (timeout, request retransmit, give up and resync from a snapshot)
+- How do snapshot + incremental feeds interact with sequence numbers?
+- How do you bound the reorder buffer?
+- How would you run A/B redundant feeds and arbitrate them?
+tests:
+- name: in-order add, execute, delete
+  tags:
+  - empty
+  - single
+  - ordering
+  code: |
+    f = FeedHandler()
+    assert f.next_seq == 1 and f.missing() == [] and f.best_bid() is None and f.best_ask() is None
+    assert f.on_message(1, ("A", 10, "B", 100, 5)) == 1
+    assert f.on_message(2, ("A", 11, "S", 102, 3)) == 1
+    assert f.on_message(3, ("A", 12, "B", 100, 2)) == 1
+    assert f.depth("B") == [(100, 7)] and f.best_bid() == 100 and f.best_ask() == 102
+    f.on_message(4, ("E", 10, 2))
+    assert f.depth("B") == [(100, 5)]
+    f.on_message(5, ("D", 12))
+    assert f.depth("B") == [(100, 3)]
+    f.on_message(6, ("E", 10, 3))
+    assert f.depth("B") == [] and f.best_bid() is None and f.next_seq == 7
+- name: gap is buffered until filled
+  tags:
+  - ordering
+  - boundary
+  code: |
+    f = FeedHandler()
+    assert f.on_message(1, ("A", 1, "B", 10, 1)) == 1
+    assert f.on_message(3, ("A", 3, "B", 12, 1)) == 0
+    assert f.on_message(4, ("A", 4, "B", 13, 1)) == 0
+    assert f.missing() == [(2, 2)]
+    assert f.depth("B") == [(10, 1)], "buffered messages must not touch the book"
+    assert f.next_seq == 2
+    assert f.on_message(2, ("A", 2, "B", 11, 1)) == 3, "filling the gap drains the buffer"
+    assert f.missing() == [] and f.next_seq == 5
+    assert f.depth("B") == [(13, 1), (12, 1), (11, 1), (10, 1)]
+- name: duplicate and stale sequence numbers are ignored
+  tags:
+  - duplicate
+  code: |
+    f = FeedHandler()
+    f.on_message(1, ("A", 1, "S", 50, 4))
+    assert f.on_message(1, ("A", 99, "S", 51, 9)) == 0, "already applied seq"
+    f.on_message(3, ("D", 1))
+    assert f.on_message(3, ("A", 98, "S", 52, 9)) == 0, "already buffered seq"
+    f.on_message(2, ("A", 2, "S", 51, 1))
+    assert f.depth("S") == [(51, 1)], f.depth("S")
+- name: several gaps reported as inclusive ranges
+  tags:
+  - boundary
+  - ordering
+  code: |
+    f = FeedHandler()
+    f.on_message(1, ("A", 1, "B", 1, 1))
+    f.on_message(5, ("A", 5, "B", 5, 1))
+    f.on_message(9, ("A", 9, "B", 9, 1))
+    f.on_message(10, ("A", 10, "B", 10, 1))
+    assert f.missing() == [(2, 4), (6, 8)]
+    for s in (2, 3, 4):
+        f.on_message(s, ("A", s, "B", s, 1))
+    assert f.missing() == [(6, 8)] and f.next_seq == 6
+- name: bad references are counted, not applied
+  tags:
+  - invalid
+  - duplicate
+  hidden: true
+  code: |
+    f = FeedHandler()
+    f.on_message(1, ("A", 1, "B", 100, 5))
+    f.on_message(2, ("D", 77))                 # unknown ref
+    f.on_message(3, ("E", 77, 1))              # unknown ref
+    f.on_message(4, ("E", 1, 6))               # more than remaining
+    f.on_message(5, ("A", 1, "B", 101, 5))     # ref already live
+    assert f.anomalies == 4, f.anomalies
+    assert f.depth("B") == [(100, 5)]
+    assert f.next_seq == 6, "an anomalous message still consumes its sequence number"
+- name: level removed only when quantity reaches zero
+  tags:
+  - state-reuse
+  - boundary
+  hidden: true
+  code: |
+    f = FeedHandler()
+    f.on_message(1, ("A", 1, "S", 100, 2)); f.on_message(2, ("A", 2, "S", 100, 2))
+    f.on_message(3, ("E", 1, 2))
+    assert f.best_ask() == 100 and f.depth("S") == [(100, 2)]
+    f.on_message(4, ("D", 2))
+    assert f.best_ask() is None and f.depth("S") == []
+    f.on_message(5, ("A", 3, "S", 100, 1))
+    assert f.depth("S") == [(100, 1)]
+- name: large shuffled stream
+  tags:
+  - scale
+  - ordering
+  hidden: true
+  code: |
+    import random
+    n = 40000
+    msgs = [(i, ("A", i, "B" if i % 2 else "S", 1000 + i % 50, 1)) for i in range(1, n + 1)]
+    chunks = [msgs[i:i + 500] for i in range(0, n, 500)]
+    rng = random.Random(7)
+    for c in chunks:
+        rng.shuffle(c)
+    f = FeedHandler()
+    for c in chunks[::-1][:1] + chunks[:-1]:      # last chunk first creates one big gap
+        for s, m in c:
+            f.on_message(s, m)
+    assert f.next_seq == n + 1 and f.missing() == []
+    assert sum(q for _, q in f.depth("B")) == n // 2
+complexity:
+- op: on_message
+  time: O(1) amortized
+  space: O(B)
+- op: missing
+  time: O(B log B)
+  space: O(B)
+- op: depth
+  time: O(P log P)
+  space: O(P)
+extensions:
+- q: 'Level 2: add a snapshot message so a late joiner (or a handler that gave up on a gap) can resync.'
+  kind: code
+  key_points:
+  - snapshot(seq, orders) replaces the book wholesale and sets next_seq = seq + 1
+  - Buffered messages with seq <= snapshot seq are discarded; later ones drain normally
+  - Stale snapshots (seq < next_seq - 1 already applied) must be ignored
+- q: 'Level 3: bound the reorder buffer and surface a resync request when it overflows.'
+  kind: code
+  key_points:
+  - Cap the number of buffered messages or the allowed gap width
+  - On overflow stop buffering and report that the caller must resync from a snapshot
+  - Never apply messages past an unfilled gap
+- q: Where do the gap-detection and retransmission requests live in a real feed handler?
+  kind: design
+  key_points:
+  - UDP multicast is lossy so every packet carries a sequence number; gap triggers a request on a separate
+    TCP recovery channel
+  - Reorder buffering and book building sit behind a parser; ring buffers hand updates to strategy threads
+  - Redundant A/B feeds are merged by sequence number to reduce gaps
+- q: What does each message cost and how much memory can the reorder buffer take?
+  kind: complexity
+  key_points:
+  - 'Each message is O(1) amortized: a dict insert plus draining contiguous entries'
+  - Memory is O(B) for B buffered messages, bounded by the largest gap
+  - 'missing() sorts buffered keys: O(B log B); could be maintained incrementally'
+narration: []
+state_aloud:
+- Sequence numbers start at 1 and messages apply strictly in order; duplicates and old numbers are ignored.
+- An anomalous message still consumes its sequence number or the stream would stall forever.
+- Levels are removed when aggregate quantity hits zero, so best_bid/best_ask never return an empty level.
+- I am assuming integer prices and quantities.
+walkthrough: |
+  next_seq tracks the next expected sequence number and a dict buffers anything ahead of it. After storing a message the handler drains the dict while next_seq is present, applying each in order, so a late gap-filler releases everything behind it. The book is a ref -> [side, price, remaining] map plus per-side price -> aggregate quantity maps; adds increase a level, deletes and executes decrease it and drop the level at zero. Anomalies are counted but still consume their sequence number. Source: standard formulation.
+categories:
+- trading
+- systems-impl

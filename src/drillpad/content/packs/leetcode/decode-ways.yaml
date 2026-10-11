@@ -1,0 +1,109 @@
+id: decode-ways
+title: Decode Ways
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Decode Ways (LC 91)"
+statement: |
+  Letters map to numbers: `A=1, B=2, ..., Z=26`. Given a string `s` of digits, return how many ways it can be split into valid codes (no leading zeros, each part between 1 and 26). Return 0 if none, and 0 for an empty string.
+
+  Example: `num_decodings("226")` returns `3` (`2 2 6`, `22 6`, `2 26`).
+starter: |
+  def num_decodings(s):
+      pass
+hints:
+- The last chunk is either one digit (1-9) or two digits (10-26).
+- 'State: ways[i] = number of decodings of the first i characters.'
+- ways[0] = 1 (empty prefix); a '0' alone contributes nothing and must pair with the digit before it.
+follow_ups:
+- What if '*' can stand for any digit 1-9 (Decode Ways II)?
+- Return the count modulo 10^9+7.
+tests:
+- name: two ways
+  tags:
+  - ordering
+  code: |
+    assert num_decodings("12")==2
+- name: three ways
+  tags:
+  - ordering
+  code: |
+    assert num_decodings("226")==3
+- name: leading zero
+  tags:
+  - invalid
+  code: |
+    assert num_decodings("06")==0
+    assert num_decodings("0")==0
+- name: single digit
+  tags:
+  - single
+  code: |
+    assert num_decodings("1")==1
+- name: zero as tens
+  tags:
+  - boundary
+  code: |
+    assert num_decodings("10")==1
+    assert num_decodings("20")==1
+    assert num_decodings("27")==1
+- name: bad zero
+  tags:
+  - invalid
+  code: |
+    assert num_decodings("100")==0
+    assert num_decodings("30")==0
+- name: zero mid
+  tags:
+  - boundary
+  code: |
+    assert num_decodings("2101")==1
+    assert num_decodings("11106")==2
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert num_decodings("")==0
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    a, b = 1, 1
+    for _ in range(89):
+        a, b = b, a + b
+    assert num_decodings("1" * 90)==b
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - Single pass over the digits
+  - O(1) space with two rolling values
+  - Table form is O(n) space
+- q: Wildcard '*' (Decode Ways II)
+  kind: code
+  key_points:
+  - Each state now multiplies by the count of digits a chunk can take
+  - Track 1-digit and 2-digit multipliers for '*'
+  - Apply a modulus
+- q: Enumerate the decodings
+  kind: design
+  key_points:
+  - Count is exponential so output is too
+  - Use backtracking guided by the DP to prune dead branches
+  - Generate lazily to bound memory
+narration: []
+state_aloud:
+- Empty string returns 0 here.
+- A zero can only be the second digit of 10 or 20.
+- Two-digit chunk must be 10..26.
+walkthrough: Let `ways[i]` be the number of decodings of the first `i` characters, with `ways[0] = 1`. If `s[i-1]` is not `'0'` add `ways[i-1]`; if the two characters ending at `i` form 10..26 add `ways[i-2]`. A lone zero adds nothing, which naturally yields 0 for invalid strings. Two rolling variables give O(n) time and O(1) space.

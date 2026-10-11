@@ -1,0 +1,94 @@
+id: house-robber-ii
+title: House Robber II
+bar_level: 2
+target_minutes: 22
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:House Robber II (LC 213)"
+statement: |
+  Houses stand in a circle, so the first and last are neighbours. `nums[i]` is the cash in house `i`. You cannot rob two adjacent houses. Return the maximum amount you can take. `nums` has at least one house.
+
+  Example: `rob([2,3,2])` returns `3` (houses 0 and 2 are adjacent in the circle, so take only the middle).
+starter: |
+  def rob(nums):
+      pass
+hints:
+- Because of the circle, house 0 and house n-1 are never both robbed. Split into two line problems.
+- 'Linear state: best[i] = max(best[i-1], best[i-2] + nums[i]) over a prefix.'
+- Run it on nums[:-1] and on nums[1:] and take the max; handle a single house separately.
+follow_ups:
+- Return which houses to rob.
+- What if each house also has a minimum gap k?
+tests:
+- name: circle blocks ends
+  tags:
+  - boundary
+  code: |
+    assert rob([2,3,2])==3
+- name: example 2
+  tags:
+  - ordering
+  code: |
+    assert rob([1,2,3,1])==4
+    assert rob([1,2,3])==3
+- name: single house
+  tags:
+  - single
+  code: |
+    assert rob([5])==5
+- name: two houses
+  tags:
+  - boundary
+  code: |
+    assert rob([2,1])==2
+    assert rob([1,7])==7
+- name: all equal
+  tags:
+  - duplicate
+  code: |
+    assert rob([4,4,4,4])==8
+- name: zeros
+  tags:
+  - zero-capacity
+  code: |
+    assert rob([0,0,0])==0
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert rob([1]*100000)==50000
+    assert rob([1]*99999)==49999
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - Two linear passes so O(n) time
+  - Two rolling variables so O(1) space
+  - Slicing copies are O(n) extra; use index bounds to avoid them
+- q: Return the houses robbed
+  kind: code
+  key_points:
+  - Keep a parent or take/skip table per pass
+  - Backtrack from the better pass
+  - Map indices back for the nums[1:] pass
+- q: Why is splitting into two passes correct
+  kind: design
+  key_points:
+  - Any valid plan excludes house 0 or excludes house n-1
+  - Each pass is exactly the set of plans with that exclusion
+  - The max of the two covers every plan
+narration: []
+state_aloud:
+- 'One house: return it, no neighbour issue.'
+- 'Two houses: they are neighbours, take the larger.'
+- Zero values are fine.
+walkthrough: 'In a circle, an optimal plan leaves out house 0 or house n-1, so the answer is the better of two linear House Robber runs: `nums[:-1]` and `nums[1:]`. In each, `best[i] = max(best[i-1], best[i-2] + nums[i])` using two rolling variables. A single house is returned directly. Total O(n) time, O(1) extra space.'

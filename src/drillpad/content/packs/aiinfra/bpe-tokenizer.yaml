@@ -1,0 +1,182 @@
+id: bpe-tokenizer
+title: Byte-pair-encoding Tokenizer
+bar_level: 3
+target_minutes: 35
+patterns:
+- bpe
+- tokenizer
+- pair-counting
+- string-processing
+- word-frequency-dedup
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Implement the core of a byte-pair-encoding (BPE) tokenizer on characters.
+
+  - `train_bpe(text, num_merges) -> list[tuple[str, str]]`: split `text` on whitespace into words and
+    treat each word as a sequence of single characters (no end-of-word marker). Repeat up to
+    `num_merges` times: count adjacent token pairs over all words (each word counts as many times as
+    it occurs), pick the pair with the highest count (ties: the lexicographically smallest pair
+    `(a, b)` by tuple comparison), record it, and replace every occurrence of it in every word by the
+    single merged token `a + b`. Merging a word is left to right and non-overlapping (`a a a` with merge
+    `(a, a)` becomes `aa a`). Stop early when no word has two or more tokens.
+  - `encode_word(word, merges) -> list[str]`: tokenize one word. Start from its characters and
+    repeatedly apply the pair that has the lowest rank (earliest in `merges`) among the adjacent
+    pairs present, merging all its non-overlapping occurrences left to right, until no listed pair is
+    present. Unknown characters stay as single tokens. `""` encodes to `[]`.
+  - `tokenize(text, merges) -> list[str]`: split on whitespace and concatenate `encode_word` of every
+    word.
+
+  Example: `train_bpe("ab ab ab cd", 1) == [("a", "b")]`, and with merges `[("a","a"),("a","b")]`,
+  `encode_word("aaab", ...) == ["aa", "ab"]`.
+
+  Training must work on the distinct words with their counts, not on every occurrence separately.
+starter: |
+  def train_bpe(text, num_merges):
+      pass
+
+
+  def encode_word(word, merges):
+      pass
+
+
+  def tokenize(text, merges):
+      pass
+hints:
+- 'Collapse the corpus to {word-as-token-tuple: count} first; all pair counting and merging operates on
+  that dict.'
+- 'min(pairs, key=lambda p: (-count[p], p)) gives the max count with lexicographic tie-break.'
+- Write one helper that merges a pair into a token sequence left to right and use it in both training
+  and encoding.
+follow_ups:
+- Incremental pair-count updates instead of recounting every round.
+- Byte-level BPE with a pre-tokenizer regex so any string is representable.
+- Special tokens and a vocabulary id table with decode.
+tests:
+- name: first merge is the most frequent pair
+  code: |
+    merges = train_bpe("ab ab ab cd", 1)
+    assert merges == [("a", "b")]
+    assert encode_word("abab", merges) == ["ab", "ab"]
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: ties go to the lexicographically smallest pair
+  code: |
+    assert train_bpe("ab cd", 1) == [("a", "b")]
+    assert train_bpe("xy ab", 1) == [("a", "b")]
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: merges build longer tokens
+  code: |
+    merges = train_bpe("low low low low lower lower newest newest newest widest", 6)
+    assert merges == [("l", "o"), ("lo", "w"), ("e", "s"), ("es", "t"), ("e", "w"), ("ew", "est")]
+    assert encode_word("lowest", merges) == ["low", "est"]
+    assert encode_word("newest", merges) == ["n", "ewest"]
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: encode applies merges in rank order, left to right
+  code: |
+    merges = [("a", "a"), ("a", "b")]
+    assert encode_word("aaa", merges) == ["aa", "a"], "non-overlapping, left to right"
+    assert encode_word("aaab", merges) == ["aa", "ab"]
+    assert encode_word("abc", [("b", "c"), ("a", "bc")]) == ["abc"]
+    assert encode_word("abc", [("a", "b"), ("b", "c")]) == ["ab", "c"], "rank 0 pair wins over rank 1"
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: round trip and unknown characters
+  code: |
+    merges = train_bpe("hello hello help", 5)
+    for w in ["hello", "help", "hex", "zzz", "h", ""]:
+        assert "".join(encode_word(w, merges)) == w
+    assert encode_word("", merges) == [] and encode_word("z", merges) == ["z"]
+    assert train_bpe("", 5) == [] and train_bpe("a b c", 5) == []
+    assert tokenize("", merges) == []
+    assert train_bpe("aa", 0) == []
+  hidden: true
+  tags:
+  - invalid
+  - empty
+  - single
+- name: training stops when no pair is left
+  code: |
+    assert train_bpe("ab", 10) == [("a", "b")]
+    assert train_bpe("aaaa", 10) == [("a", "a"), ("aa", "aa")]
+  hidden: true
+  tags:
+  - boundary
+- name: tokenize splits on whitespace and concatenates
+  code: |
+    merges = train_bpe("ab ab ab", 1)
+    assert tokenize("ab  ab\nb", merges) == ["ab", "ab", "b"]
+  hidden: true
+  tags:
+  - ordering
+- name: train on 150k words with 200 merges
+  code: |
+    import random
+    rng = random.Random(1)
+    vocab = ["".join(rng.choice("abcdefgh") for _ in range(rng.randrange(4, 10))) for _ in range(300)]
+    text = " ".join(rng.choice(vocab) for _ in range(150000))
+    merges = train_bpe(text, 200)
+    assert len(merges) == 200
+    toks = tokenize(text[:20000], merges)
+    assert "".join(toks) == text[:20000].replace(" ", "")
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: train_bpe
+  time: O(M * U * L)
+  space: O(U * L)
+- op: encode_word
+  time: O(L * R)
+  space: O(L)
+extensions:
+- q: 'Level 2: make training incremental. Keep pair counts and an index pair -> words, and update only
+    the words touched by each merge.'
+  kind: code
+  key_points:
+  - Maintain pair counts in a dict plus a heap or bucket structure with lazy deletion for the best pair
+  - When a word changes, subtract its old pairs and add its new pairs
+  - Tie-breaking must stay identical to the simple version so results match
+- q: Why do production tokenizers work on bytes and use a pre-tokenization step?
+  kind: design
+  key_points:
+  - Byte-level base vocabulary guarantees every input is encodable, with no unknown token
+  - Pre-tokenization (regex split into words/numbers/punctuation) stops merges from crossing word boundaries
+    and keeps training counts manageable
+  - 'Vocabulary size is a trade: larger vocab means shorter sequences (cheaper attention) but a bigger
+    embedding table and rarer tokens'
+- q: How would you serve tokenization at high QPS in an inference gateway?
+  kind: design
+  key_points:
+  - Cache encode_word results per distinct word (as tokenize does) since word frequency is Zipfian
+  - Precompute the rank dict once; use a priority-queue merge for long words to avoid O(L*R)
+  - Tokenization must be bit-identical to the model's training tokenizer; version it with the model
+- q: Cost of training and of encoding, and what dominates.
+  kind: complexity
+  key_points:
+  - Training is O(M * U * L) for M merges, U distinct words, average length L when recounting each round
+  - encode_word is O(L) per iteration with up to O(L) iterations in the naive form, O(L log L) with a
+    heap of ranked pairs
+  - Training on every occurrence instead of distinct words multiplies the work by the average word frequency
+narration: []
+state_aloud:
+- 'Ask: character or byte level, pre-tokenization, end-of-word marker. I assume whitespace words and characters.'
+- 'Tie-break on equal counts must be deterministic: smallest pair.'
+- 'Merge non-overlapping left to right: aaa with (a,a) is aa a.'
+- Encode must apply merges in training order (rank), not by length or greedily longest.
+- Empty text, empty word and unknown characters.
+walkthrough: |
+  Training collapses the corpus into a Counter of words (tuples of tokens), then loops: count adjacent pairs weighted by word frequency, take the best by (-count, pair), and rewrite every distinct word with a left-to-right non-overlapping merge. Working on distinct words with counts makes each round independent of corpus length. encode_word repeatedly finds the lowest-rank adjacent pair present and merges all its occurrences, which reproduces the training order; tokenize memoises per word. Standard BPE formulation (Sennrich et al.) with explicit tie-breaking; no source note applies.
+categories:
+- ai-infra

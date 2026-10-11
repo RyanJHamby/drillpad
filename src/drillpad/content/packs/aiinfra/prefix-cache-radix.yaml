@@ -1,0 +1,208 @@
+id: prefix-cache-radix
+title: Prefix Cache (radix/trie)
+bar_level: 3
+target_minutes: 35
+patterns:
+- trie
+- prefix-cache
+- lru
+- lazy-heap
+- kv-cache-reuse
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Inference servers reuse the attention KV cache of a prompt prefix that was seen before (for
+  example a shared system prompt). Implement the lookup structure as a token trie with LRU
+  eviction. (A radix tree is the path-compressed version of this; implementing one node per
+  token is fine and is what the tests assume.)
+
+  `PrefixCache(capacity)` stores at most `capacity` trie nodes (one node = one token).
+  `ValueError` if `capacity < 0`. Time is passed explicitly as `now` (non-decreasing integer).
+
+  - `insert(tokens, now) -> int`: add the sequence, creating missing nodes; every node on the path
+    gets `last_used = now`. Return the number of NEW nodes created (before any eviction). Then,
+    while `size() > capacity`, evict the **least recently used leaf** (a node with no children).
+    Ties on `last_used` go to the node created earliest. Evicting a leaf may turn its parent into
+    a leaf that becomes a candidate. With `capacity == 0` nothing is stored and `0` is returned.
+  - `match(tokens, now) -> int`: length of the longest prefix of `tokens` present in the trie.
+    Every matched node gets `last_used = now`. An empty list matches `0`.
+  - `size() -> int`: number of nodes currently stored.
+
+  Example (capacity 5): `insert([1,2,3], 1)`, `insert([4,5,6], 2)` makes 6 nodes, so the LRU leaf
+  (token 3, last used at time 1) is evicted; `match([1,2,3], 3)` is then `2`.
+  Inserting a sequence longer than the capacity ends up keeping its first `capacity` tokens.
+starter: |
+  class PrefixCache:
+      def __init__(self, capacity):
+          pass
+
+      def insert(self, tokens, now):
+          pass
+
+      def match(self, tokens, now):
+          pass
+
+      def size(self):
+          pass
+hints:
+- 'Node: parent, token, children dict, last_used, creation serial. Walk the path creating nodes as needed.'
+- A min-heap of (last_used, serial, node) can find the LRU leaf. Push leaves lazily and validate on pop
+  (still alive, still a leaf, last_used unchanged).
+- 'When you evict a leaf, its parent may have become a leaf: push it with its current last_used.'
+follow_ups:
+- Compress chains into radix edges.
+- Pin nodes that are in use by running requests so they cannot be evicted.
+- Match at block granularity (hash of every 16-token block) as paged caches do.
+tests:
+- name: longest cached prefix
+  code: |
+    c = PrefixCache(10)
+    assert c.insert([1, 2, 3, 4], now=1) == 4
+    assert c.insert([1, 2, 5], now=2) == 1, "only token 5 is new"
+    assert c.size() == 5
+    assert c.match([1, 2, 3, 9], now=3) == 3
+    assert c.match([1, 2, 5, 6, 7], now=3) == 3
+    assert c.match([9], now=3) == 0
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: empty and exact inputs
+  code: |
+    c = PrefixCache(5)
+    assert c.match([], 0) == 0 and c.insert([], 0) == 0 and c.size() == 0
+    assert c.insert([7], 1) == 1
+    assert c.match([7], 2) == 1 and c.match([7, 7], 2) == 1
+    assert c.insert([7], 3) == 0, "re-inserting is a refresh, not growth"
+    assert c.size() == 1
+  hidden: false
+  tags:
+  - empty
+  - single
+- name: LRU leaf is evicted when over capacity
+  code: |
+    c = PrefixCache(5)
+    c.insert([1, 2, 3], now=1)
+    c.insert([4, 5, 6], now=2)           # size 6 > 5: evict the least recently used leaf (token 3)
+    assert c.size() == 5
+    assert c.match([1, 2, 3], now=3) == 2
+    assert c.match([4, 5, 6], now=3) == 3
+  hidden: false
+  tags:
+  - ordering
+  - time
+  - boundary
+- name: match refreshes recency
+  code: |
+    c = PrefixCache(5)
+    c.insert([1, 2, 3], now=1)
+    c.insert([4, 5], now=2)
+    c.match([1, 2, 3], now=3)            # branch 1-2-3 is now the freshest
+    c.insert([6], now=4)                 # size 6: LRU leaf is 5 (last used 2)
+    assert c.match([4, 5], 5) == 1
+    assert c.match([1, 2, 3], 5) == 3
+  hidden: false
+  tags:
+  - ordering
+  - time
+  - state-reuse
+- name: 'only leaves are evicted: shared prefixes survive'
+  code: |
+    c = PrefixCache(4)
+    c.insert([1, 2, 3], now=1)
+    c.insert([1, 2, 4], now=2)          # nodes 1,2,3,4 -> size 4
+    c.insert([9], now=3)                # size 5: leaf 3 (last 1) goes, never the shared 1-2
+    assert c.match([1, 2, 3], 4) == 2 and c.match([1, 2, 4], 4) == 3
+    assert c.size() == 4
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+- name: inserting a sequence longer than capacity keeps its head
+  code: |
+    c = PrefixCache(3)
+    c.insert([1, 2, 3, 4, 5], now=1)
+    assert c.size() == 3 and c.match([1, 2, 3, 4, 5], 2) == 3
+    z = PrefixCache(0)
+    assert z.insert([1, 2], 1) == 0 and z.size() == 0 and z.match([1, 2], 2) == 0
+  hidden: true
+  tags:
+  - boundary
+  - zero-capacity
+- name: tie on last-used evicts the older node first
+  code: |
+    c = PrefixCache(2)
+    c.insert([1], now=5)
+    c.insert([2], now=5)
+    c.insert([3], now=5)                # three leaves tie: creation order decides, token 1 goes
+    assert c.match([1], 6) == 0 and c.match([2], 6) == 1 and c.match([3], 6) == 1
+  hidden: true
+  tags:
+  - ordering
+- name: 10k inserts under a tight capacity
+  code: |
+    import random
+    rng = random.Random(7)
+    c = PrefixCache(20000)
+    system = [rng.randrange(50) for _ in range(30)]
+    hits = 0
+    for i in range(10000):
+        toks = system + [rng.randrange(1000) for _ in range(30)]
+        hits += c.match(toks, i) >= 30
+        c.insert(toks, i)
+        assert c.size() <= 20000
+    assert hits == 9999, "the shared system prompt is never evicted: it is always the freshest ancestor"
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: insert
+  time: O(L + E log N)
+  space: O(N)
+- op: match
+  time: O(L)
+  space: O(1)
+extensions:
+- q: 'Level 2: add pin(tokens) / unpin(tokens) so nodes referenced by running requests cannot be evicted.'
+  kind: code
+  key_points:
+  - Per-node refcount; a node is evictable only if it is a leaf with refcount 0
+  - Pinning a path pins every ancestor, unpin must be symmetric
+  - If all leaves are pinned and size > capacity, the insert must fail or the cache temporarily exceed
+    capacity; decide and state it
+- q: How would you turn the trie into a radix tree and why does it matter for KV caches?
+  kind: design
+  key_points:
+  - Merge single-child chains into edges labelled with token slices; splitting an edge when a new sequence
+    diverges mid-edge
+  - Fewer nodes and pointer chasing, and a node can own a contiguous run of KV blocks
+  - Eviction granularity becomes a whole edge or a block; keep matching at block boundaries
+- q: How is a prefix cache connected to the block allocator, and what must be true before reusing cached
+    KV?
+  kind: design
+  key_points:
+  - Cached prefixes map to physical KV blocks that are refcounted (see paged-kv-cache-allocator), so a
+    hit increments refcounts
+  - The cached KV is valid only for the same model, weights version, tokenizer and positional offset,
+    so these belong in the key
+  - Eviction frees blocks only when no running sequence references them
+- q: Complexity of insert and match with a lazy heap, and what bounds the heap size?
+  kind: complexity
+  key_points:
+  - match is O(L) for L tokens; insert is O(L) plus O(log H) per evicted node
+  - Each touch and each leaf-creation pushes one heap entry so H is O(total touches) unless you rebuild;
+    compact when stale entries dominate
+  - Space is O(capacity) nodes plus stale heap entries
+narration: []
+state_aloud:
+- 'Define the unit: one node per token, capacity counts nodes.'
+- Only leaves are evictable, otherwise a deeper cached prefix would lose its ancestors.
+- Match counts as use and refreshes recency of the matched path.
+- Tie-break is creation order; capacity 0 stores nothing; empty prefix matches 0.
+- A re-insert of an existing sequence creates zero nodes.
+walkthrough: |
+  A trie keyed by token, each node carrying last_used and a creation serial. Insert and match walk the path stamping last_used. Eviction needs the least recently used leaf: a heap of (last_used, serial, node) entries is pushed whenever a node is touched at the end of a path or becomes a leaf; stale entries (dead node, gained a child, newer last_used) are skipped on pop. Because every touch stamps the whole path, a parent is never older than its child, so leaf-only LRU is globally consistent. The shared-prefix behaviour is the reason systems keep KV for repeated system prompts; see the user's paged-memory note for the refcounted block sharing it would sit on top of (interview-prep/14-memory-management.md, section 4). The trie itself is a standard formulation.
+categories:
+- ai-infra

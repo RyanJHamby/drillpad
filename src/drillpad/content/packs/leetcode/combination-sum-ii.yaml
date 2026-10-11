@@ -1,0 +1,105 @@
+id: combination-sum-ii
+title: Combination Sum II
+bar_level: 2
+target_minutes: 22
+patterns:
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Combination Sum II (LC 40)"
+statement: |
+  Given a list of positive integers `candidates` (which may contain repeats) and an integer `target`, return all distinct combinations whose values add up to `target`. Each element of `candidates` may be used at most once. The result must not contain two combinations with the same multiset of values. Order of the combinations and of numbers inside them is free.
+
+  Example: `combination_sum2([10,1,2,7,6,1,5], 8)` returns `[[1,1,6],[1,2,5],[1,7],[2,6]]` in some order.
+starter: |
+  def combination_sum2(candidates, target):
+      pass
+hints:
+- Sort first so equal numbers sit next to each other.
+- Recurse with a start index and a remaining target; each element is consumed once, so recurse on i + 1.
+- At one depth, skip a candidate equal to the previous candidate at that same depth (i > start and c[i] == c[i-1]). Also stop the loop once a value exceeds the remainder.
+follow_ups:
+- Allow unlimited reuse of each number (Combination Sum I).
+- Count the combinations instead of listing them.
+tests:
+- name: classic example
+  tags:
+  - duplicate
+  code: |
+    r=combination_sum2([10,1,2,7,6,1,5],8)
+    assert sorted(sorted(c) for c in r)==[[1,1,6],[1,2,5],[1,7],[2,6]]
+- name: repeats collapse
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    r=combination_sum2([2,5,2,1,2],5)
+    assert sorted(sorted(c) for c in r)==[[1,2,2],[5]]
+- name: no combination
+  tags:
+  - invalid
+  code: |
+    assert combination_sum2([3,4],2)==[]
+    assert combination_sum2([2,4],5)==[]
+- name: single candidate
+  tags:
+  - single
+  code: |
+    assert combination_sum2([4],4)==[[4]]
+    assert combination_sum2([4],5)==[]
+- name: empty candidates
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert combination_sum2([],3)==[]
+- name: each element used once
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    r=combination_sum2([1,1],2)
+    assert sorted(r)==[[1,1]]
+    assert combination_sum2([1],2)==[]
+- name: many identical values
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=combination_sum2([1]*100,50)
+    assert r==[[1]*50]
+    r=combination_sum2([1]*30+[2]*30+[3]*30,20)
+    assert len({tuple(sorted(c)) for c in r})==len(r) and len(r)>10
+    assert all(sum(c)==20 for c in r)
+complexity:
+- op: overall
+  time: O(2^n)
+  space: O(n)
+extensions:
+- q: How does sorting plus the skip rule change the cost compared with a Set of tuples?
+  kind: complexity
+  key_points:
+  - Dedup by skipping avoids generating duplicates at all
+  - A Set approach still explores every duplicate branch and can be exponentially slower
+  - Sorting costs O(n log n), negligible next to the search
+- q: Why is the condition i > start and not i > 0?
+  kind: reasoning
+  key_points:
+  - Equal values are only forbidden as the first pick at a given depth
+  - The same value may legally appear again deeper in the path (e.g. [1,1,6])
+  - i > 0 would wrongly drop valid combinations
+- q: How would you prune harder?
+  kind: design
+  key_points:
+  - Break when candidates[i] > remaining since the array is sorted
+  - Precompute suffix sums to bail out when the rest cannot reach target
+  - Group equal values into (value, count) pairs and choose how many to take
+narration: []
+state_aloud:
+- Sorted input is required for the dedup rule.
+- Break out of the loop when a value exceeds the remainder.
+- Target not reachable returns an empty list.
+walkthrough: |
+  Sort the candidates, then run a depth-first search that carries the remaining target and a start index. At each depth iterate over candidates from `start`; skip any value equal to the previous one at this depth so each distinct combination is formed in only one way, and stop once a value exceeds the remainder because everything after it is larger. When the remainder reaches zero record a copy of the path.

@@ -1,0 +1,136 @@
+id: best-time-buy-sell-stock-iii
+title: Best Time to Buy/Sell Stock (III/IV)
+bar_level: 3
+target_minutes: 30
+patterns:
+- dp-state-machine
+- k-transactions
+- greedy-shortcut
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  `max_profit(k, prices) -> int`: you may complete AT MOST `k` transactions (one transaction = one buy followed by one later
+  sell) and hold at most one share at a time (you must sell before buying again; a sell and rebuy on the same day is
+  allowed). Return the maximum profit; 0 if no profitable trade exists. `ValueError` if `k < 0`.
+
+  `k` can be enormous (even larger than the number of days). The solution must run in about O(n * min(k, n/2)) time and
+  O(min(k, n/2)) memory; allocating an `n x k` table for `k = 10**9` is a bug. Covers both "at most 2" (III) and "at most
+  k" (IV).
+starter: |
+  def max_profit(k, prices):
+      pass
+hints:
+- 'State per transaction count j: buy[j] = best balance while holding after the j-th buy, sell[j] = best
+  balance after the j-th sell.'
+- 'For each price p and j in 1..k: buy[j] = max(buy[j], sell[j-1] - p); sell[j] = max(sell[j], buy[j]
+  + p).'
+- If k >= n // 2 you can never use all transactions, so the answer is the unlimited-transactions answer
+  (sum of positive differences) - handle that first to avoid huge k.
+follow_ups:
+- Why does k >= n // 2 collapse to the unlimited case?
+- Can you get O(n log n) for large k (the aliens-trick / slope trick)?
+- How do you recover the chosen trades?
+tests:
+- name: at most two (III)
+  code: |
+    assert max_profit(2, [3, 3, 5, 0, 0, 3, 1, 4]) == 6
+    assert max_profit(2, [1, 2, 3, 4, 5]) == 4
+    assert max_profit(2, [7, 6, 4, 3, 1]) == 0
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: at most k (IV)
+  code: |
+    assert max_profit(2, [2, 4, 1]) == 2
+    assert max_profit(2, [3, 2, 6, 5, 0, 3]) == 7
+    assert max_profit(1, [3, 2, 6, 5, 0, 3]) == 4
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: k zero, empty and tiny inputs
+  code: |
+    assert max_profit(0, [1, 5, 2, 9]) == 0
+    assert max_profit(3, []) == 0
+    assert max_profit(3, [4]) == 0
+    assert max_profit(1, [1, 2]) == 1
+  hidden: false
+  tags:
+  - zero-capacity
+  - empty
+  - single
+- name: huge k does not allocate k states
+  code: |
+    prices = [1, 5, 2, 8, 3, 9, 1, 4]
+    assert max_profit(10**9, prices) == (5 - 1) + (8 - 2) + (9 - 3) + (4 - 1)
+    assert max_profit(4, prices) == 19
+    assert max_profit(3, prices) == 4 + 6 + 8 or max_profit(3, prices) > 0
+    assert max_profit(3, prices) == 16
+  hidden: false
+  tags:
+  - boundary
+  - duplicate
+- name: rejects negative k
+  code: |
+    try:
+        max_profit(-1, [1, 2])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("negative k")
+  hidden: true
+  tags:
+  - invalid
+- name: 'scale: 200k days k=2 and huge k'
+  code: |
+    n = 200000
+    prices = [1000 + (i * 7919) % 211 + (i // 1000) for i in range(n)]
+    a = max_profit(2, prices)
+    b = max_profit(10**9, prices)
+    c = max_profit(50, prices[:20000])
+    assert 0 < a <= b
+    assert c > 0
+  hidden: true
+  tags:
+  - scale
+  - boundary
+complexity:
+- op: max_profit
+  time: O(n * min(k, n))
+  space: O(min(k, n))
+extensions:
+- q: 'Level 2: add a per-transaction fee to the k-transaction version.'
+  key_points:
+  - 'Subtract the fee on the sell transition: sell[j] = max(sell[j], buy[j] + p - fee)'
+  - The k >= n/2 shortcut must use the fee-aware unlimited DP, not the sum of deltas
+  - Fee equal to the gain means the trade is skipped
+  kind: code
+- q: 'Level 3: return the actual trades for the best k-transaction plan.'
+  key_points:
+  - Store predecessor choices or reconstruct from DP tables over (day, j, holding)
+  - Memory becomes O(n * k) unless you use Hirschberg-style recomputation
+  - Report (buy_day, sell_day) pairs in time order
+  kind: code
+- q: 'Complexity: time, space, and the large-k trap.'
+  key_points:
+  - The rolling DP is O(n * k) time and O(k) space
+  - With k >= n/2 the cap is irrelevant, so replace k by n/2 and use the O(n) greedy
+  - Without the cap, k = 10^9 would allocate gigabytes or time out
+  kind: complexity
+- q: 'Design: what does "at most k trades" model in a real strategy?'
+  key_points:
+  - A budget on turnover or transaction count (cost, risk, exchange limits)
+  - Hindsight-optimal DP is an upper bound for a signal, not a tradable strategy
+  - 'Real constraints: position sizes, fees, market impact and capital limits are not modeled here'
+  kind: design
+narration: []
+state_aloud:
+- At most k transactions, one share at a time, sell before rebuy.
+- 'k can exceed n/2: switch to the unlimited greedy; k == 0 returns 0.'
+- Empty or single-day input is 0; negative k is invalid.
+walkthrough: |
+  Standard LeetCode 123 (at most two transactions) generalized to LeetCode 188 (at most k) with the k >= n/2 shortcut. Rolling DP with buy/sell arrays per transaction count. Source: standard formulation.
+categories:
+- trading

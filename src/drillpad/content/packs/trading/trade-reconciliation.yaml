@@ -1,0 +1,141 @@
+id: trade-reconciliation
+title: Trade Reconciliation Matcher
+bar_level: 2
+target_minutes: 20
+patterns:
+- hash-map
+- reconciliation
+- aggregation
+- two-sided-diff
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Reconcile an internal trade blotter against a broker's confirmations and report the **breaks**.
+
+  `reconcile(internal, broker) -> list[tuple[str, str]]` where each argument is a list of `(trade_id, qty)` rows. The same
+  `trade_id` may appear several times in one list (partial fills): first SUM the quantities per id on each side.
+
+  An id is a break when:
+  - it is only on the internal side: `(trade_id, "missing at broker")`
+  - it is only on the broker side: `(trade_id, "missing internally")`
+  - it is on both sides but the summed quantities differ:
+    `(trade_id, "qty mismatch: internal=<a>, broker=<b>")`  (e.g. `"qty mismatch: internal=50, broker=45"`)
+
+  Ids that match on both sides produce nothing. Return the breaks sorted by `trade_id` (plain string order), one entry per id.
+  An id present on a side with a net quantity of 0 still COUNTS as present on that side.
+  Quantities are ints (can be negative for busts/cancels). Do it in one linear pass per side plus a sort of the break ids.
+starter: |
+  def reconcile(internal, broker):
+      pass
+hints:
+- Aggregate each side into a dict trade_id -> summed qty first; partial fills make the same id repeat.
+- 'Iterate the union of ids in sorted order and classify: missing on one side, or present on both with
+  different totals.'
+- 'Check membership with `in`, not truthiness: a net quantity of 0 is still a present trade.'
+follow_ups:
+- How would you add price/timestamp tolerance matching?
+- How do you reconcile when ids differ between systems (fuzzy match on symbol/qty/price)?
+- How do you make the break report incremental (daily deltas)?
+tests:
+- name: doc example
+  code: |
+    internal = [("T1", 100), ("T2", 50), ("T3", 20)]
+    broker = [("T1", 100), ("T2", 45), ("T4", 10)]
+    assert reconcile(internal, broker) == [
+        ("T2", "qty mismatch: internal=50, broker=45"),
+        ("T3", "missing at broker"),
+        ("T4", "missing internally")]
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: both empty and fully matched
+  code: |
+    assert reconcile([], []) == []
+    assert reconcile([("A", 1)], [("A", 1)]) == []
+    assert reconcile([("A", 1), ("B", 2)], [("B", 2), ("A", 1)]) == []
+  hidden: false
+  tags:
+  - empty
+  - ordering
+- name: partial fills are summed per side
+  code: |
+    internal = [("T1", 40), ("T1", 60), ("T2", 10)]
+    broker = [("T1", 100), ("T2", 4), ("T2", 5)]
+    assert reconcile(internal, broker) == [("T2", "qty mismatch: internal=10, broker=9")]
+  hidden: false
+  tags:
+  - duplicate
+  - boundary
+- name: zero net quantity still counts as present
+  code: |
+    internal = [("T1", 10), ("T1", -10)]
+    assert reconcile(internal, []) == [("T1", "missing at broker")]
+    assert reconcile(internal, [("T1", 0)]) == []
+    assert reconcile([], [("T9", 0)]) == [("T9", "missing internally")]
+    assert reconcile([("T1", 5)], [("T1", 0)]) == [("T1", "qty mismatch: internal=5, broker=0")]
+  hidden: false
+  tags:
+  - boundary
+  - invalid
+- name: sorted by trade id as strings
+  code: |
+    internal = [("T10", 1), ("T2", 1), ("A", 1)]
+    out = reconcile(internal, [])
+    assert [t for t, _ in out] == ["A", "T10", "T2"]
+  hidden: false
+  tags:
+  - ordering
+- name: negative quantities for busts
+  code: |
+    assert reconcile([("X", 100), ("X", -30)], [("X", 70)]) == []
+    assert reconcile([("X", 100), ("X", -30)], [("X", 100)]) == [("X", "qty mismatch: internal=70, broker=100")]
+  hidden: true
+  tags:
+  - duplicate
+  - invalid
+- name: 'scale: 200k rows each side'
+  code: |
+    internal = [(f"T{i % 100000}", 1) for i in range(200000)]
+    broker = [(f"T{i % 100000}", 1) for i in range(200000)]
+    broker[5] = ("T5", 3)
+    broker.append(("ZZ", 4))
+    out = reconcile(internal, broker)
+    assert out == [("T5", "qty mismatch: internal=2, broker=4"), ("ZZ", "missing internally")]
+  hidden: true
+  tags:
+  - scale
+  - duplicate
+complexity:
+- op: reconcile
+  time: O(n + m + B log B)
+  space: O(n + m)
+extensions:
+- q: 'Level 2: match on (symbol, side) with price tolerance when ids are missing on one side.'
+  key_points:
+  - Bucket by (symbol, side, qty) and pair within a price tolerance
+  - Each broker row can match at most one internal row
+  - Unmatched rows become breaks with explicit reasons
+  kind: code
+- q: Cost of reconciling at scale.
+  key_points:
+  - Hashing both sides is O(n + m) versus O(n*m) for nested loops
+  - Only breaks are sorted, so sorting cost is O(B log B)
+  - Memory is O(n + m); stream and shard by id hash if it does not fit
+  kind: complexity
+- q: 'Design: operating a reconciliation process (fund-operations style).'
+  key_points:
+  - Breaks are queued with age and owner; trade-date T+1 cut-offs make unresolved breaks urgent (NAV impact)
+  - 'Idempotent daily runs: same inputs give the same report so reruns are safe'
+  - Keep an audit trail of resolutions and never edit source records in place
+  kind: design
+narration: []
+state_aloud:
+- Sum partial fills per id before comparing; present-with-zero is still present.
+- Output sorted by id, one break per id.
+- Exact reason strings as specified; integers only.
+walkthrough: |
+  Source: standard formulation.
+categories:
+- trading

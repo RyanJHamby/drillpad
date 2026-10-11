@@ -1,0 +1,250 @@
+id: fee-tier-calculator
+title: Tiered Fee Calculator
+bar_level: 2
+target_minutes: 22
+patterns:
+- prefix-sums
+- binary-search
+- rounding
+- tiered-pricing
+firm_tags: []
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `FeeSchedule`, a payment-processing fee calculator. Amounts are integer cents; rates are integer
+  basis points (1 bp = 0.01%).
+
+  `FeeSchedule(tiers, mode="marginal", fixed=0, min_fee=0, max_fee=None)`:
+
+  * `tiers` is a list of `(up_to, rate_bps)` sorted by strictly increasing `up_to` (cents, > 0); the LAST tier
+    must have `up_to = None` (unbounded). Tier `i` covers amounts in `(prev_up_to, up_to]`, so an amount equal to
+    `up_to` belongs to that tier. Violations raise `ValueError`, as do an unknown `mode`, negative `rate_bps`,
+    negative `fixed`/`min_fee`, or `max_fee < min_fee`.
+  * `mode="marginal"`: each slice of the amount is charged at its own tier's rate (like tax brackets).
+    `mode="volume"`: the whole amount is charged at the rate of the single tier containing it.
+  * `fee(amount)` for an int `amount > 0` (else `ValueError`):
+    1. percentage part: take the EXACT total `sum(slice * rate_bps) / 10000` and round it ONCE with half up
+       (2.5 -> 3). Do not round per tier.
+    2. add `fixed`.
+    3. clamp: raise to at least `min_fee`, then lower to at most `max_fee` when it is not `None`.
+
+  `fee` must be fast enough to price hundreds of thousands of transactions against a schedule with
+  thousands of tiers: precompute per-tier cumulative values and locate the tier by binary search.
+starter: |
+  class FeeSchedule:
+      def __init__(self, tiers, mode="marginal", fixed=0, min_fee=0, max_fee=None):
+          pass
+
+      def fee(self, amount):
+          pass
+hints:
+- 'Precompute prefix totals: cum[i] = sum over earlier tiers of (width * rate_bps), as an exact integer
+  numerator over 10000.'
+- Find the tier with bisect_left on the up_to bounds (inclusive upper edge), then numerator = cum[i] +
+  (amount - prev_bound) * rate_bps.
+- 'Round once: (2*numerator + 10000) // 20000, then add fixed and clamp.'
+follow_ups:
+- Why do marginal tiers avoid the cliff where a slightly larger amount costs less than a smaller one?
+- How would monthly cumulative volume pricing (volume discounts across transactions) change the design?
+- Where do fee rounding errors show up in reconciliation with the processor, and how do you track them?
+tests:
+- name: marginal brackets
+  tags:
+  - boundary
+  - ordering
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    tiers = [(10000, 290), (100000, 190), (None, 90)]
+    s = FeeSchedule(tiers)
+    assert s.fee(10000) == 290
+    assert s.fee(10001) == 290, "one extra cent at 1.9% is 0.019 and rounds away"
+    assert s.fee(100000) == 290 + 1710
+    assert s.fee(200000) == 290 + 1710 + 900
+    assert s.fee(5000) == 145
+- name: volume mode uses the containing tier for the whole amount
+  tags:
+  - boundary
+  - ordering
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    tiers = [(10000, 290), (100000, 190), (None, 90)]
+    s = FeeSchedule(tiers, mode="volume")
+    assert s.fee(10000) == 290
+    assert s.fee(10001) == 190, "tier upper bound is inclusive; 10001 is in the next tier"
+    assert s.fee(100000) == 1900
+    assert s.fee(100001) == 900
+    assert s.fee(1) == 0, "0.029 rounds to 0"
+- name: round once at the end and half up
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    s = FeeSchedule([(None, 50)])
+    assert s.fee(100) == 1, "0.5 rounds up"
+    assert s.fee(300) == 2, "1.5 rounds up, not banker's"
+    assert s.fee(99) == 0
+    t = FeeSchedule([(1, 5000), (None, 5000)])
+    assert t.fee(3) == 2, "exact total is 1.5; rounding per slice would also differ on other inputs"
+    u = FeeSchedule([(1, 5000), (2, 5000), (None, 5000)])
+    assert u.fee(3) == 2
+- name: fixed fee min and max
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    s = FeeSchedule([(None, 290)], fixed=30)
+    assert s.fee(10000) == 320
+    m = FeeSchedule([(None, 290)], fixed=30, min_fee=100, max_fee=500)
+    assert m.fee(100) == 100, "floor applies after fixed"
+    assert m.fee(10000) == 320
+    assert m.fee(10**6) == 500, "cap"
+    assert FeeSchedule([(None, 100)], min_fee=7).fee(1) == 7
+- name: invalid schedules and amounts
+  tags:
+  - invalid
+  - empty
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    assert raises(FeeSchedule, [])
+    assert raises(FeeSchedule, [(100, 10)]), "last tier must be unbounded"
+    assert raises(FeeSchedule, [(100, 10), (50, 5), (None, 1)]), "bounds must increase"
+    assert raises(FeeSchedule, [(100, 10), (100, 5), (None, 1)])
+    assert raises(FeeSchedule, [(0, 10), (None, 1)])
+    assert raises(FeeSchedule, [(None, -1)])
+    assert raises(FeeSchedule, [(None, 1)], mode="weird")
+    assert raises(FeeSchedule, [(None, 1)], fixed=-1)
+    assert raises(FeeSchedule, [(None, 1)], min_fee=10, max_fee=5)
+    s = FeeSchedule([(None, 1)])
+    for bad in (0, -5, 1.5, "10", None):
+        assert raises(s.fee, bad)
+- name: single tier and single cent
+  tags:
+  - single
+  - boundary
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    assert FeeSchedule([(None, 10000)]).fee(1) == 1
+    assert FeeSchedule([(None, 0)], fixed=25).fee(1) == 25
+    assert FeeSchedule([(5, 10000), (None, 0)]).fee(10) == 5
+- name: zero rate tiers and exact bounds
+  tags:
+  - boundary
+  - zero-capacity
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    s = FeeSchedule([(1000, 0), (2000, 100), (None, 200)])
+    assert s.fee(1000) == 0 and s.fee(1500) == 5 and s.fee(2000) == 10 and s.fee(3000) == 30
+- name: thousands of tiers and many fees
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    tiers = [((i + 1) * 100, i % 50 + 1) for i in range(4000)] + [(None, 25)]
+    s = FeeSchedule(tiers)
+    total = 0
+    for a in range(1, 300001):
+        total += s.fee(a * 3)
+    assert total > 0
+    exact = 0
+    prev = 0
+    for up, bps in tiers[:4000]:
+        exact += (up - prev) * bps
+        prev = up
+    assert s.fee(400000) == (2 * exact + 10000) // 20000
+complexity:
+- op: construct
+  time: O(T)
+  space: O(T)
+- op: fee
+  time: O(log T)
+  space: O(1)
+extensions:
+- q: 'Level 2: monthly cumulative volume tiers: the rate for a transaction depends on the merchant''s
+    volume so far this month.'
+  kind: code
+  key_points:
+  - Track month-to-date volume per merchant and price only the slice of this transaction in each tier
+  - A transaction that straddles a boundary is split across two rates
+  - Reset on month boundary using an injected timestamp
+- q: 'Level 3: per-currency schedules with currency-specific minor-unit scales and fixed fees.'
+  kind: code
+  key_points:
+  - Key schedules by currency; JPY has no minor unit so cents scale differs
+  - Convert fixed fees with exact fractions, round once
+  - Reject unknown currencies explicitly
+- q: How do you ship pricing changes safely?
+  kind: design
+  key_points:
+  - Version fee schedules with effective dates; a transaction is priced with the schedule in force at
+    its timestamp
+  - Store the computed fee and schedule version on the transaction so it can be audited and never recomputed
+  - Shadow-price new schedules against live traffic before enabling them
+- q: Compare scanning tiers per call to precomputation.
+  kind: complexity
+  key_points:
+  - A linear scan is O(T) per fee; 4000 tiers times 300k calls is over a billion steps
+  - Prefix totals plus bisect make each fee O(log T)
+  - Precomputation costs O(T) once and O(T) space
+narration: []
+state_aloud:
+- Integer cents and integer basis points; rounding happens exactly once, half up, on the exact total.
+- 'Upper bounds are inclusive: an amount equal to up_to belongs to that tier.'
+- Marginal vs volume pricing changes the result and avoids pricing cliffs; ask which one is wanted.
+- 'Order of operations: percentage, then fixed fee, then min and max clamp.'
+- 'Validate the tier table up front: strictly increasing, last unbounded.'
+walkthrough: |
+  The constructor validates the tiers and precomputes cum[i], the exact integer numerator (width times rate_bps) of all tiers before tier i, plus the list of finite upper bounds. fee finds the tier index with bisect_left (inclusive upper edge), then the numerator is cum[i] + (amount - prev_bound) * rate for marginal mode or amount * rate for volume mode. A single half-up rounding (2n + 10000) // 20000 gives the percentage fee; fixed is added and the min/max clamp applied. Standard formulation (tiered payment fees); no source doc.

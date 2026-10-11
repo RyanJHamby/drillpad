@@ -1,0 +1,87 @@
+id: generic-infra
+name: Generic infra / platform company
+family: infra
+confidence: inferred
+sources:
+- private notes:section 0 meta-patterns
+- private notes:section 3 practical-round
+  formats
+- private notes:section 5
+format:
+  rounds: multi-part build of a small in-memory system; spec grows in stages
+  platform: CoderPad class (documented by one firm); varies
+  minutes: 60
+  problems_per_round: 1 (multi-part)
+  language_notes: Python recommended where the firm names a language (one firm's published guidance).
+  ai_assistance_allowed: unknown
+format_confidence: inferred
+weights:
+  correctness: 25
+  edge_cases: 15
+  complexity: 8
+  pace: 12
+  communication: 12
+  extensions: 18
+  quality: 10
+weights_confidence: inferred
+bar:
+  pass_score: 68
+  floors:
+    correctness: 0.6
+    edge_cases: 0.4
+bar_confidence: inferred
+pace:
+  target_minutes_by_level:
+    1: 8
+    2: 15
+    3: 25
+    4: 35
+  first_code_by_minute: 3
+  approach_by_minute: 2
+pace_confidence: inferred
+what_earns_points:
+- part 1 green fast, then extend without rewriting
+- one resolver/helper everything goes through
+- explicit Enum/dataclass states
+- injected clock for anything time-based
+- asserts written unprompted after each part
+- edge cases named before the interviewer asks
+- 60-second answer for thread-safety, persistence, scale follow-ups
+what_loses_points:
+- 10 minutes of class design before any output
+- guessing return formats instead of asking
+- bare-string states
+- time.time() hard-wired so tests are not deterministic
+red_flags:
+- building the wrong return format for 10 minutes without asking
+canonical_topics:
+- lru-cache
+- ttl-cache
+- rate-limiter
+- task-scheduler
+- dependency-graph
+- kv-store
+- circuit-breaker
+- thread-safety
+- backpressure
+problem_ids:
+- lru-cache
+- ttl-cache
+- token-bucket
+- sliding-window-counter
+- bounded-queue
+- thread-pool
+- admission-control
+- distributed-rate-limiter
+- cache-aside
+missing_problems:
+- problem: in-memory key-value store with transactions (begin/commit/rollback)
+  source: private notes:section 3
+- problem: job scheduler with dependencies
+  source: private notes:section 3
+tags:
+- infra
+- staged
+- python
+notes: Derived mostly from one firm's published candidate guidance and my own drill system, generalised;
+  mark all as inferred for other infra firms.

@@ -1,0 +1,232 @@
+id: request-router-consistent-hash
+title: Request Router with Consistent Hashing
+bar_level: 3
+target_minutes: 35
+patterns:
+- consistent-hashing
+- virtual-nodes
+- bisect
+- load-balancing
+- kv-cache-affinity
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  A router sends each request key (a session id, a prompt-prefix hash, ...) to a backend so that the
+  same key keeps landing on the same backend (cache affinity) and adding or removing a backend moves
+  as few keys as possible. Implement a consistent-hash ring with virtual nodes.
+
+  Hashing is fixed so results are deterministic: `h(s) = int(hashlib.md5(s.encode()).hexdigest()[:8], 16)`.
+  Backend `name` owns the virtual points `h(f"{name}#{i}")` for `i in range(vnodes)`. A key goes to the
+  first point whose hash is `>=` `h(key)` going clockwise, wrapping from the largest point to the
+  smallest. If two points have equal hashes, the one with the smaller backend name comes first.
+
+  `HashRing(vnodes=100)` (`ValueError` if `vnodes < 1`):
+  - `add_node(name)`: add a backend; adding an existing one is a no-op.
+  - `remove_node(name)`: remove it; `KeyError` if unknown.
+  - `route(key) -> name`; `LookupError` if the ring is empty.
+  - `route_n(key, n) -> list[name]`: up to `n` DISTINCT backends walking clockwise from the key's
+    position (the first one equals `route(key)`), e.g. for replication or fallback. If `n` exceeds
+    the number of backends return all of them; `n == 0` returns `[]`.
+
+  Lookups must be O(log V + small), not a scan of all points, and a single `add_node` must not
+  rehash or re-sort the whole ring from scratch.
+starter: |
+  class HashRing:
+      def __init__(self, vnodes=100):
+          pass
+
+      def add_node(self, name):
+          pass
+
+      def remove_node(self, name):
+          pass
+
+      def route(self, key):
+          pass
+
+      def route_n(self, key, n):
+          pass
+hints:
+- Keep the points in one sorted list of (hash, name) and use bisect_left with (h(key), '') so ties sort
+  by name.
+- Wrap-around is `index % len(ring)`.
+- 'route_n: walk from the start index collecting names not seen yet; at most len(ring) steps.'
+follow_ups:
+- Weighted backends (vnodes proportional to capacity).
+- Bounded-load consistent hashing so a hot key cannot overload one backend.
+- Rendezvous (highest-random-weight) hashing as the alternative.
+tests:
+- name: single node gets every key; empty ring raises
+  code: |
+    r = HashRing(10)
+    try:
+        r.route("k")
+    except LookupError:
+        pass
+    else:
+        raise AssertionError("empty ring must raise LookupError")
+    r.add_node("n1")
+    assert all(r.route(f"k{i}") == "n1" for i in range(50))
+    r.add_node("n1")                         # duplicate add is a no-op
+    assert r.route_n("k", 3) == ["n1"]
+  hidden: false
+  tags:
+  - empty
+  - single
+  - invalid
+- name: route follows the clockwise rule on the md5 ring
+  code: |
+    import hashlib
+    def h(s):
+        return int(hashlib.md5(s.encode()).hexdigest()[:8], 16)
+    r = HashRing(3)
+    r.add_node("a"); r.add_node("b")
+    ring = sorted((h(f"{n}#{i}"), n) for n in "ab" for i in range(3))
+    def expect(key):
+        x = h(key)
+        for hv, n in ring:
+            if hv >= x:
+                return n
+        return ring[0][1]                   # wrap around
+    for i in range(300):
+        assert r.route(f"key{i}") == expect(f"key{i}"), i
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: adding a node only moves keys onto the new node
+  code: |
+    r = HashRing(100)
+    for n in ["a", "b", "c"]:
+        r.add_node(n)
+    keys = [f"req-{i}" for i in range(5000)]
+    before = {k: r.route(k) for k in keys}
+    r.add_node("d")
+    moved = 0
+    for k in keys:
+        now = r.route(k)
+        if now != before[k]:
+            assert now == "d", "a key may only move to the new node"
+            moved += 1
+    assert 0.10 * len(keys) < moved < 0.40 * len(keys), moved
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: removing a node only moves that node's keys
+  code: |
+    r = HashRing(100)
+    for n in ["a", "b", "c", "d"]:
+        r.add_node(n)
+    keys = [f"req-{i}" for i in range(5000)]
+    before = {k: r.route(k) for k in keys}
+    r.remove_node("c")
+    for k in keys:
+        if before[k] != "c":
+            assert r.route(k) == before[k]
+        else:
+            assert r.route(k) in {"a", "b", "d"}
+    try:
+        r.remove_node("zzz")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("unknown node must raise KeyError")
+  hidden: false
+  tags:
+  - state-reuse
+  - invalid
+- name: virtual nodes balance the load
+  code: |
+    r = HashRing(200)
+    for n in ["a", "b", "c", "d"]:
+        r.add_node(n)
+    counts = {n: 0 for n in "abcd"}
+    for i in range(20000):
+        counts[r.route(f"user-{i}")] += 1
+    assert min(counts.values()) > 0.6 * 5000 and max(counts.values()) < 1.4 * 5000, counts
+  hidden: true
+  tags:
+  - duplicate
+  - scale
+- name: route_n returns distinct replicas in ring order
+  code: |
+    r = HashRing(50)
+    for n in ["a", "b", "c"]:
+        r.add_node(n)
+    for i in range(200):
+        reps = r.route_n(f"k{i}", 2)
+        assert len(reps) == 2 and len(set(reps)) == 2 and reps[0] == r.route(f"k{i}")
+    assert sorted(r.route_n("k", 10)) == ["a", "b", "c"], "n larger than node count returns all nodes"
+    assert r.route_n("k", 0) == []
+  hidden: true
+  tags:
+  - ordering
+  - boundary
+- name: 200 nodes x 100 vnodes, 200k lookups
+  code: |
+    r = HashRing(100)
+    for i in range(200):
+        r.add_node(f"node-{i}")
+    seen = set()
+    for i in range(200000):
+        seen.add(r.route(f"session-{i}"))
+    assert len(seen) == 200
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: route
+  time: O(log V)
+  space: O(V)
+- op: add_node
+  time: O(v * V)
+  space: O(V)
+- op: remove_node
+  time: O(V)
+  space: O(V)
+extensions:
+- q: 'Level 2: bounded loads. Do not send a key to a backend that already holds more than ceil(c * average)
+    active keys; spill to the next clockwise backend.'
+  kind: code
+  key_points:
+  - Track per-backend load and the total; the cap is recomputed as keys are added or removed
+  - Spill uses route_n order, so the choice stays deterministic and mostly stable
+  - Choose c (for example 1.25) and state that smaller c means more spill and worse affinity
+- q: Why does a prefix-cache-aware LLM router prefer consistent hashing to round robin, and what breaks
+    it?
+  kind: design
+  key_points:
+  - Same prefix lands on the same replica so its KV/prefix cache is warm; round robin scatters prefixes
+    across replicas
+  - Hot prefixes overload one replica, so bounded loads or replica sets with load-aware choice among route_n(key,
+    2) are needed
+  - Scale events remap about 1/N of keys, which cold-starts those caches; draining and gradual weight
+    ramps soften it
+- q: Compare consistent hashing with virtual nodes against rendezvous hashing.
+  kind: design
+  key_points:
+  - Rendezvous scores every backend per key (O(N) per lookup) but needs no ring state and balances well
+    without vnodes
+  - Ring lookup is O(log V) but needs many vnodes (tens to hundreds) to balance, costing memory and slower
+    membership change
+  - Both move only keys of the changed node
+- q: Cost of lookup and membership change, and the effect of vnode count on balance.
+  kind: complexity
+  key_points:
+  - route is O(log(N*v)); add_node is O(v * N*v) with insort memmove or O(N*v log) if rebuilt
+  - Load imbalance shrinks roughly like 1/sqrt(v); more vnodes means more memory and slower add/remove
+  - Space is O(N*v)
+narration: []
+state_aloud:
+- 'Ask: is hashing specified (it is: md5 prefix) and what to do on an empty ring (LookupError).'
+- Duplicate add is a no-op; removing an unknown node is an error.
+- Wrap-around from the last point to the first.
+- route_n must return DISTINCT backends, not distinct points.
+- Only keys of an added/removed node should move; say it and the tests check it.
+walkthrough: |
+  The ring is a sorted list of (hash, backend) points, one per virtual node. A lookup hashes the key, uses bisect_left to find the first point at or after it and wraps with a modulo; route_n keeps walking and collects distinct backend names. add_node inserts its vnodes with insort, remove_node filters its points out. Virtual nodes smooth the arc lengths so each backend owns a near-equal share. Standard consistent-hashing formulation; the cache-affinity motivation follows the prefix-cache idea in prefix-cache-radix.
+categories:
+- ai-infra

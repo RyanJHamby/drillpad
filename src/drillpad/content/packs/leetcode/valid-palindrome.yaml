@@ -1,0 +1,95 @@
+id: valid-palindrome
+title: Valid Palindrome
+bar_level: 1
+target_minutes: 10
+patterns:
+- two-pointers
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Valid Palindrome (LC 125)"
+statement: |
+  Given a string `s`, decide whether it reads the same forwards and backwards after ignoring every character that is not a letter or digit and treating uppercase and lowercase as equal. An empty result counts as a palindrome.
+
+  Example: `is_palindrome("A man, a plan, a canal: Panama")` is `True`; `is_palindrome("race a car")` is `False`.
+starter: |
+  def is_palindrome(s):
+      pass
+hints:
+- Building a cleaned copy and comparing it to its reverse works in O(n) space.
+- Use two indices from both ends moving inward and skip non-alphanumeric characters.
+- Compare lowercase versions; use `str.isalnum()` to skip.
+follow_ups:
+- Do it with O(1) extra space.
+- What if at most one character may be deleted (Valid Palindrome II)?
+tests:
+- name: punctuated palindrome
+  tags:
+  - ordering
+  code: |
+    assert is_palindrome('A man, a plan, a canal: Panama') is True
+- name: not a palindrome
+  tags:
+  - invalid
+  code: |
+    assert is_palindrome('race a car') is False
+- name: empty string
+  tags:
+  - empty
+  code: |
+    assert is_palindrome('') is True
+- name: only punctuation
+  tags:
+  - boundary
+  code: |
+    assert is_palindrome(' .,!? ') is True
+- name: single character
+  tags:
+  - single
+  code: |
+    assert is_palindrome('a') is True
+- name: digits and mixed case
+  tags:
+  - duplicate
+  code: |
+    assert is_palindrome('0P') is False
+    assert is_palindrome('Ab1 1bA') is True
+- name: million characters
+  tags:
+  - scale
+  hidden: true
+  code: |
+    s='a'*500000+'b'+'a'*500000
+    assert is_palindrome(s) is True
+    assert is_palindrome(s+'c') is False
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Two pointers versus building a cleaned reversed copy.
+  kind: complexity
+  key_points:
+  - Both O(n) time
+  - Two pointers use O(1) extra space
+  - The copy uses O(n) space but is simpler
+- q: Handle Unicode properly.
+  kind: design
+  key_points:
+  - Normalise (NFKC) and casefold instead of lower()
+  - Decide which categories count as alphanumeric
+  - Grapheme clusters may span several code points
+- q: Allow deleting at most one character.
+  kind: reasoning
+  key_points:
+  - On first mismatch try skipping left or right
+  - Check the remaining substring is a palindrome for either choice
+  - Still O(n) time
+narration: []
+state_aloud:
+- Empty or all-punctuation input is a palindrome.
+- Case-insensitive comparison.
+- Digits count as characters.
+walkthrough: |
+  Place pointers at both ends. Advance each past characters that are not alphanumeric, then compare the two characters case-insensitively; a mismatch returns False. Move both inward until they cross. No cleaned copy is built, so extra space is constant.

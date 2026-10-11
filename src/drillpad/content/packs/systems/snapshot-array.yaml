@@ -1,0 +1,167 @@
+id: snapshot-array
+title: Snapshot Array
+bar_level: 2
+target_minutes: 22
+patterns:
+- binary-search
+- versioning
+- sparse-storage
+firm_tags: []
+statement: |
+  Implement `SnapshotArray(length)` (LeetCode 1146): an array of `length` zeros that supports
+  snapshots.
+
+  - `set(index, val)`: set the element at `index`. `IndexError` if `index` is out of
+    `[0, length)`.
+  - `snap()` -> int: take a snapshot and return its id (0 for the first, then 1, 2, ...).
+  - `get(index, snap_id)` -> the value `index` had when snapshot `snap_id` was taken. `IndexError`
+    for a bad index; `ValueError` if `snap_id` has not been taken yet.
+
+  `snap()` must NOT copy the array: with 50,000 elements and 50,000 snapshots it has to stay fast,
+  so store per-index version histories.
+
+  Example
+  ```python
+  a = SnapshotArray(3); a.set(0, 5); a.snap() -> 0; a.set(0, 6)
+  a.get(0, 0) -> 5;  a.snap() -> 1;  a.get(0, 1) -> 6;  a.get(2, 1) -> 0
+  ```
+starter: |
+  class SnapshotArray:
+      def __init__(self, length):
+          pass
+
+      def set(self, index, val):
+          pass
+
+      def snap(self):
+          pass
+
+      def get(self, index, snap_id):
+          pass
+hints:
+- Do not copy the array on snap(); keep a version counter.
+- For each index keep a sorted list of (snap_id at time of write, value).
+- 'get: bisect_right on the snapshot ids for that index, minus one; default 0.'
+follow_ups:
+- What if set is called many times between snapshots?
+- How would you implement it with a persistent segment tree?
+tests:
+- name: leetcode example
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    a = SnapshotArray(3)
+    a.set(0, 5)
+    assert a.snap() == 0
+    a.set(0, 6)
+    assert a.get(0, 0) == 5
+    assert a.snap() == 1
+    assert a.get(0, 1) == 6 and a.get(2, 1) == 0 and a.get(1, 0) == 0
+- name: overwrite within one epoch and gaps
+  tags:
+  - duplicate
+  - boundary
+  code: |
+    a = SnapshotArray(2)
+    a.set(1, 1); a.set(1, 2); a.set(1, 3)
+    assert a.snap() == 0
+    assert a.snap() == 1
+    a.set(1, 9)
+    assert a.snap() == 2
+    assert (a.get(1, 0), a.get(1, 1), a.get(1, 2)) == (3, 3, 9)
+- name: invalid arguments
+  tags:
+  - invalid
+  - single
+  code: |
+    a = SnapshotArray(1)
+    a.set(0, 7)
+    for fn, exc in ((lambda: a.set(1, 1), IndexError), (lambda: a.set(-1, 1), IndexError),
+                    (lambda: a.get(0, 0), ValueError), (lambda: a.get(5, 0), IndexError)):
+        try:
+            fn()
+        except exc:
+            pass
+        else:
+            raise AssertionError("expected %s" % exc.__name__)
+    assert a.snap() == 0 and a.get(0, 0) == 7
+    try:
+        a.get(0, 1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("snap_id 1 not taken yet")
+- name: snapshot before any set
+  hidden: true
+  tags:
+  - empty
+  - boundary
+  code: |
+    a = SnapshotArray(4)
+    s0 = a.snap()
+    a.set(3, 8)
+    s1 = a.snap()
+    assert a.get(3, s0) == 0 and a.get(3, s1) == 8
+- name: snap does not copy
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    a = SnapshotArray(50000)
+    for i in range(50000):
+        a.set(i % 1000, i)
+        a.snap()
+    assert a.get(0, 0) == 0
+    assert a.get(7, 7) == 7 and a.get(7, 8) == 7
+    assert a.get(7, 1007) == 1007 and a.get(7, 1006) == 7
+    assert a.get(999, 49999) == 49999
+complexity:
+- op: set
+  time: O(1)
+  space: O(n)
+- op: snap
+  time: O(1)
+  space: O(1)
+- op: get
+  time: O(log s)
+  space: O(1)
+extensions:
+- q: State per-operation costs and total space after S snapshots and W writes.
+  kind: complexity
+  key_points:
+  - 'snap is O(1): just increments the counter'
+  - 'get is a binary search over that index''s history: O(log w) for w writes to the index'
+  - 'Total space O(W): only writes are stored, not copies of the array'
+- q: Support deleting old snapshots to reclaim memory.
+  kind: design
+  key_points:
+  - Reference-count snapshots; versions no snapshot can see may be compacted
+  - Merge adjacent versions of an index when the intermediate snapshot ids are deleted
+  - Persistent data structures (path-copying trees) make old versions cheap to keep or drop
+- q: Make it thread-safe and persistent.
+  kind: design
+  key_points:
+  - Writers mutate under a lock; reads of older snapshots are immutable and need no lock
+  - Log writes with their snapshot ids to disk and rebuild histories on start
+  - Copy-on-write snapshots (as in databases) tag versions instead of copying data
+- q: Why store (snap_id, value) per index instead of an array copy per snapshot?
+  kind: reasoning
+  key_points:
+  - Copying is O(n) per snapshot, O(n*S) space
+  - Sparse histories pay only for changed cells
+  - Overwriting inside one epoch replaces the last entry so history stays minimal
+narration: []
+state_aloud:
+- Snapshot ids start at 0.
+- Overwrites in the same epoch replace the last entry.
+- Unwritten cells are 0.
+- Invalid index or future snapshot id raise.
+walkthrough: 'Each written index keeps two parallel lists: the snapshot epochs of its writes and the values.
+  set appends (or overwrites the entry for the current epoch), snap just increments a counter, and get
+  binary searches the index''s epochs for the last write at or before the requested snapshot, defaulting
+  to 0. Space is proportional to the number of writes.'
+anki_queries: []
+categories:
+- systems-impl

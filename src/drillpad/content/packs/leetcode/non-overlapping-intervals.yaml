@@ -1,0 +1,118 @@
+id: non-overlapping-intervals
+title: Non-overlapping Intervals
+bar_level: 2
+target_minutes: 25
+patterns:
+- intervals
+- greedy
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Non-overlapping Intervals (LC 435)"
+statement: |
+  Given a list of intervals `[start, end]`, return the minimum number of intervals to remove so the rest do not overlap. Intervals that merely touch (one ends exactly where another starts) do not overlap.
+
+  Example: `erase_overlap_intervals([[1,2],[2,3],[3,4],[1,3]])` returns `1` (remove `[1,3]`).
+starter: |
+  def erase_overlap_intervals(intervals):
+      pass
+hints:
+- 'Equivalent: keep the maximum number of mutually non-overlapping intervals; the answer is n minus that.'
+- This is activity selection. Which sort key lets a single left-to-right pass pick correctly?
+- Sort by end. Keep an interval if its start >= the last kept end; otherwise count a removal.
+follow_ups:
+- Return the removed intervals.
+- 'Weighted version: maximise total weight kept.'
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert erase_overlap_intervals([[1,2],[2,3],[3,4],[1,3]]) == 1
+- name: all identical
+  tags:
+  - duplicate
+  code: |
+    assert erase_overlap_intervals([[1,2],[1,2],[1,2]]) == 2
+- name: already non-overlapping and touching
+  tags:
+  - boundary
+  code: |
+    assert erase_overlap_intervals([[1,2],[2,3]]) == 0
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert erase_overlap_intervals([]) == 0
+- name: single
+  tags:
+  - single
+  code: |
+    assert erase_overlap_intervals([[5,9]]) == 0
+- name: sorting by start is wrong
+  tags:
+  - ordering
+  code: |
+    assert erase_overlap_intervals([[1,100],[2,3],[4,5]]) == 1
+    assert erase_overlap_intervals([[0,10],[1,2],[3,4],[5,6]]) == 1
+  hidden: true
+- name: unsorted and nested
+  tags:
+  - ordering
+  code: |
+    assert erase_overlap_intervals([[5,6],[1,10],[2,3],[3,4],[7,8]]) == 1
+  hidden: true
+- name: negative coordinates
+  tags:
+  - invalid
+  - boundary
+  code: |
+    assert erase_overlap_intervals([[-3,-1],[-2,0],[-1,1]]) == 1
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 300000
+    a = [[i, i + 2] for i in range(n)]
+    assert erase_overlap_intervals(a) == n - (n + 1) // 2
+    b = [[0, 10**9]] * n + [[i, i + 1] for i in range(n)]
+    assert erase_overlap_intervals(b) == n
+  hidden: true
+complexity:
+- op: overall
+  time: O(n log n)
+  space: O(1)
+extensions:
+- q: Give the exchange argument for sorting by end time.
+  kind: reasoning
+  key_points:
+  - Among intervals compatible with those kept, the one with the earliest end leaves the most room
+  - Any optimal solution's first interval can be swapped for the earliest-ending one without conflict
+  - Induction on the remaining intervals
+- q: Why does sorting by start with 'drop the later one' fail, and how can you fix it?
+  kind: reasoning
+  key_points:
+  - A long early interval can overlap many short ones while only costing one removal
+  - 'Fix: when overlap, keep the interval with the smaller end and drop the other'
+  - Sorting by end makes this automatic
+- q: Complexity.
+  kind: complexity
+  key_points:
+  - 'Sort dominates: O(n log n)'
+  - 'Sweep: O(n)'
+  - Space O(1) extra besides sort (O(n) if you copy)
+- q: 'Design: intervals arrive online; maintain the max compatible set.'
+  kind: design
+  key_points:
+  - Maintain kept intervals in an ordered structure
+  - On arrival, compare with overlapping kept intervals and keep the earlier-ending one if it conflicts with just one
+  - Optimal online unweighted maintenance is non-trivial; discuss offline recomputation or weighted DP with binary search
+narration: []
+state_aloud:
+- Empty input.
+- Touching intervals do not overlap.
+- 'Sort key matters: end, not start.'
+walkthrough: |
+  Keeping the largest compatible set equals removing the fewest. Sort by end time; keep the first interval, then for each next interval, if it starts at or after the end of the last kept one, keep it and update the end; otherwise it overlaps and must be removed, so count it. Choosing the earliest-ending interval leaves the most room for the rest.

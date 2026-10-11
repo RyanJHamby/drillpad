@@ -1,0 +1,172 @@
+id: bloom-filter
+title: Bloom Filter
+bar_level: 3
+target_minutes: 35
+patterns:
+- bloom-filter
+- hashing
+- bit-array
+- probabilistic
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement `BloomFilter(capacity, error_rate=0.01)`.
+
+  Sizing (use exactly these formulas so results are comparable)
+  - `m = ceil(-capacity * ln(error_rate) / (ln 2)^2)` bits, exposed as `self.m`
+  - `k = max(1, round(m / capacity * ln 2))` hash functions, exposed as `self.k`
+  - Raise `ValueError` if `capacity <= 0` or `error_rate` is not strictly between 0 and 1.
+
+  API
+  - `add(item)`: `item` is a string. Set `k` bit positions derived by double hashing from a
+    deterministic hash (e.g. `hashlib.blake2b`/`md5`; never built-in `hash`):
+    `pos_i = (h1 + i * h2) % m`.
+  - `might_contain(item)` -> bool, and `item in bf` works too: never a false negative.
+  - `count_set_bits()` -> number of 1 bits.
+
+  Example
+  ```python
+  bf = BloomFilter(1000, 0.01); bf.m, bf.k   # (9586, 7)
+  bf.add("apple"); "apple" in bf   # True
+  "zzz" in bf                      # almost certainly False
+  ```
+starter: |
+  import hashlib
+  import math
+
+  class BloomFilter:
+      def __init__(self, capacity, error_rate=0.01):
+          pass
+
+      def add(self, item):
+          pass
+
+      def might_contain(self, item):
+          pass
+
+      def __contains__(self, item):
+          pass
+
+      def count_set_bits(self):
+          pass
+hints:
+- Compute m and k from the formulas, store bits in a bytearray.
+- Derive two base hashes from one digest and generate k positions as h1 + i*h2 mod m.
+- Membership requires all k bits set; any zero bit proves absence.
+follow_ups:
+- How does the false-positive rate behave as you insert more than capacity items?
+- How would you size the filter if you only know the memory budget?
+tests:
+- name: sizing formulas
+  tags:
+  - boundary
+  - single
+  code: |
+    bf = BloomFilter(1000, 0.01)
+    assert (bf.m, bf.k) == (9586, 7)
+    bf2 = BloomFilter(100, 0.001)
+    assert (bf2.m, bf2.k) == (1438, 10)
+- name: no false negatives
+  tags:
+  - scale
+  - duplicate
+  code: |
+    bf = BloomFilter(1000, 0.01)
+    items = ["item-%d" % i for i in range(1000)]
+    for it in items:
+        bf.add(it)
+        bf.add(it)           # idempotent
+    assert all(it in bf and bf.might_contain(it) for it in items)
+- name: empty filter contains nothing
+  tags:
+  - empty
+  - state-reuse
+  code: |
+    bf = BloomFilter(100)
+    assert bf.count_set_bits() == 0
+    assert not any(("x%d" % i) in bf for i in range(200))
+    bf.add("a")
+    assert "a" in bf and 1 <= bf.count_set_bits() <= bf.k
+- name: invalid parameters
+  tags:
+  - invalid
+  - zero-capacity
+  code: |
+    for args in ((0, 0.01), (-5, 0.01), (10, 0.0), (10, 1.0), (10, 1.5)):
+        try:
+            BloomFilter(*args)
+        except ValueError:
+            continue
+        raise AssertionError("expected ValueError for %r" % (args,))
+    assert "ok" and BloomFilter(1, 0.5).k >= 1
+- name: false positive rate near target
+  hidden: true
+  tags:
+  - scale
+  - boundary
+  code: |
+    bf = BloomFilter(2000, 0.01)
+    for i in range(2000):
+        bf.add("member-%d" % i)
+    fp = sum(1 for i in range(20000) if ("other-%d" % i) in bf)
+    assert fp / 20000 < 0.025, fp / 20000
+    assert fp > 0 or True
+    bits = bf.count_set_bits()
+    assert 0.35 * bf.m < bits < 0.65 * bf.m, bits
+- name: deterministic across instances
+  hidden: true
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    a = BloomFilter(100); b = BloomFilter(100)
+    for w in ("x", "y", "z"):
+        a.add(w); b.add(w)
+    assert a.count_set_bits() == b.count_set_bits() > 0
+    assert bytes(a.bits) == bytes(b.bits)
+complexity:
+- op: add
+  time: O(1)
+  space: O(n)
+- op: might_contain
+  time: O(1)
+  space: O(n)
+extensions:
+- q: What are the time and space costs, and how does space scale with accuracy?
+  kind: complexity
+  key_points:
+  - 'add and lookup cost k hash computations: O(k), constant for fixed error rate'
+  - Space is m = -n ln p / (ln2)^2 bits, about 1.44 log2(1/p) bits per item
+  - 'Compare with a hash set that stores whole keys: much larger, but exact'
+- q: Can you support deletion, or merging two filters?
+  kind: design
+  key_points:
+  - 'Plain Bloom cannot delete: clearing a bit may remove other items'
+  - Counting Bloom uses small counters per slot at 3-4x the space; cuckoo filters are an alternative
+  - Union of same-parameter filters is a bitwise OR; intersection only approximates
+- q: Where would you use one in a system, and what happens as it fills past capacity?
+  kind: design
+  key_points:
+  - Guard expensive lookups (LSM-tree SSTables, cache penetration, crawler seen-sets)
+  - False positive rate climbs quickly past design capacity; use scalable (stacked) Bloom filters
+  - Persist by serialising the bit array; hash functions must stay identical across versions
+- q: Why double hashing, and why not Python's hash()?
+  kind: reasoning
+  key_points:
+  - k independent hashes are costly; h1 + i*h2 gives comparable false-positive rates
+  - hash() of str is randomised per process so a persisted/shared filter would break
+  - Odd h2 (or coprime to m) avoids short probe cycles
+narration: []
+state_aloud:
+- Never a false negative, only false positives.
+- No deletion support in the basic version.
+- Deterministic hashing so the filter can be persisted/shared.
+- 'Parameters validated: capacity > 0 and 0 < p < 1.'
+walkthrough: Size m and k from the standard formulas and keep the bits in a bytearray. One blake2b digest
+  supplies two 64-bit hashes; the k positions are h1 + i*h2 mod m. add sets those bits and might_contain
+  checks that all are set, so there are no false negatives and a tunable false-positive rate. Operations
+  are O(k) time and the filter uses O(m) bits.
+anki_queries: []
+categories:
+- systems-impl

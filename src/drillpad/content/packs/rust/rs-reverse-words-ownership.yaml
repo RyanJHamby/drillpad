@@ -1,0 +1,171 @@
+title: Reverse Words (Ownership and Slices)
+target_minutes: 15
+patterns:
+- string-slices
+- ownership
+- borrowing
+- split-whitespace
+firm_tags: []
+categories:
+- leetcode
+statement: |2
+
+  Implement four free functions. Words are separated by any amount of Unicode whitespace; leading,
+  trailing and repeated whitespace is ignored.
+
+  ```rust
+  fn reverse_words(s: &str) -> String        // words in reverse order, joined by ONE space
+  fn reverse_each_word(s: &str) -> String    // each word's characters reversed, words keep order, joined by one space
+  fn first_word(s: &str) -> &str             // borrowed slice of the first word, "" if there is none
+  fn longest_word(s: &str) -> &str           // borrowed slice of the longest word (by chars); the first one wins ties; "" if none
+  ```
+
+  `reverse_words` and `reverse_each_word` must build a new owned `String` (the input is only borrowed).
+  `first_word` and `longest_word` must NOT allocate: they return a slice that points into the input.
+  "Reverse" means by Unicode scalar value (`char`), never by byte.
+
+  Example: `reverse_words("  the sky   is blue ")` is `"blue is sky the"`, and
+  `reverse_each_word("ab cd")` is `"ba dc"`.
+starter: |2
+
+  fn reverse_words(s: &str) -> String {
+      todo!()
+  }
+
+  fn reverse_each_word(s: &str) -> String {
+      todo!()
+  }
+
+  fn first_word(s: &str) -> &str {
+      todo!()
+  }
+
+  fn longest_word(s: &str) -> &str {
+      todo!()
+  }
+hints:
+- '`s.split_whitespace()` already skips empty pieces and yields `&str` slices of `s` -- no manual index math needed.'
+- 'Return type `&str` with a single `&str` argument: lifetime elision ties the output to `s`. If you were tempted to `.to_string()` inside `first_word`, you are returning an owned value where a borrow is wanted.'
+- To reverse by character use `word.chars().rev().collect::<String>()`; `word.len()` counts bytes, so use `word.chars().count()` for 'longest'. `Iterator::max_by_key` returns the LAST maximum, so think about how to keep the first on ties.
+follow_ups:
+- Why can first_word return &str without any lifetime annotation, but a two-argument version could not?
+- What would break if you reversed the bytes of a UTF-8 string?
+- Could reverse_words avoid the intermediate Vec? What would you need instead?
+- What is the difference between split(' ') and split_whitespace() on repeated spaces?
+tests:
+- name: basic reverse_words
+  tags:
+  - single
+  - ordering
+  code: |
+    assert_eq!(reverse_words("the sky is blue"), "blue is sky the");
+    assert_eq!(reverse_words("hello"), "hello");
+    let owned = String::from("a b c");
+    assert_eq!(reverse_words(&owned), "c b a");
+    assert_eq!(owned, "a b c"); // input untouched
+  hidden: false
+- name: extra whitespace is collapsed
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    assert_eq!(reverse_words("  the sky   is blue "), "blue is sky the");
+    assert_eq!(reverse_words("a\t b\n c"), "c b a");
+    assert_eq!(reverse_each_word("  ab   cd  "), "ba dc");
+  hidden: false
+- name: empty and blank input
+  tags:
+  - empty
+  code: |
+    assert_eq!(reverse_words(""), "");
+    assert_eq!(reverse_words("   \t "), "");
+    assert_eq!(reverse_each_word(""), "");
+    assert_eq!(first_word("   "), "");
+    assert_eq!(longest_word(""), "");
+  hidden: false
+- name: first_word and longest_word borrow from the input
+  tags:
+  - single
+  - ordering
+  code: |
+    let text = String::from("  alpha beta gamma-ray x");
+    let f = first_word(&text);
+    let l = longest_word(&text);
+    assert_eq!(f, "alpha");
+    assert_eq!(l, "gamma-ray");
+    let base = text.as_ptr() as usize;
+    let end = base + text.len();
+    for s in [f, l] {
+        let p = s.as_ptr() as usize;
+        assert!(p >= base && p + s.len() <= end, "result must be a slice of the input, not a copy");
+    }
+  hidden: false
+- name: longest word ties go to the first
+  tags:
+  - duplicate
+  - ordering
+  hidden: true
+  code: |
+    assert_eq!(longest_word("aa bb cc"), "aa");
+    assert_eq!(longest_word("a bbb cc ddd"), "bbb");
+    assert_eq!(first_word("one"), "one");
+- name: unicode is reversed by char not byte
+  tags:
+  - invalid
+  - boundary
+  hidden: true
+  code: |
+    assert_eq!(reverse_each_word("héllo wörld"), "olléh dlröw");
+    assert_eq!(reverse_each_word("日本語 ü"), "語本日 ü");
+    assert_eq!(reverse_words("über 日本"), "日本 über");
+    // 'longest' counts chars, not bytes: 3 CJK chars (9 bytes) lose to 4 ASCII chars
+    assert_eq!(longest_word("日本語 abcd"), "abcd");
+- name: large input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    let s = "ab ".repeat(200_000);
+    let r = reverse_each_word(&s);
+    assert_eq!(r.len(), 3 * 200_000 - 1);
+    assert!(r.starts_with("ba ba"));
+    assert_eq!(reverse_words(&s).len(), 3 * 200_000 - 1);
+complexity:
+- op: reverse_words / reverse_each_word
+  time: O(n)
+  space: O(n)
+- op: first_word / longest_word
+  time: O(n)
+  space: O(1)
+extensions:
+- q: first_word returns a borrowed &str. What guarantees the caller cannot use it after the String is dropped?
+  kind: design
+  key_points:
+  - 'Lifetime elision: the output lifetime equals the single input reference''s lifetime'
+  - The borrow checker rejects any use of the slice after the owner is moved or dropped (use-after-free is a compile error, unlike a Python reference that silently keeps the str alive)
+  - 'No allocation: the &str is just a pointer plus a length into the original buffer'
+- q: What is the time and space cost of each function, and where do the allocations happen?
+  kind: complexity
+  key_points:
+  - 'All four are one pass over the input: O(n) time'
+  - reverse_words and reverse_each_word allocate an O(n) String for the result (plus an O(words) Vec if you collect)
+  - first_word and longest_word are O(1) extra space because they only return a slice
+- q: Why is reversing a String by bytes wrong, and what are the limits of reversing by char?
+  kind: reasoning
+  key_points:
+  - UTF-8 chars are 1-4 bytes; reversing bytes produces invalid UTF-8 (a String invariant) and would panic or need unsafe
+  - chars() iterates Unicode scalar values, which is correct for precomposed text
+  - Combining marks and emoji sequences are grapheme clusters; reversing chars can detach them, needing the unicode-segmentation crate
+state_aloud:
+- Empty or whitespace-only input returns an empty String / empty slice, not a panic.
+- 'Multiple spaces, tabs and newlines: split_whitespace collapses them, so output has single spaces only.'
+- 'Unicode: reverse by char, measure length by chars().count(), never index a str by byte offset blindly.'
+- 'Ownership: functions that return &str borrow from the input and must not allocate; functions that return String own their data.'
+walkthrough: |2
+
+  `split_whitespace` yields `&str` slices pointing into the input, so `first_word` and `longest_word` just return one of those slices and the elided lifetime keeps it tied to the caller's `String`; the two `String`-returning functions collect and join into a fresh owned buffer. In Python, `str` slices copy and nothing stops you from holding one after the source changes; in Rust the borrow checker enforces it at compile time. `max_by_key` returns the last maximum, so a manual fold with strict `>` keeps the first word on ties.
+id: rs-reverse-words-ownership
+language: rust
+bar_level: 1
+narration: []
+anki_queries: []

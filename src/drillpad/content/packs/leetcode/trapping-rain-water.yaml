@@ -1,0 +1,100 @@
+id: trapping-rain-water
+title: Trapping Rain Water
+bar_level: 3
+target_minutes: 38
+patterns:
+- two-pointers
+- stack
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Trapping Rain Water (LC 42)"
+statement: |
+  `height` lists the heights of unit-width bars in an elevation map. After rain, water collects in the gaps between bars. Return the total units of water trapped.
+
+  Example: `trap([0,1,0,2,1,0,1,3,2,1,2,1])` returns `6`.
+starter: |
+  def trap(height):
+      pass
+hints:
+- Water above bar i is min(tallest bar to its left, tallest to its right) minus height[i], never below
+  zero.
+- Precomputing prefix-max and suffix-max arrays gives O(n) time with O(n) space.
+- 'Two pointers: move the side with the smaller running max, because that side''s water level is already
+  determined by its own max.'
+follow_ups:
+- Do it with a monotonic stack instead.
+- How would this extend to a 2D height map (Trapping Rain Water II)?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert trap([0,1,0,2,1,0,1,3,2,1,2,1])==6
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert trap([])==0
+- name: fewer than three bars
+  tags:
+  - single
+  code: |
+    assert trap([5])==0
+    assert trap([3,1])==0
+- name: valley between walls
+  tags:
+  - boundary
+  code: |
+    assert trap([4,2,0,3,2,5])==9
+    assert trap([3,0,3])==3
+- name: monotone slopes trap nothing
+  tags:
+  - invalid
+  code: |
+    assert trap([1,2,3,4,5])==0
+    assert trap([5,4,3,2,1])==0
+- name: flat equal bars
+  tags:
+  - duplicate
+  code: |
+    assert trap([2,2,2,2])==0
+- name: large basin
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    h=[n]+[0]*(n-2)+[n]
+    assert trap(h)==n*(n-2)
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Compare the three standard approaches.
+  kind: complexity
+  key_points:
+  - 'Prefix/suffix max arrays: O(n) time, O(n) space'
+  - 'Two pointers: O(n) time, O(1) space'
+  - 'Monotonic stack: O(n) time, O(n) space'
+- q: Monotonic stack formulation.
+  kind: design
+  key_points:
+  - Keep indices with decreasing heights
+  - 'On a taller bar pop the bottom and add a bounded layer: width * (min(left,right) - bottom)'
+  - Computes water layer by layer
+- q: Why can the two-pointer sweep trust the smaller side?
+  kind: reasoning
+  key_points:
+  - If left max < right max, water at left is limited by left max regardless of unknown middle bars
+  - The right side's true max is at least the current right max
+  - So you can finalise that bar and advance
+narration: []
+state_aloud:
+- Fewer than 3 bars trap nothing.
+- Water level at a bar is min of both side maxima.
+- Monotone slopes trap nothing.
+walkthrough: |
+  Keep `l`, `r` pointers and the best heights seen from each side. Whichever side has the smaller max is the limiting wall for its current bar, so add `left_max - height[l]` (or the right analogue) and advance that pointer. The other side's max is at least as large, so the answer for that bar is final.

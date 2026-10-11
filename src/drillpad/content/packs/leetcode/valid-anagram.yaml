@@ -1,0 +1,98 @@
+id: valid-anagram
+title: Valid Anagram
+bar_level: 1
+target_minutes: 10
+patterns:
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Valid Anagram (LC 242)"
+statement: |
+  Given two strings `s` and `t`, return `True` if `t` is a rearrangement of the characters of `s` (same characters with the same multiplicities), otherwise `False`.
+
+  Example: `is_anagram("anagram", "nagaram")` is `True`; `is_anagram("rat", "car")` is `False`.
+starter: |
+  def is_anagram(s, t):
+      pass
+hints:
+- Strings of different lengths can never be anagrams.
+- Count each character in one string and subtract using the other.
+- If all counts return to zero the strings match; a fixed 26-slot array works for lowercase letters but
+  a dict is general.
+follow_ups:
+- What if the inputs contain arbitrary Unicode?
+- How would you group a list of words into anagram classes?
+tests:
+- name: classic anagram
+  tags:
+  - ordering
+  code: |
+    assert is_anagram('anagram','nagaram') is True
+- name: not an anagram
+  tags:
+  - invalid
+  code: |
+    assert is_anagram('rat','car') is False
+- name: different lengths
+  tags:
+  - boundary
+  code: |
+    assert is_anagram('ab','abc') is False
+- name: both empty
+  tags:
+  - empty
+  code: |
+    assert is_anagram('','') is True
+- name: single characters
+  tags:
+  - single
+  code: |
+    assert is_anagram('a','a') is True
+    assert is_anagram('a','b') is False
+- name: same letters, different counts
+  tags:
+  - duplicate
+  code: |
+    assert is_anagram('aabb','abbb') is False
+    assert is_anagram('aab','aba') is True
+- name: long strings
+  tags:
+  - scale
+  hidden: true
+  code: |
+    a='ab'*50000
+    b='ba'*50000
+    assert is_anagram(a,b) is True
+    assert is_anagram(a,b[:-1]+'c') is False
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Counting versus sorting both strings.
+  kind: complexity
+  key_points:
+  - 'Counting: O(n) time'
+  - 'Sorting: O(n log n) time'
+  - Space is O(k) for an alphabet of size k, constant for fixed alphabets
+- q: Support arbitrary Unicode input.
+  kind: design
+  key_points:
+  - Use a hash map (Counter) instead of a fixed array
+  - Normalise first (NFC) so equivalent code points match
+  - Space becomes O(distinct characters)
+- q: Why can you do a single pass with one counter?
+  kind: reasoning
+  key_points:
+  - Increment for s, decrement for t
+  - All zeros at the end means equal multisets
+  - Length check first prunes early
+narration: []
+state_aloud:
+- Different lengths fail immediately.
+- Empty strings are anagrams of each other.
+- Case sensitivity and the alphabet assumed.
+walkthrough: |
+  Reject different lengths up front. Then build a character count from `s` and decrement it for each character of `t`; a count that goes negative (or any non-zero remainder) proves the multisets differ. Equal lengths plus no negative count implies all counts are zero.

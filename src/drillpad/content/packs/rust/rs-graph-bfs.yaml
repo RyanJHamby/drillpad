@@ -1,0 +1,195 @@
+title: Graph BFS and Shortest Path (indices)
+target_minutes: 25
+patterns:
+- bfs
+- adjacency-list
+- parent-pointers
+- vecdeque
+- option-vec
+firm_tags: []
+categories:
+- leetcode
+statement: |2
+
+  A graph with `n` nodes numbered `0..n` is given as an adjacency list `adj: &[Vec<usize>]`, where `adj[u]` lists the
+  nodes reachable from `u` by one directed edge (an undirected graph lists each edge in both directions). Edges are
+  unweighted. Implement:
+
+  ```rust
+  fn bfs_distances(adj: &[Vec<usize>], start: usize) -> Vec<Option<usize>>;
+  fn shortest_path(adj: &[Vec<usize>], from: usize, to: usize) -> Option<Vec<usize>>;
+  fn bfs_order(adj: &[Vec<usize>], start: usize) -> Vec<usize>;
+  ```
+
+  - `bfs_distances` returns a vector of length `adj.len()`: entry `v` is `Some(edges on a shortest path)` or `None` if `v`
+    is unreachable. If `start` is out of range, every entry is `None`.
+  - `shortest_path` returns the node list `from ..= to` inclusive, or `None` if there is no path or either endpoint is out
+    of range. `shortest_path(g, a, a)` is `Some(vec![a])`.
+  - `bfs_order` returns the nodes in the order BFS visits them (reachable only; empty if `start` is out of range).
+
+  Determinism: explore each node's neighbors in the order they appear in `adj[u]`, and keep the **first** parent that
+  discovers a node. Under that rule the BFS order and the reconstructed path are unique. Duplicate edges and self-loops
+  may appear and must not break anything.
+
+  Example: `adj = [[1, 2], [3], [3], []]`: distances are `[Some(0), Some(1), Some(1), Some(2)]` and the path 0 to 3 is `[0, 1, 3]`.
+starter: |2
+
+  use std::collections::VecDeque;
+
+  fn bfs_distances(adj: &[Vec<usize>], start: usize) -> Vec<Option<usize>> {
+      todo!()
+  }
+
+  fn shortest_path(adj: &[Vec<usize>], from: usize, to: usize) -> Option<Vec<usize>> {
+      todo!()
+  }
+
+  fn bfs_order(adj: &[Vec<usize>], start: usize) -> Vec<usize> {
+      todo!()
+  }
+hints:
+- '`Vec<Option<usize>>` is the idiomatic ''distance or unreachable'': `None` plays the role of Python''s `-1`/`inf`, and doubles as the visited marker (`dist[v].is_none()` means unseen). Mark nodes when you ENQUEUE them, not when you pop them, or nodes get queued many times.'
+- 'Keep `parent: Vec<Option<usize>>` alongside. To rebuild the path, walk from `to` back to `from` pushing each node, then `reverse()` the vec. Loop with `let mut cur = to; while cur != from { cur = parent[cur].unwrap(); }`-style logic and make sure the unreachable case returns None first.'
+- 'Guard indices up front (`if start >= adj.len() { ... }`): `adj[v]` with a bad index panics. Iterate neighbors with `for &v in &adj[u]` (copying the `usize`), so the immutable borrow of `adj` does not conflict with mutating `dist` and `queue`, which are separate variables.'
+follow_ups:
+- Why must visited be set when enqueuing rather than when dequeuing?
+- How would you do BFS on a grid, or with several start nodes (multi-source)?
+- When does BFS give the right shortest path and when do you need Dijkstra or 0-1 BFS?
+- How would you return an iterator of the BFS order lazily instead of a Vec?
+tests:
+- name: distances on a small DAG
+  tags:
+  - single
+  - ordering
+  code: |
+    let adj = vec![vec![1, 2], vec![3], vec![3], vec![]];
+    assert_eq!(bfs_distances(&adj, 0), vec![Some(0), Some(1), Some(1), Some(2)]);
+    assert_eq!(bfs_distances(&adj, 3), vec![None, None, None, Some(0)]);
+    assert_eq!(bfs_order(&adj, 0), vec![0, 1, 2, 3]);
+  hidden: false
+- name: shortest path reconstruction
+  tags:
+  - ordering
+  - single
+  code: |
+    let adj = vec![vec![1, 2], vec![3], vec![3], vec![4], vec![]];
+    assert_eq!(shortest_path(&adj, 0, 4), Some(vec![0, 1, 3, 4])); // first parent (via 1) wins
+    assert_eq!(shortest_path(&adj, 0, 2), Some(vec![0, 2]));
+    assert_eq!(shortest_path(&adj, 0, 0), Some(vec![0]));
+    assert_eq!(shortest_path(&adj, 3, 3), Some(vec![3]));
+    let shortcut = vec![vec![1, 3], vec![2], vec![3], vec![]];
+    assert_eq!(shortest_path(&shortcut, 0, 3), Some(vec![0, 3]));
+  hidden: false
+- name: disconnected nodes are unreachable
+  tags:
+  - invalid
+  - boundary
+  code: |
+    // two components: {0,1,2} and {3,4}; node 5 isolated
+    let adj = vec![vec![1], vec![0, 2], vec![1], vec![4], vec![3], vec![]];
+    let d = bfs_distances(&adj, 0);
+    assert_eq!(d, vec![Some(0), Some(1), Some(2), None, None, None]);
+    assert_eq!(shortest_path(&adj, 0, 4), None);
+    assert_eq!(shortest_path(&adj, 5, 0), None);
+    assert_eq!(shortest_path(&adj, 3, 4), Some(vec![3, 4]));
+    assert_eq!(bfs_order(&adj, 3), vec![3, 4]);
+  hidden: false
+- name: empty graph and bad indices
+  tags:
+  - empty
+  - invalid
+  code: |
+    let empty: Vec<Vec<usize>> = vec![];
+    assert_eq!(bfs_distances(&empty, 0), vec![]);
+    assert_eq!(shortest_path(&empty, 0, 0), None);
+    assert!(bfs_order(&empty, 0).is_empty());
+    let adj = vec![vec![1], vec![0]];
+    assert_eq!(bfs_distances(&adj, 7), vec![None, None]);
+    assert_eq!(shortest_path(&adj, 0, 9), None);
+    assert_eq!(shortest_path(&adj, 9, 0), None);
+    assert!(bfs_order(&adj, 2).is_empty());
+    let single = vec![vec![]];
+    assert_eq!(bfs_distances(&single, 0), vec![Some(0)]);
+    assert_eq!(shortest_path(&single, 0, 0), Some(vec![0]));
+  hidden: false
+- name: cycles, self-loops and duplicate edges
+  tags:
+  - duplicate
+  - state-reuse
+  hidden: true
+  code: |
+    let adj = vec![vec![0, 1, 1, 2], vec![2, 0], vec![0, 2, 3], vec![1]];
+    assert_eq!(bfs_distances(&adj, 0), vec![Some(0), Some(1), Some(1), Some(2)]);
+    assert_eq!(bfs_order(&adj, 0), vec![0, 1, 2, 3]);
+    assert_eq!(shortest_path(&adj, 0, 3), Some(vec![0, 2, 3]));
+    assert_eq!(shortest_path(&adj, 3, 2), Some(vec![3, 1, 2]));
+    let ring: Vec<Vec<usize>> = (0..6).map(|i| vec![(i + 1) % 6]).collect();
+    assert_eq!(bfs_distances(&ring, 2)[1], Some(5));
+- name: directed edges are respected
+  tags:
+  - ordering
+  - invalid
+  hidden: true
+  code: |
+    let adj = vec![vec![1], vec![2], vec![]];
+    assert_eq!(shortest_path(&adj, 0, 2), Some(vec![0, 1, 2]));
+    assert_eq!(shortest_path(&adj, 2, 0), None);
+    assert_eq!(bfs_distances(&adj, 2), vec![None, None, Some(0)]);
+    let grid_like = vec![vec![1, 2], vec![0, 3], vec![0, 3], vec![1, 2, 4], vec![3]];
+    assert_eq!(bfs_order(&grid_like, 4), vec![4, 3, 1, 2, 0]);
+- name: long chain and wide fan-out
+  tags:
+  - scale
+  hidden: true
+  code: |
+    let n = 300_000;
+    let chain: Vec<Vec<usize>> = (0..n).map(|i| if i + 1 < n { vec![i + 1] } else { vec![] }).collect();
+    let d = bfs_distances(&chain, 0);
+    assert_eq!(d[n - 1], Some(n - 1));
+    let p = shortest_path(&chain, 0, n - 1).unwrap();
+    assert_eq!(p.len(), n);
+    assert_eq!(p[0], 0);
+    assert_eq!(*p.last().unwrap(), n - 1);
+    let mut star: Vec<Vec<usize>> = vec![(1..n).collect()];
+    star.extend((1..n).map(|_| vec![0]));
+    assert_eq!(bfs_order(&star, 0).len(), n);
+complexity:
+- op: bfs_distances / bfs_order
+  time: O(V + E)
+  space: O(V)
+- op: shortest_path
+  time: O(V + E)
+  space: O(V)
+extensions:
+- q: Why does BFS find shortest paths in unweighted graphs, and when does it stop being correct?
+  kind: reasoning
+  key_points:
+  - 'BFS visits nodes in nondecreasing distance order: the first time a node is discovered is via a shortest path'
+  - With weighted edges it is wrong; use Dijkstra (BinaryHeap with Reverse), or 0-1 BFS with a deque when weights are 0 or 1
+  - Marking visited at enqueue time preserves this property and keeps each node in the queue at most once
+- q: What are the time and space costs, and how do they depend on the graph representation?
+  kind: complexity
+  key_points:
+  - 'Each node is enqueued once and each adjacency entry scanned once: O(V + E)'
+  - Space is O(V) for the distance/parent vectors and queue; the adjacency list itself is O(V + E)
+  - An adjacency matrix would make neighbor scanning O(V) per node, O(V^2) total
+- q: How would you adapt this to share a graph across threads or to run many BFS queries?
+  kind: design
+  key_points:
+  - The functions take &[Vec<usize>] immutably, so a shared Arc<Vec<Vec<usize>>> can be read from many threads with no lock (Vec<Vec<usize>> is Sync)
+  - Each query owns its own dist/parent/queue, so queries are embarrassingly parallel (rayon or scoped threads)
+  - For parallel BFS within one query, process the frontier level by level and merge discoveries, which needs atomic visited flags
+state_aloud:
+- Out-of-range start or target returns None/empty, not an index panic.
+- Mark visited on enqueue, not on dequeue, or nodes are processed repeatedly.
+- Disconnected nodes stay None; from == to is a path of length zero.
+- Duplicate edges and self-loops are harmless because visited is checked first.
+- Neighbor order and first-parent-wins make the path deterministic.
+walkthrough: |2
+
+  BFS expands a `VecDeque` frontier one layer at a time, so the first time a node is discovered is along a shortest path; `Vec<Option<usize>>` stores the distance with `None` meaning unvisited, and a parallel parent vector lets `shortest_path` walk back from the target and reverse. Nodes are marked when enqueued so each is processed once, giving O(V + E). Using indices instead of node references sidesteps all ownership issues in graph code, unlike Python where you would store dicts of object references.
+id: rs-graph-bfs
+language: rust
+bar_level: 2
+narration: []
+anki_queries: []

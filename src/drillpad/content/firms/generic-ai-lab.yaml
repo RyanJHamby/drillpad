@@ -1,0 +1,77 @@
+id: generic-ai-lab
+name: Generic AI lab
+family: ai-lab
+confidence: inferred
+sources:
+- private notes:Part 9 What Separates Pass from Fail
+- private notes:Part 2 LC Strategy, The Reality of LC at Each Track
+- private notes:section 1 table
+format:
+  rounds: coding (1-2 problems) plus system design; counts not documented per firm
+  platform: unspecified (candidate's choice of language; Python fine)
+  minutes: 45
+  problems_per_round: 1-2
+  language_notes: Python is fine; candidate's choice (supplemental Part 2).
+  ai_assistance_allowed: no unless interviewer says otherwise (Anthropic official; OpenAI reported)
+format_confidence: reported
+weights:
+  correctness: 25
+  edge_cases: 15
+  complexity: 10
+  pace: 10
+  communication: 20
+  extensions: 10
+  quality: 10
+weights_confidence: inferred
+bar:
+  pass_score: 70
+  floors:
+    correctness: 0.6
+    communication: 0.5
+    edge_cases: 0.4
+bar_confidence: inferred
+pace:
+  target_minutes_by_level:
+    1: 10
+    2: 18
+    3: 28
+    4: 40
+  first_code_by_minute: 6
+  approach_by_minute: 4
+pace_confidence: inferred
+what_earns_points:
+- clean readable code
+- explains thought process before and during coding
+- handles edge cases proactively
+- discusses tradeoffs
+- justifies a data-structure choice instead of naming it
+what_loses_points:
+- silent coding
+- skipping straight to code before discussing approach
+- ignoring edge cases
+- clever tricks over clear code
+red_flags:
+- using AI where the round forbids it (can end candidacy per Anthropic guidance)
+canonical_topics:
+- graph
+- tree
+- dynamic-programming
+- sliding-window
+- data-structure-design
+- lru-cache
+- heap
+problem_ids:
+- lru-cache
+- lfu-cache
+- ttl-cache
+- token-bucket
+- min-heap
+- bounded-queue
+- thread-pool
+missing_problems: []
+tags:
+- ai-lab
+- python
+- communication-heavy
+notes: Docs say difficulty is medium to hard, rarely competition-hard; correctness and communication over
+  cleverness (supplemental Part 2).

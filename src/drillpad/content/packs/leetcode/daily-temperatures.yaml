@@ -1,0 +1,92 @@
+id: daily-temperatures
+title: Daily Temperatures
+bar_level: 2
+target_minutes: 20
+patterns:
+- stack
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+- trading
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Daily Temperatures (LC 739)"
+statement: |
+  Given daily temperatures, return a list where `answer[i]` is how many days you must wait after day `i` for a strictly warmer temperature, or `0` if that never happens.
+
+  Example: `wait_days([73,74,75,71,69,72,76,73])` returns `[1,1,4,2,1,1,0,0]`.
+starter: |
+  def wait_days(temps):
+      pass
+hints:
+- Brute force scans ahead for each day, O(n^2).
+- Keep a stack of indices whose answer is still unknown; their temperatures are decreasing.
+- A new warmer day resolves every index on the stack with a lower temperature.
+follow_ups:
+- Can you do it in O(1) extra space?
+- Relate this to the stock span problem.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert wait_days([73,74,75,71,69,72,76,73])==[1,1,4,2,1,1,0,0]
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert wait_days([])==[]
+- name: single
+  tags:
+  - single
+  code: |
+    assert wait_days([50])==[0]
+- name: strictly decreasing
+  tags:
+  - boundary
+  code: |
+    assert wait_days([90,80,70])==[0,0,0]
+- name: equal temps are not warmer
+  tags:
+  - duplicate
+  code: |
+    assert wait_days([70,70,71])==[2,1,0]
+- name: large decreasing then spike
+  tags:
+  - scale
+  hidden: true
+  code: |
+    t=list(range(100000,0,-1))+[200000]
+    r=wait_days(t)
+    assert r[0]==100000 and r[-1]==0 and r[50000]==50000
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why O(n) with a nested loop?
+  kind: complexity
+  key_points:
+  - Each index is pushed once and popped once
+  - Amortized O(1) per element
+  - Stack worst-case size n for decreasing input
+- q: O(1) extra space approach
+  kind: design
+  key_points:
+  - Scan right to left using the answer array to jump ahead
+  - Jump by answer[j] to the next candidate
+  - Still amortized O(n)
+- q: Stock span variant
+  kind: reasoning
+  key_points:
+  - Same monotonic stack looking backward
+  - Pop while previous price <= current
+  - Span is index distance to the new top
+narration: []
+state_aloud:
+- Empty input.
+- Equal temperature does not count as warmer.
+- Never-warmer days return 0.
+- Strictly decreasing input leaves the whole stack full.
+walkthrough: |
+  Maintain a stack of indices whose temperatures are in decreasing order. For each day, while the stack's top has a lower temperature than today, pop it and set its answer to the index difference. Then push today's index. Indices remaining at the end get 0. Every index enters and leaves the stack once, so the algorithm is linear.

@@ -1,0 +1,260 @@
+id: cpp-lru-cache
+title: LRU Cache with unordered_map and std::list
+language: cpp
+bar_level: 3
+target_minutes: 35
+patterns:
+- lru
+- list-splice
+- iterator-stability
+- hash-map
+firm_tags:
+- quant-hft
+- ai-infra
+- distsys
+statement: |
+  Implement `template <class K, class V> class LRUCache` (C++20) with O(1) `get` and `put`, using
+  `std::unordered_map` for lookup and `std::list` for recency order. `K` is hashable via `std::hash`;
+  `V` may be move-only.
+
+  API:
+  - `explicit LRUCache(size_t capacity)`
+  - `V* get(const K&)`: pointer to the stored value and mark the entry most recently used, or `nullptr` on a miss
+  - `void put(const K&, V value)`: insert or overwrite (an overwrite also refreshes recency); if the insert
+    exceeds capacity, evict the least recently used entry. Capacity 0 stores nothing.
+  - `bool contains(const K&) const`: membership test that does NOT change recency
+  - `bool erase(const K&)`: remove if present, returns whether something was removed
+  - `size()`, `capacity()`
+
+  Requirement: refreshing recency must not copy or reallocate the entry. A pointer returned by `get` stays valid
+  until that entry is evicted or erased (hint: list splice relinks nodes).
+
+  Example:
+  ```cpp
+  LRUCache<int, std::string> c(2);
+  c.put(1, "a"); c.put(2, "b");
+  c.get(1);          // 2 is now least recently used
+  c.put(3, "c");     // evicts 2
+  ```
+starter: |
+  template <class K, class V>
+  class LRUCache {
+  public:
+      explicit LRUCache(std::size_t capacity) { (void)capacity; }
+      // Returns a pointer to the cached value (and marks it most recently used), or nullptr on a miss.
+      V* get(const K& key) { (void)key; return nullptr; }
+      // Insert or overwrite; evicts the least recently used entry when over capacity.
+      void put(const K& key, V value) { (void)key; (void)value; }
+      // Membership test that does NOT change recency.
+      bool contains(const K& key) const { (void)key; return false; }
+      bool erase(const K& key) { (void)key; return false; }
+      std::size_t size() const { return 0; }
+      std::size_t capacity() const { return 0; }
+  };
+hints:
+- List front = most recent. The map goes key -> list iterator, so you reach the node in O(1).
+- std::list::splice(pos, other_list, it) moves one node to the front in O(1) without invalidating any
+  iterator or pointer to it.
+- On eviction erase the map entry using the key stored in the list node (that's why nodes hold the pair,
+  not just the value). Check capacity 0 before touching anything.
+follow_ups:
+- Why list + unordered_map instead of std::map or a vector?
+- What changes to make this thread-safe without a global lock (sharding, or a lock per shard)?
+- How would you make it cache-friendlier than a node-based list (intrusive index-linked arrays)?
+- How does LRU behave under a scan of a huge cold set, and what is the fix (2Q, LRU-K, TinyLFU)?
+tests:
+- name: get and put
+  tags:
+  - single
+  - duplicate
+  code: |
+    LRUCache<int, std::string> c(2);
+    CHECK(c.get(1) == nullptr);
+    c.put(1, "one");
+    c.put(2, "two");
+    CHECK_EQ(c.size(), 2u);
+    std::string* p = c.get(1);
+    CHECK(p != nullptr);
+    CHECK_EQ(*p, "one");
+    CHECK_EQ(*c.get(2), "two");
+- name: evicts least recently used
+  tags:
+  - ordering
+  - boundary
+  code: |
+    LRUCache<int, int> c(3);
+    c.put(1, 10); c.put(2, 20); c.put(3, 30);
+    c.put(4, 40);                       // evicts 1
+    CHECK(!c.contains(1));
+    CHECK(c.contains(2) && c.contains(3) && c.contains(4));
+    CHECK_EQ(c.size(), 3u);
+    CHECK(c.get(1) == nullptr);
+- name: get refreshes recency
+  tags:
+  - ordering
+  code: |
+    LRUCache<int, int> c(2);
+    c.put(1, 1); c.put(2, 2);
+    CHECK(c.get(1) != nullptr);         // 2 is now the LRU
+    c.put(3, 3);
+    CHECK(c.contains(1));
+    CHECK(!c.contains(2));
+    CHECK(c.contains(3));
+- name: put on existing key updates value and recency
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    LRUCache<std::string, int> c(2);
+    c.put("a", 1); c.put("b", 2);
+    c.put("a", 100);                    // update, a becomes MRU
+    CHECK_EQ(c.size(), 2u);
+    c.put("c", 3);                      // evicts b
+    CHECK(!c.contains("b"));
+    CHECK_EQ(*c.get("a"), 100);
+    CHECK_EQ(*c.get("c"), 3);
+- name: capacity one
+  tags:
+  - zero-capacity
+  - boundary
+  code: |
+    LRUCache<int, int> c(1);
+    c.put(1, 1);
+    CHECK_EQ(*c.get(1), 1);
+    c.put(2, 2);
+    CHECK(c.get(1) == nullptr);
+    CHECK_EQ(*c.get(2), 2);
+    c.put(2, 22);
+    CHECK_EQ(c.size(), 1u);
+    CHECK_EQ(*c.get(2), 22);
+- name: capacity zero stores nothing
+  tags:
+  - zero-capacity
+  - empty
+  code: |
+    LRUCache<int, int> c(0);
+    c.put(1, 1);
+    CHECK_EQ(c.size(), 0u);
+    CHECK(c.get(1) == nullptr);
+    CHECK_EQ(c.capacity(), 0u);
+    LRUCache<int, int> d(1);
+    d.put(5, 5);
+    CHECK_EQ(d.capacity(), 1u);
+- name: contains does not refresh recency
+  hidden: true
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    LRUCache<int, int> c(2);
+    c.put(1, 1); c.put(2, 2);
+    CHECK(c.contains(1));               // must not touch recency
+    c.put(3, 3);                        // so 1 is still the LRU and goes
+    CHECK(!c.contains(1));
+    CHECK(c.contains(2));
+- name: erase frees a slot
+  hidden: true
+  tags:
+  - state-reuse
+  - invalid
+  code: |
+    LRUCache<int, int> c(2);
+    c.put(1, 1); c.put(2, 2);
+    CHECK(c.erase(1));
+    CHECK(!c.erase(1));
+    CHECK(!c.erase(99));
+    CHECK_EQ(c.size(), 1u);
+    c.put(3, 3);                        // no eviction needed
+    CHECK(c.contains(2) && c.contains(3));
+- name: returned pointers survive other operations
+  hidden: true
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    LRUCache<int, std::string> c(3);
+    c.put(1, "one"); c.put(2, "two");
+    std::string* p = c.get(1);
+    c.put(3, "three");                  // no eviction
+    c.get(2);
+    CHECK(p == c.get(1));               // splice relinks the node, it must not reallocate it
+    CHECK_EQ(*p, "one");
+- name: move-only values
+  hidden: true
+  tags:
+  - single
+  - ordering
+  code: |
+    LRUCache<int, std::unique_ptr<int>> c(2);
+    c.put(1, std::make_unique<int>(11));
+    c.put(2, std::make_unique<int>(22));
+    c.put(3, std::make_unique<int>(33));
+    CHECK(c.get(1) == nullptr);
+    CHECK_EQ(**c.get(3), 33);
+- name: many operations stay O(1)
+  hidden: true
+  tags:
+  - scale
+  code: |
+    LRUCache<int, int> c(1000);
+    long hits = 0;
+    for (int i = 0; i < 400000; i++) {
+        int k = (i % 3 == 0) ? i % 50 : (int)(((long)i * 7919) % 1500);
+        if (c.get(k)) hits++; else c.put(k, i);
+    }
+    CHECK(c.size() == 1000u);
+    CHECK(hits > 0);
+    for (int i = 0; i < 1000; i++) c.put(100000 + i, i);
+    CHECK(!c.contains(0));
+    CHECK(c.contains(100999));
+complexity:
+- op: get
+  time: O(1) expected
+  space: O(1)
+- op: put
+  time: O(1) expected
+  space: O(capacity)
+- op: erase
+  time: O(1) expected
+  space: O(1)
+extensions:
+- q: Why store the key inside the list node?
+  kind: reasoning
+  key_points:
+  - Eviction starts from the list's back and must find the map entry to erase
+  - Without the key you would need an O(n) reverse lookup
+  - Alternatively store map iterators in the list, at the cost of a more tangled type
+- q: What dominates the real cost and how would you reduce it?
+  kind: complexity
+  key_points:
+  - 'Asymptotically O(1) but every entry is a separate heap node plus a hash bucket: pointer chasing and
+    cache misses'
+  - Use an index-linked array of slots (free list) plus open addressing to get contiguous memory
+  - Reserving the hash table avoids rehash spikes on the hot path
+- q: Make the cache safe for concurrent readers and writers.
+  kind: design
+  key_points:
+  - A single mutex is simplest but get mutates recency, so even reads need the exclusive lock
+  - Shard by hash(key) % N with a mutex per shard; per-shard LRU approximates global LRU
+  - 'Returning V* is unsafe under concurrency: return a copy or shared_ptr<V> instead'
+- q: What pointer/iterator invalidation rules does this design rely on?
+  kind: reasoning
+  key_points:
+  - std::list nodes never move, so iterators and element addresses survive splice, insert and erase of
+    other nodes
+  - unordered_map iterators are invalidated by rehash, but its values (list iterators) are not, which
+    is why storing list iterators as map values is safe
+  - Using std::vector or deque for the order would invalidate these iterators
+narration: []
+state_aloud:
+- 'Capacity 0 and 1 are boundary cases: capacity 0 must not insert at all.'
+- Update of an existing key must refresh recency and must not grow the size.
+- Evict the back of the list and its map entry together; keep the two structures in sync.
+- get() returns nullptr on a miss rather than a default value so a miss is distinguishable and no V copy
+  is needed.
+walkthrough: |
+  The map gives O(1) lookup to a `std::list` iterator, and `splice` relinks that node to the front in O(1) without invalidating iterators or addresses, so recency updates never copy values and a returned `V*` stays stable. Eviction pops the list back and erases the matching map key. Python's `OrderedDict.move_to_end` hides this pairing; in C++ you build it from two containers and rely on their iterator-invalidation guarantees.
+anki_queries: []
+categories:
+- systems-impl
+- leetcode

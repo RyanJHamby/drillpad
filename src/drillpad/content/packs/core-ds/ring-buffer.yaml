@@ -1,0 +1,112 @@
+id: ring-buffer
+title: Fixed-capacity ring buffer
+bar_level: 1
+target_minutes: 15
+patterns: [circular-buffer, modular-indexing]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:4 - *"'
+statement: |
+  Implement `RingBuffer(capacity)`, a fixed-capacity FIFO backed by one fixed-size list with
+  wrapping indices. API: `enqueue(val)`, `dequeue()`, `peek()`, `is_full()`, `len()`.
+  `enqueue` on a full buffer raises OverflowError; `dequeue`/`peek` on an empty buffer raise
+  IndexError; capacity <= 0 raises ValueError. All operations O(1), no reallocation.
+starter: |
+  class RingBuffer:
+      def __init__(self, capacity):
+          pass
+hints:
+  - Track the head index and a size; tail = (head + size) % capacity.
+  - Tracking size separately resolves the empty-versus-full ambiguity.
+follow_ups:
+  - How would you avoid tracking size separately (reserved slot or full flag)?
+  - Make enqueue overwrite the oldest element when full.
+  - Build a bounded blocking queue on top of this for producer/consumer.
+  - How is this different from a deque?
+tests:
+  - name: fifo order
+    tags: [ordering, boundary]
+    code: |
+      r = RingBuffer(3)
+      for v in (1, 2, 3): r.enqueue(v)
+      assert r.is_full() and len(r) == 3 and r.peek() == 1
+      assert [r.dequeue(), r.dequeue(), r.dequeue()] == [1, 2, 3]
+      assert len(r) == 0
+  - name: wraparound
+    tags: [boundary, state-reuse]
+    code: |
+      r = RingBuffer(3)
+      for v in (0, 1, 2): r.enqueue(v)
+      for i in range(3, 13):
+          assert r.dequeue() == i - 3
+          r.enqueue(i)
+      assert len(r) == 3
+      assert [r.dequeue(), r.dequeue(), r.dequeue()] == [10, 11, 12]
+  - name: overflow and underflow
+    tags: [empty, invalid, boundary]
+    code: |
+      r = RingBuffer(2)
+      for fn in (r.dequeue, r.peek):
+          try: fn()
+          except IndexError: pass
+          else: raise AssertionError("empty should raise IndexError")
+      r.enqueue(1); r.enqueue(2)
+      try: r.enqueue(3)
+      except OverflowError: pass
+      else: raise AssertionError("full should raise OverflowError")
+  - name: capacity one and bad capacity
+    tags: [zero-capacity, single, invalid]
+    hidden: true
+    code: |
+      r = RingBuffer(1)
+      for i in range(5):
+          r.enqueue(i); assert r.dequeue() == i
+      for bad in (0, -3):
+          try: RingBuffer(bad)
+          except ValueError: pass
+          else: raise AssertionError("bad capacity should raise ValueError")
+complexity:
+- op: enqueue/dequeue/peek
+  time: O(1)
+  space: O(capacity)
+extensions:
+- q: How would you avoid tracking size separately?
+  kind: reasoning
+  key_points:
+  - Reserve one slot always (capacity - 1 usable)
+  - Or keep a full flag next to head/tail
+  - Otherwise head == tail is ambiguous between empty and full
+  - 'Tradeoff: wasted slot versus extra state'
+- q: Make enqueue overwrite the oldest element when full.
+  kind: code
+  key_points:
+  - On full, advance head by one before writing
+  - Size stays at capacity
+  - State the policy explicitly (reject versus overwrite)
+- q: Build a bounded blocking queue on top of this.
+  kind: design
+  key_points:
+  - Add a lock plus two condition variables (not_full, not_empty)
+  - Loop on the predicate
+  - put notifies not_empty; get notifies not_full
+  - Consider close() to unblock waiters
+- q: What is the space cost and how does this differ from a deque?
+  kind: complexity
+  key_points:
+  - Space O(capacity), fixed, no reallocation ever
+  - All operations O(1) worst case (not just amortized)
+  - Deque supports both ends and typically grows dynamically
+narration:
+- 'Fixed array, two things to track: a head index and a count — I''m avoiding head/tail-only because that can''t disambiguate empty from full.'
+- '[silent] mostly silent while writing enqueue/dequeue'
+- Wraparound is just index modulo capacity, here for the tail slot on enqueue.
+- This is the core of a bounded queue — add blocking/locking on top and it's producer-consumer ready.
+state_aloud:
+- 'Empty buffer: `dequeue`/`peek` must raise, not return stale data.'
+- 'Full buffer: `enqueue` must raise or overwrite-oldest, depending on spec — state which policy you''re implementing.'
+- 'Wraparound itself: tail index computed mod capacity crossing past the array''s physical end.'
+- 'Capacity of 1: enqueue then dequeue should work without off-by-one errors.'
+- Distinguishing "empty" from "full" — both can have `head == tail` if you don't track `size` separately, which is why this implementation tracks size explicitly rather than inferring from pointers.
+walkthrough: |
+  A single fixed-size array holds the data, with a `head` index and an explicit `count`; indices wrap with modulo capacity instead of shifting elements. Tracking size separately is what distinguishes empty from full, since `head == tail` is ambiguous otherwise. Enqueue, dequeue and peek are all O(1) and space is O(k) with no reallocation. Empty dequeue/peek must raise, and a full enqueue either raises or overwrites the oldest, depending on the stated policy. Adding a lock and two condition variables on top yields a bounded blocking queue.
+categories: [systems-impl]

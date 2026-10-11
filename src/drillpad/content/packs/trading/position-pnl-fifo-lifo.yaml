@@ -1,0 +1,188 @@
+id: position-pnl-fifo-lifo
+title: Position and PnL (FIFO/LIFO lots)
+bar_level: 3
+target_minutes: 35
+patterns:
+- lot-matching
+- deque
+- pnl
+- position-tracking
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Track one instrument's position and profit-and-loss using **lot matching**. `Position(method)` with
+  `method` in `"fifo"` or `"lifo"` (else `ValueError`).
+
+  `trade(side, qty, price) -> int` records a fill (`side` is `"buy"`/`"sell"`, `qty` and `price` positive int; price in
+  cents) and returns the **realized PnL** produced by that fill (an int, possibly negative).
+
+  Rules:
+  - A trade in the same direction as the current position (or from flat) opens a new lot.
+  - A trade in the opposite direction closes existing lots: FIFO closes the OLDEST lot first, LIFO the NEWEST.
+    Closing `q` units of a lot bought at `p0` with a sell at `p1` realizes `(p1 - p0) * q`; closing a short lot sold at
+    `p0` with a buy at `p1` realizes `(p0 - p1) * q`. A lot may be closed partially and keeps its price and place.
+  - If the trade is larger than the whole position it **flips**: the remainder opens a lot in the new direction at the
+    trade price.
+
+  Queries: `position() -> int` (signed net quantity), `realized() -> int` (cumulative), `unrealized(mark) -> int`
+  (sum over open lots of `(mark - price) * signed_qty`), and `open_lots() -> [(signed_qty, price), ...]` oldest first.
+  `ValueError` for a bad side, non-positive qty or price.
+
+  No fees. Each trade must be O(1) amortized in the number of lots it closes.
+starter: |
+  class Position:
+      def __init__(self, method="fifo"):
+          pass
+hints:
+- All open lots share a direction, so keep a deque of [qty, price] and a direction flag. Opposite trades
+  consume lots, same-direction trades append.
+- FIFO consumes from the left, LIFO from the right; partially consumed lots stay in place with reduced
+  qty.
+- Realized PnL per closed unit is (close - open) * direction. If lots run out with quantity left over,
+  flip direction and open a lot with the remainder.
+follow_ups:
+- How does average-cost accounting differ and when do firms use it?
+- How would fees and multipliers (futures) enter the PnL?
+- How do you report unrealized PnL per lot for a risk screen?
+tests:
+- name: fifo realizes against the oldest lot
+  code: |
+    p = Position("fifo")
+    assert p.trade("buy", 10, 100) == 0
+    assert p.trade("buy", 10, 110) == 0
+    assert p.trade("sell", 15, 120) == (120 - 100) * 10 + (120 - 110) * 5
+    assert p.position() == 5 and p.open_lots() == [(5, 110)]
+    assert p.realized() == 250 and p.unrealized(130) == 100
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: lifo realizes against the newest lot
+  code: |
+    p = Position("lifo")
+    p.trade("buy", 10, 100); p.trade("buy", 10, 110)
+    assert p.trade("sell", 15, 120) == (120 - 110) * 10 + (120 - 100) * 5
+    assert p.open_lots() == [(5, 100)] and p.position() == 5
+    assert p.realized() == 200
+  hidden: false
+  tags:
+  - ordering
+- name: short positions and covering
+  code: |
+    p = Position("fifo")
+    assert p.trade("sell", 10, 100) == 0
+    assert p.position() == -10
+    assert p.trade("buy", 4, 90) == (100 - 90) * 4
+    assert p.open_lots() == [(-6, 100)]
+    assert p.unrealized(95) == (95 - 100) * -6
+    assert p.trade("buy", 6, 105) == (100 - 105) * 6
+    assert p.position() == 0 and p.open_lots() == [] and p.realized() == 40 - 30
+  hidden: false
+  tags:
+  - single
+  - boundary
+- name: flip through zero opens a new lot
+  code: |
+    for m in ("fifo", "lifo"):
+        p = Position(m)
+        p.trade("buy", 5, 100)
+        assert p.trade("sell", 8, 110) == 50
+        assert p.position() == -3 and p.open_lots() == [(-3, 110)]
+        assert p.trade("buy", 1, 100) == 10
+        assert p.open_lots() == [(-2, 110)] and p.realized() == 60
+  hidden: false
+  tags:
+  - boundary
+  - state-reuse
+- name: fifo and lifo diverge on interleaved trades
+  code: |
+    f, l = Position("fifo"), Position("lifo")
+    seq = [("buy", 3, 100), ("buy", 2, 120), ("sell", 2, 110), ("buy", 4, 90), ("sell", 6, 100)]
+    rf = [f.trade(*t) for t in seq]
+    rl = [l.trade(*t) for t in seq]
+    assert f.realized() == sum(rf) and l.realized() == sum(rl)
+    assert f.position() == l.position() == 1
+    assert f.open_lots() == [(1, 90)] and l.open_lots() == [(1, 100)]
+    assert rf == [0, 0, 20, 0, (100 - 100) * 1 + (100 - 120) * 2 + (100 - 90) * 3]
+    assert rl == [0, 0, -20, 0, (100 - 90) * 4 + (100 - 100) * 2]
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: rejects bad input
+  code: |
+    try:
+        Position("hifo")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("method")
+    p = Position("fifo")
+    for args in [("hold", 1, 1), ("buy", 0, 5), ("sell", -1, 5), ("buy", 1, 0)]:
+        try:
+            p.trade(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    assert p.position() == 0 and p.realized() == 0 and p.open_lots() == []
+  hidden: true
+  tags:
+  - invalid
+  - empty
+- name: 'scale: 300k trades'
+  code: |
+    for m in ("fifo", "lifo"):
+        p = Position(m)
+        total = 0
+        for i in range(300000):
+            side = "buy" if (i // 100) % 2 == 0 else "sell"
+            total += p.trade(side, 1 + i % 3, 1000 + i % 17)
+        assert total == p.realized()
+        assert abs(p.position()) < 400
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: trade
+  time: O(L) worst case, O(1) amortized
+  space: O(L)
+- op: unrealized/position
+  time: O(L)
+  space: O(1)
+extensions:
+- q: 'Level 2: track average-cost accounting alongside lots and make position()/avg_price() O(1).'
+  key_points:
+  - Maintain signed qty and total cost incrementally on open and close
+  - Realized PnL under average cost uses avg price at the time of the closing fill
+  - Flip-through-zero resets the average to the new fill price
+  kind: code
+- q: 'Level 3: add per-trade fees and a futures contract multiplier and return gross vs net realized PnL.'
+  key_points:
+  - Multiplier scales every price difference; fees reduce net, never gross
+  - Fees on the opening leg are attributed to the lot and realized when it closes
+  - Integer cents/mils throughout so totals reconcile exactly
+  kind: code
+- q: Why is each trade O(1) amortized even though it can close many lots?
+  key_points:
+  - Every lot is pushed once and popped once, so total close work is bounded by the number of opens
+  - Partial consumption touches one lot only
+  - position() is O(L) as written; a running signed total makes it O(1)
+  kind: complexity
+- q: 'Design: how would the PnL engine be fed and audited in production?'
+  key_points:
+  - Deterministic replay of the fill log reproduces every realized number
+  - Reconcile against broker/prime-broker statements to catch missed or duplicated fills
+  - Corporate actions and busts need explicit adjustment events, not edits to history
+  kind: design
+narration: []
+state_aloud:
+- FIFO closes oldest first, LIFO newest first; a trade larger than the position flips it.
+- Short lots realize (sell price - buy price) * qty on cover.
+- Integer cents; no fees; unrealized uses the supplied mark.
+walkthrough: |
+  Standard lot-matching PnL accounting. Open lots live in a deque with a single direction; closing fills consume from the front (FIFO) or back (LIFO), realizing (close - open) * direction per unit, and any leftover flips the book. Source: standard formulation.
+categories:
+- trading

@@ -1,0 +1,102 @@
+id: graph-valid-tree
+title: Graph Valid Tree
+bar_level: 2
+target_minutes: 22
+patterns:
+- union-find
+- graph-bfs-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Graph Valid Tree (LC 261)"
+statement: |
+  There are `n` nodes labelled `0` to `n - 1` and a list of undirected `edges`. Return `True` if the edges form a valid tree: the graph is connected and contains no cycle. Otherwise return `False`.
+
+  Example: `valid_tree(5, [[0,1],[0,2],[0,3],[1,4]])` is `True`; `valid_tree(5, [[0,1],[1,2],[2,3],[1,3],[1,4]])` is `False` because of a cycle.
+starter: |
+  def valid_tree(n, edges):
+      pass
+hints:
+- A tree on n nodes has exactly n - 1 edges; check that count first.
+- With n - 1 edges, the graph is a tree iff it is connected (or iff it has no cycle).
+- 'Use union-find: if an edge joins two nodes already in the same set you found a cycle.'
+follow_ups:
+- Return the edge that creates a cycle.
+- Check connectivity with BFS instead of union-find.
+tests:
+- name: valid tree
+  tags:
+  - boundary
+  code: |
+    assert valid_tree(5,[[0,1],[0,2],[0,3],[1,4]]) is True
+- name: has a cycle
+  tags:
+  - invalid
+  code: |
+    assert valid_tree(5,[[0,1],[1,2],[2,3],[1,3],[1,4]]) is False
+- name: single node
+  tags:
+  - single
+  code: |
+    assert valid_tree(1,[]) is True
+- name: disconnected forest
+  tags:
+  - invalid
+  - boundary
+  hidden: true
+  code: |
+    assert valid_tree(4,[[0,1],[2,3]]) is False
+    assert valid_tree(2,[]) is False
+- name: duplicate undirected edge
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    assert valid_tree(2,[[0,1],[1,0]]) is False
+- name: edge count right but cycle plus isolated node
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    assert valid_tree(4,[[0,1],[1,2],[2,0]]) is False
+- name: long path
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    e=[[i,i+1] for i in range(n-1)]
+    assert valid_tree(n,e) is True
+    e.append([0,n-1])
+    assert valid_tree(n,e) is False
+complexity:
+- op: overall
+  time: O(V + E * alpha(V))
+  space: O(V)
+extensions:
+- q: What is the cost of union-find here?
+  kind: complexity
+  key_points:
+  - Near-linear with path compression and union by size
+  - Edge-count precheck makes the work at most n-1 unions
+  - Space O(V) for the parent array
+- q: Do it with DFS instead.
+  kind: code
+  key_points:
+  - Build adjacency lists, DFS from node 0 passing the parent
+  - A visited neighbour that is not the parent means a cycle
+  - Finally check that all n nodes were visited
+- q: What if edges stream in and you must answer after each one?
+  kind: design
+  key_points:
+  - Incremental union-find returns the cycle-causing edge immediately
+  - Track the component count to know when it becomes connected
+  - Cannot undo easily; deletions need offline or link-cut structures
+narration: []
+state_aloud:
+- Wrong edge count means not a tree.
+- Duplicate edges form a 2-cycle.
+- Single node with no edges is a tree.
+walkthrough: |
+  A tree on n nodes must have exactly n - 1 edges, so reject any other count immediately. Then process the edges with union-find; if both endpoints already share a root the edge closes a cycle and the answer is false. With the right edge count and no cycle, the graph has to be connected, so it is a valid tree.

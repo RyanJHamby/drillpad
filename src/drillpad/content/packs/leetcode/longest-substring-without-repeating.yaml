@@ -1,0 +1,90 @@
+id: longest-substring-without-repeating
+title: Longest Substring Without Repeating Characters
+bar_level: 2
+target_minutes: 20
+patterns:
+- sliding-window
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Longest Substring No Repeat (LC 3)"
+statement: |
+  Given a string `s`, return the length of the longest contiguous substring in which no character appears twice.
+
+  Example: `longest_unique("abcabcbb")` returns `3` (`"abc"`).
+starter: |
+  def longest_unique(s):
+      pass
+hints:
+- A window [l, r] is valid if all its characters are distinct.
+- When s[r] is already inside the window, shrink from the left.
+- Store the last index of each char so l can jump directly past the earlier copy.
+follow_ups:
+- How would you return the substring itself?
+- What if the alphabet is only 26 letters, can you use O(1) space?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert longest_unique('abcabcbb')==3
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert longest_unique('')==0
+- name: all same
+  tags:
+  - duplicate
+  code: |
+    assert longest_unique('bbbbb')==1
+- name: repeat behind the window
+  tags:
+  - boundary
+  code: |
+    assert longest_unique('abba')==2
+    assert longest_unique('tmmzuxt')==5
+- name: single char
+  tags:
+  - single
+  code: |
+    assert longest_unique('z')==1
+- name: long string
+  tags:
+  - scale
+  hidden: true
+  code: |
+    s='abcdefghij'*20000
+    assert longest_unique(s)==10
+complexity:
+- op: overall
+  time: O(n)
+  space: O(k)
+extensions:
+- q: Why is it O(n) despite the inner shrink?
+  kind: complexity
+  key_points:
+  - Each index enters and leaves the window at most once
+  - Left pointer only moves forward
+  - Space bounded by alphabet size k
+- q: Return the substring too
+  kind: code
+  key_points:
+  - Track best start along with the length
+  - Slice at the end
+  - No extra passes needed
+- q: 'Design: longest window with at most k distinct chars'
+  kind: design
+  key_points:
+  - Replace the last-index map with a count map
+  - Shrink while distinct count exceeds k
+  - Same O(n) amortized argument
+narration: []
+state_aloud:
+- Empty string.
+- Repeat that sits before the current window start ('abba').
+- Single repeated character.
+walkthrough: |
+  Maintain a window [left, right] containing distinct characters and a map from character to its most recent index. When the new character was last seen inside the window, move `left` just past that previous index; the max-with guards against stale indices left of the window ('abba'). Update the best length after each step. Each pointer only advances, so the scan is linear.

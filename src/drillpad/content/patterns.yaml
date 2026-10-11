@@ -1,0 +1,78 @@
+- slug: hash-map
+  name: Hash Map
+  description: Trade space for O(1) lookups by indexing what you have seen (complements, counts, canonical keys).
+- slug: two-pointers
+  name: Two Pointers
+  description: Move two indices through a (usually sorted) sequence to avoid a nested loop.
+- slug: sliding-window
+  name: Sliding Window
+  description: Grow and shrink a contiguous window while maintaining an invariant in O(n).
+- slug: binary-search
+  name: Binary Search
+  description: Halve a sorted or monotonic search space, including searching over the answer value.
+- slug: stack
+  name: Stack / Monotonic Stack
+  description: Use LIFO order for matching and nesting, or keep a monotonic stack to find next greater/smaller elements.
+- slug: linked-list
+  name: Linked List
+  description: Pointer rewiring, dummy heads, and fast/slow pointers on singly linked nodes.
+- slug: tree-dfs
+  name: Tree DFS
+  description: Recursive or stack-based depth-first traversal that carries state down and results up.
+- slug: tree-bfs
+  name: Tree BFS
+  description: Level-order traversal with a queue, processing one depth at a time.
+- slug: heap-top-k
+  name: Heap / Top K
+  description: Use a priority queue to track the k best items or repeatedly extract the next smallest.
+- slug: graph-bfs-dfs
+  name: Graph BFS/DFS
+  description: Traverse graphs and grids with a visited set to find components, paths, and copies.
+- slug: topological-sort
+  name: Topological Sort
+  description: Order a DAG by dependencies (Kahn's algorithm or DFS) and detect cycles.
+- slug: union-find
+  name: Union-Find
+  description: Disjoint sets with path compression for near-constant connectivity queries and cycle detection.
+- slug: dp-1d
+  name: 1D Dynamic Programming
+  description: Define a state over a single index and build it from earlier states (often with rolling variables).
+- slug: dp-2d
+  name: 2D Dynamic Programming
+  description: Fill a table over two indices (grids, string pairs) from smaller subproblems.
+- slug: intervals
+  name: Intervals
+  description: Sort by start and sweep to merge, count overlaps, or schedule.
+- slug: backtracking
+  name: Backtracking
+  description: Build candidates incrementally, recurse, and undo choices to enumerate or search all possibilities.
+- slug: trie
+  name: Trie
+  description: Prefix tree for fast word insertion, exact lookup, prefix queries, and wildcard search.
+- slug: prefix-sum
+  name: Prefix Sum
+  description: Precompute running totals (or products) so range questions become differences of two values.
+- slug: greedy
+  name: Greedy
+  description: Make the locally best choice each step and justify it with an exchange argument.
+- slug: math
+  name: Math / Number Theory
+  description: Closed-form or arithmetic reasoning (fast exponentiation, digit manipulation, overflow care).
+- slug: bit-manipulation
+  name: Bit Manipulation
+  description: Use XOR, shifts and masks (with explicit width semantics) to solve in O(1) extra space.
+- slug: matrix-simulation
+  name: Matrix Simulation
+  description: Walk or transform a grid in place with careful boundary and layer handling.
+- slug: shortest-path
+  name: Shortest Path
+  description: Dijkstra / Bellman-Ford style relaxation over weighted graphs.
+- slug: multi-source-bfs
+  name: Multi-source BFS
+  description: Seed the queue with every source at once to compute nearest-source distances.
+- slug: minimum-spanning-tree
+  name: Minimum Spanning Tree
+  description: Connect all nodes at minimum total weight with Prim or Kruskal (plus union-find).
+- slug: eulerian-path
+  name: Eulerian Path
+  description: Traverse every edge exactly once (Hierholzer), with lexicographic tie-breaking.

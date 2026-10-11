@@ -1,0 +1,239 @@
+id: bit-tricks-flags
+title: Bit Manipulation for Order Flags
+bar_level: 2
+target_minutes: 20
+patterns:
+- bit-manipulation
+- bitmask
+- packing
+- flags
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Order-entry protocols pack order options into bit flags. Implement helpers over this fixed table (given in the starter):
+
+  `FLAGS = {"IOC": 1, "FOK": 2, "POST_ONLY": 4, "HIDDEN": 8, "REDUCE_ONLY": 16}`
+
+  - `parse_flags(names) -> int`: OR of the named flags (`ValueError` for an unknown name; `[]` gives 0; repeats are harmless).
+  - `flag_names(flags) -> list[str]`: names of the set flags in ascending bit order.
+  - `toggle(flags, name) -> int`: flip one flag (`ValueError` for an unknown name).
+  - `validate(flags) -> bool`: True iff `flags` is an int in `0..31` (no unknown high bits, not negative) AND it is
+    consistent: `IOC` and `FOK` are mutually exclusive, and `POST_ONLY` cannot be combined with `IOC` or `FOK`.
+  - `popcount(x) -> int`: number of set bits (non-negative `x`, else `ValueError`); use the `x &= x - 1` trick, not `bin().count`.
+  - `lowest_set_bit(x) -> int`: index of the lowest set bit using `x & -x`, or `-1` for 0 (`ValueError` if negative).
+  - `diff_flags(a, b) -> list[str]`: names whose state differs between `a` and `b` (XOR), ascending bit order.
+  - `pack(side, flags, qty) -> int`: a single word `(qty << 8) | (flags << 1) | side_bit` with `side_bit` 0 for `"buy"`, 1 for
+    `"sell"`. `ValueError` if side is bad, `flags` fails `validate`, or `qty` is not an int in `1..2**32 - 1`.
+  - `unpack(word) -> (side, flags, qty)`: the inverse; `ValueError` for a negative word, a word with bits 6-7 set, or a word of 40 bits or more.
+prelude: |
+  FLAGS = {"IOC": 1, "FOK": 2, "POST_ONLY": 4, "HIDDEN": 8, "REDUCE_ONLY": 16}
+starter: |
+  def parse_flags(names):
+      pass
+
+
+  def flag_names(flags):
+      pass
+
+
+  def toggle(flags, name):
+      pass
+
+
+  def validate(flags):
+      pass
+
+
+  def popcount(x):
+      pass
+
+
+  def lowest_set_bit(x):
+      pass
+
+
+  def diff_flags(a, b):
+      pass
+
+
+  def pack(side, flags, qty):
+      pass
+
+
+  def unpack(word):
+      pass
+hints:
+- Set with |=, clear with &= ~mask, toggle with ^=, test with (flags & mask) != 0. Names map to bits through
+  the table, so build everything on it.
+- 'Kernighan popcount: x &= x - 1 clears the lowest set bit; the lowest set bit itself is x & -x, and
+  its index is (x & -x).bit_length() - 1.'
+- 'Validate in layers: reject unknown bits first (flags & ~31), then the exclusive combinations. Packing
+  is shifts and ORs; unpack reverses with masks.'
+follow_ups:
+- How would the layout change for a fixed-width 64-bit wire format with signed prices?
+- How do you atomically update flags shared across threads in C++?
+- Why prefer bit flags over a struct of bools on the hot path?
+tests:
+- name: parse and names round trip
+  code: |
+    assert parse_flags([]) == 0
+    assert parse_flags(["IOC", "HIDDEN"]) == 9
+    assert parse_flags(["HIDDEN", "IOC", "IOC"]) == 9
+    assert flag_names(0) == []
+    assert flag_names(25) == ["IOC", "HIDDEN", "REDUCE_ONLY"]
+    assert flag_names(parse_flags(["REDUCE_ONLY", "POST_ONLY"])) == ["POST_ONLY", "REDUCE_ONLY"]
+    try:
+        parse_flags(["NOPE"])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown")
+  hidden: false
+  tags:
+  - empty
+  - duplicate
+- name: toggle and diff
+  code: |
+    assert toggle(0, "FOK") == 2 and toggle(2, "FOK") == 0 and toggle(7, "IOC") == 6
+    assert diff_flags(0b00101, 0b00110) == ["IOC", "FOK"]
+    assert diff_flags(9, 9) == [] and diff_flags(0, 31) == ["IOC", "FOK", "POST_ONLY", "HIDDEN", "REDUCE_ONLY"]
+    try:
+        toggle(0, "x")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown")
+  hidden: false
+  tags:
+  - ordering
+  - invalid
+- name: validate rules
+  code: |
+    assert validate(0) is True and validate(1) is True and validate(2) is True and validate(4) is True
+    assert validate(1 | 2) is False, "IOC with FOK"
+    assert validate(4 | 1) is False and validate(4 | 2) is False, "post-only with IOC/FOK"
+    assert validate(4 | 8 | 16) is True
+    assert validate(32) is False and validate(-1) is False and validate(1 | 32) is False
+    assert validate(31) is False
+    assert validate(1 | 8 | 16) is True
+  hidden: false
+  tags:
+  - boundary
+  - invalid
+- name: popcount and lowest set bit
+  code: |
+    assert popcount(0) == 0 and popcount(1) == 1 and popcount(0b101101) == 4 and popcount(2**40 - 1) == 40
+    assert lowest_set_bit(0) == -1 and lowest_set_bit(1) == 0 and lowest_set_bit(0b101000) == 3 and lowest_set_bit(2**33) == 33
+    for fn in (popcount, lowest_set_bit):
+        try:
+            fn(-1)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(fn.__name__)
+  hidden: false
+  tags:
+  - zero-capacity
+  - boundary
+- name: pack and unpack
+  code: |
+    w = pack("buy", 0, 1)
+    assert w == 256 and unpack(w) == ("buy", 0, 1)
+    w = pack("sell", 9, 500)
+    assert w == (500 << 8) | (9 << 1) | 1
+    assert unpack(w) == ("sell", 9, 500)
+    big = pack("buy", 16, 2**32 - 1)
+    assert unpack(big) == ("buy", 16, 2**32 - 1)
+  hidden: false
+  tags:
+  - single
+  - boundary
+- name: pack and unpack validation
+  code: |
+    bad_packs = [("hold", 0, 1), ("buy", 3, 1), ("buy", 32, 1), ("buy", 0, 0), ("buy", 0, 2**32), ("buy", 0, -5), ("buy", 0, 1.5)]
+    for args in bad_packs:
+        try:
+            pack(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    for w in (-1, 64, 128, 2**40):
+        try:
+            unpack(w)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(w)
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: exhaustive round trip over all valid flag sets
+  code: |
+    valid = [f for f in range(32) if validate(f)]
+    assert len(valid) == 16 and 31 not in valid
+    for f in valid:
+        for side in ("buy", "sell"):
+            assert unpack(pack(side, f, 12345)) == (side, f, 12345)
+        assert parse_flags(flag_names(f)) == f
+        assert popcount(f) == len(flag_names(f))
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+- name: 'scale: 300k pack/unpack/validate calls'
+  code: |
+    acc = 0
+    for i in range(300000):
+        f = i % 32
+        if validate(f):
+            w = pack("sell" if i & 1 else "buy", f, 1 + i % 1000)
+            s, ff, q = unpack(w)
+            acc += popcount(ff) + lowest_set_bit(w | 1) + q
+    assert acc > 0
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: flag ops, popcount, lowest bit
+  time: O(1)
+  space: O(1)
+- op: popcount (Kernighan)
+  time: O(set bits)
+  space: O(1)
+extensions:
+- q: 'Level 2: add `iter_set_bits(x)` yielding each set bit index in O(popcount) using lowest-bit isolation.'
+  key_points:
+  - 'Loop: low = x & -x; yield low.bit_length() - 1; x ^= low'
+  - Total work proportional to set bits, not word width
+  - Handle x == 0 and reject negatives
+  kind: code
+- q: 'Level 3: extend the word with a 16-bit symbol id and a price field and keep pack/unpack exact.'
+  key_points:
+  - Define field offsets and masks once as constants
+  - Range-check each field before shifting so fields cannot bleed into neighbours
+  - Property test pack/unpack over random fields
+  kind: code
+- q: Cost of the operations.
+  key_points:
+  - All flag ops are O(1) word operations
+  - Kernighan popcount is O(number of set bits); hardware popcnt makes it one instruction
+  - Packing into one integer keeps an order in one cache line or register
+  kind: complexity
+- q: 'Design: flags in an order-entry protocol.'
+  key_points:
+  - 'Wire formats are fixed-width and versioned: unknown bits must be rejected or ignored explicitly'
+  - Invalid combinations (IOC with FOK) are caught pre-trade
+  - Endianness and alignment matter when the word crosses a network or language boundary
+  kind: design
+narration: []
+state_aloud:
+- IOC/FOK are exclusive and post-only cannot combine with either; unknown bits are invalid.
+- Pack layout is qty << 8 | flags << 1 | side; qty fits 32 bits and is positive.
+- popcount/lowest-bit reject negatives; lowest_set_bit(0) is -1.
+walkthrough: |
+  Standard bit-manipulation toolkit applied to order flags. Layout and validation rules are my own formulation.
+categories:
+- trading

@@ -1,0 +1,86 @@
+id: group-anagrams
+title: Group Anagrams
+bar_level: 2
+target_minutes: 20
+patterns:
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Group Anagrams (LC 49)"
+statement: |
+  Given a list of lowercase strings, group together the ones that are anagrams of each other. Return a list of groups; the order of groups and the order inside a group does not matter.
+
+  Example: `group_anagrams(["eat","tea","tan","ate","nat","bat"])` returns groups `[["eat","tea","ate"],["tan","nat"],["bat"]]`.
+starter: |
+  def group_anagrams(strs):
+      pass
+hints:
+- Anagrams share some canonical form. What could that be?
+- Sorting each word gives a hashable key; a 26-slot letter count tuple gives an O(L) key.
+- Use a dict from key to list of words.
+follow_ups:
+- Can you avoid the O(L log L) sort per word?
+- How would you handle unicode input?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    r=group_anagrams(['eat','tea','tan','ate','nat','bat'])
+    assert sorted(sorted(g) for g in r)==[['ate','eat','tea'],['bat'],['nat','tan']]
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert group_anagrams([])==[]
+- name: empty string
+  tags:
+  - single
+  code: |
+    assert group_anagrams([''])==[['']]
+- name: duplicates stay together
+  tags:
+  - duplicate
+  code: |
+    r=group_anagrams(['a','a','b'])
+    assert sorted(sorted(g) for g in r)==[['a','a'],['b']]
+- name: many words
+  tags:
+  - scale
+  hidden: true
+  code: |
+    ws=[chr(97+i%26)*3+chr(97+(i*7)%26) for i in range(20000)]
+    r=group_anagrams(ws)
+    assert sum(len(g) for g in r)==20000 and all(len({''.join(sorted(w)) for w in g})==1 for g in r)
+complexity:
+- op: overall
+  time: O(n * k)
+  space: O(n * k)
+extensions:
+- q: Avoid sorting each word?
+  kind: complexity
+  key_points:
+  - Use a 26-int count tuple as the key
+  - Key construction is O(k) rather than O(k log k)
+  - Total O(n*k) time
+- q: Unicode or huge alphabets?
+  kind: design
+  key_points:
+  - Use a Counter / frozenset of items as the key instead of a fixed array
+  - Normalize case and combining characters first
+  - Key size now depends on distinct chars
+- q: Streaming words and queries 'who is my anagram group?'
+  kind: design
+  key_points:
+  - Maintain the dict incrementally keyed by canonical form
+  - Lookup of one word is O(k)
+  - Memory bounded by stored words
+narration: []
+state_aloud:
+- Empty input list and empty strings.
+- Repeated identical words.
+- Output ordering is unspecified; say so.
+walkthrough: |
+  Two words are anagrams exactly when they share the same multiset of letters, so we compute a canonical key and bucket words by it in a dictionary. Using a 26-element count tuple makes each key O(k) for word length k; sorting the letters works too at O(k log k). The result is simply the dictionary values.

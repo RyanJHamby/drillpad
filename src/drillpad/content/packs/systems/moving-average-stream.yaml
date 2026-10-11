@@ -1,0 +1,124 @@
+id: moving-average-stream
+title: Moving Average From Data Stream
+bar_level: 1
+target_minutes: 12
+patterns:
+- sliding-window
+- queue
+- running-sum
+firm_tags: []
+statement: |
+  Implement `MovingAverage(size)` (LeetCode 346).
+
+  - `next(val)` -> float: add `val` to the stream and return the average of the last `size`
+    values (or of all values so far if fewer than `size` have been seen).
+  - `size < 1` raises `ValueError`.
+  - It must be O(1) per call: keep a running sum rather than re-adding the window.
+
+  Example
+  ```python
+  m = MovingAverage(3)
+  m.next(1) -> 1.0;  m.next(10) -> 5.5;  m.next(3) -> 4.666...;  m.next(5) -> 6.0
+  ```
+starter: |
+  class MovingAverage:
+      def __init__(self, size):
+          pass
+
+      def next(self, val):
+          pass
+hints:
+- Keep the last `size` values in a deque.
+- 'Maintain a running total: add the new value and subtract the one that falls out.'
+- Divide by the current window length, not by size.
+follow_ups:
+- How would you compute a moving median instead?
+- What if the stream is distributed?
+tests:
+- name: leetcode example
+  tags:
+  - boundary
+  - ordering
+  code: |
+    m = MovingAverage(3)
+    assert m.next(1) == 1.0
+    assert m.next(10) == 5.5
+    assert abs(m.next(3) - 14 / 3) < 1e-9
+    assert m.next(5) == 6.0
+- name: window of one and negatives
+  tags:
+  - zero-capacity
+  - single
+  code: |
+    m = MovingAverage(1)
+    assert m.next(5) == 5.0 and m.next(-3) == -3.0
+    m2 = MovingAverage(2)
+    assert m2.next(-1) == -1.0 and m2.next(1) == 0.0 and m2.next(3) == 2.0
+- name: invalid size
+  tags:
+  - invalid
+  - empty
+  code: |
+    for bad in (0, -2):
+        try:
+            MovingAverage(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+    assert MovingAverage(5).next(0) == 0.0
+- name: fewer values than window
+  hidden: true
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    m = MovingAverage(100)
+    for i in range(1, 11):
+        assert m.next(i) == (i + 1) / 2
+- name: long stream is fast
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    m = MovingAverage(1000)
+    for i in range(200000):
+        r = m.next(i)
+    assert r == sum(range(199000, 200000)) / 1000
+complexity:
+- op: next
+  time: O(1)
+  space: O(n)
+extensions:
+- q: Time and space per call?
+  kind: complexity
+  key_points:
+  - 'O(1) time: one append, one optional popleft, one division'
+  - O(size) space for the window
+  - Recomputing sum(window) would be O(size) per call
+- q: Floating point drift and very long streams?
+  kind: design
+  key_points:
+  - Keep an integer sum when inputs are ints; with floats use Kahan summation or recompute periodically
+  - Exponential moving average needs O(1) space and no window but is a different statistic
+  - 'Large values risk overflow in fixed-width languages: use wider accumulators'
+- q: Extend to a time-based window and to many concurrent streams.
+  kind: design
+  key_points:
+  - Store (timestamp, value) and evict by age instead of count
+  - One MovingAverage per key in a dict, evicting idle keys
+  - 'Thread-safety: lock per stream or single-writer ownership'
+narration: []
+state_aloud:
+- 'Fewer than size values: divide by the count so far.'
+- size < 1 invalid.
+- Running sum avoids O(size) per call.
+- Float vs integer sums.
+walkthrough: 'A deque holds the current window and a running total is updated on each call: add the new
+  value, and if the window exceeds size subtract the value that leaves. The average is the total divided
+  by the current window length, so it is correct before the window fills. Each call is O(1) time and O(size)
+  space.'
+anki_queries: []
+categories:
+- systems-impl

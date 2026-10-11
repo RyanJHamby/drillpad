@@ -1,0 +1,123 @@
+id: fair-array-remove-one
+title: 'Remove One Planet: Equal Odd/Even Sums'
+bar_level: 2
+target_minutes: 22
+patterns:
+- prefix-sum
+- parity
+firm_tags: []
+categories:
+- leetcode
+statement: |
+  You are given a list `masses` of planet masses (non-negative integers). If you destroy exactly one planet, the planets after it shift one position to the left, so their parities of index change.
+
+  Call the remaining list **balanced** if the sum of its elements at even indices (0, 2, 4, ...) equals the sum of its elements at odd indices (1, 3, 5, ...), using the indices of the *remaining* list.
+
+  Write `fair_indices(masses)` returning the list of indices `i` (ascending) such that destroying planet `i` leaves a balanced list. The answer's length is the count of such indices.
+
+  Example: `fair_indices([2, 1, 6, 4])` returns `[1]`. Removing index 1 leaves `[2, 6, 4]` where even positions sum to `2 + 4 = 6` and odd positions to `6`.
+  Removing index 0 leaves `[1, 6, 4]` (5 vs 6), so it does not count.
+
+  An empty remaining list (removing the only planet) is balanced, 0 equals 0.
+starter: |
+  def fair_indices(masses):
+      pass
+hints:
+- Brute force rebuilds the list for every i, which is O(n^2). What changes about the sums when you remove i?
+- Elements before i keep their parity. Elements after i flip parity.
+- Precompute prefix sums of even-index and odd-index elements (or running totals while scanning left to right) so each i is checked in O(1).
+follow_ups:
+- Return only the count, using O(1) extra space.
+- What if you must remove exactly k planets in a row (a contiguous block)?
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert fair_indices([2, 1, 6, 4]) == [1]
+- name: all positions fair
+  tags:
+  - duplicate
+  code: |
+    assert fair_indices([1, 1, 1]) == [0, 1, 2]
+    assert fair_indices([1, 2, 3]) == []
+- name: single planet
+  tags:
+  - single
+  code: |
+    assert fair_indices([5]) == [0]
+- name: empty input
+  tags:
+  - empty
+  code: |
+    assert fair_indices([]) == []
+- name: zeros and ends
+  tags:
+  - boundary
+  code: |
+    assert fair_indices([0, 0]) == [0, 1]
+    assert fair_indices([3, 0]) == [0]
+    assert fair_indices([0, 3]) == [1]
+- name: matches brute force on pseudo-random arrays
+  tags:
+  - boundary
+  - ordering
+  hidden: true
+  code: |
+    def brute(a):
+        out = []
+        for i in range(len(a)):
+            b = a[:i] + a[i + 1:]
+            if sum(b[0::2]) == sum(b[1::2]):
+                out.append(i)
+        return out
+    x = 12345
+    for n in range(0, 12):
+        for _ in range(40):
+            a = []
+            for _ in range(n):
+                x = (x * 1103515245 + 12345) % (2 ** 31)
+                a.append((x >> 16) % 4)
+            assert fair_indices(a) == brute(a), a
+- name: large input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 200001
+    r = fair_indices([1] * n)
+    assert len(r) == n and r[0] == 0 and r[-1] == n - 1
+    assert fair_indices([1] * 200000) == []
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+  accepted_space:
+  - O(n)
+extensions:
+- q: Why does the prefix/suffix approach beat rebuilding the list, and what is the cost?
+  kind: complexity
+  key_points:
+  - Rebuilding and summing per index is O(n) each, so O(n^2) overall
+  - Parity-split prefix sums answer each index in O(1), O(n) total
+  - Running totals (left sums plus total minus left) bring extra space down to O(1)
+- q: Derive the balance condition for removing index i.
+  kind: reasoning
+  key_points:
+  - Even sum after removal is prefix_even(i) + suffix_odd(i+1) because suffix elements flip parity
+  - Odd sum after removal is prefix_odd(i) + suffix_even(i+1)
+  - Suffix sums are total minus prefix minus the removed element, so no second array is needed
+- q: Design the generalization where a contiguous block of k planets is removed.
+  kind: design
+  key_points:
+  - Prefix parity sums still work, but the shift after the block depends on k parity
+  - If k is even suffix parities are unchanged, if k is odd they flip
+  - Still O(n) total with O(1) per window; mention sliding the block start
+narration: []
+state_aloud:
+- Indices shift after removal, so parity of later elements flips.
+- Removing the only element leaves an empty list which counts as balanced.
+- Zero masses are allowed, so several indices can be fair at once.
+- Return indices, not values, in ascending order.
+walkthrough: |
+  Scan left to right keeping `left_even` and `left_odd`, the sums of elements strictly before i by original parity. The suffix after i is `total_even - left_even - (m if i even)` for even positions and similarly for odd. After removal, suffix elements swap parity, so the new even sum is `left_even + suffix_odd` and the new odd sum is `left_odd + suffix_even`. Compare, record i if equal, then add masses[i] to the correct left bucket. One pass, constant extra space.

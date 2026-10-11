@@ -1,0 +1,153 @@
+id: detect-squares
+title: Detect Squares
+bar_level: 2
+target_minutes: 25
+patterns:
+- hash-map
+- math
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Design a class `DetectSquares` that stores points on a 2D plane (duplicates allowed, each add counts as a separate point).
+
+  - `add(point)`: add `point = [x, y]`.
+  - `count(point)`: return the number of ways to choose three stored points that, together with the query point, form an axis-aligned square with positive area. Different copies of a duplicate point count as different choices.
+
+  Example: after adding `[3,10]`, `[11,2]`, `[3,2]`, `count([11,10])` returns `1`. Adding `[11,2]` again makes it `2`.
+starter: |
+  class DetectSquares:
+      def __init__(self):
+          pass
+
+      def add(self, point):
+          pass
+
+      def count(self, point):
+          pass
+hints:
+- An axis-aligned square with a given corner is determined by one diagonal corner.
+- Count points with a hash map keyed by (x, y). For each stored point (px, py) that could be the diagonal opposite of the query, abs(px - x) == abs(py - y) and non-zero.
+- The answer for that diagonal is cnt[(px,py)] * cnt[(px,y)] * cnt[(x,py)]; sum over all distinct diagonal points.
+follow_ups:
+- Make count faster when many points share a column.
+- Support removing a point.
+tests:
+- name: example
+  tags:
+  - boundary
+  code: |
+    d=DetectSquares()
+    d.add([3,10]); d.add([11,2]); d.add([3,2])
+    assert d.count([11,10]) == 1
+    assert d.count([14,8]) == 0
+- name: duplicates multiply
+  tags:
+  - duplicate
+  code: |
+    d=DetectSquares()
+    d.add([3,10]); d.add([11,2]); d.add([3,2])
+    d.add([11,2])
+    assert d.count([11,10]) == 2
+- name: empty structure
+  tags:
+  - empty
+  code: |
+    d=DetectSquares()
+    assert d.count([1,1]) == 0
+- name: zero-area never counts
+  tags:
+  - invalid
+  - boundary
+  code: |
+    d=DetectSquares()
+    d.add([5,5]); d.add([5,5]); d.add([5,5])
+    assert d.count([5,5]) == 0
+    d.add([7,5])
+    assert d.count([5,5]) == 0
+- name: squares in all four directions
+  tags:
+  - ordering
+  code: |
+    d=DetectSquares()
+    for p in ([0,0],[0,2],[2,0],[2,2],[0,-2],[2,-2]):
+        d.add(p)
+    assert d.count([0,0]) == 2
+    assert d.count([2,2]) == 1
+  hidden: true
+- name: count does not change the structure
+  tags:
+  - state-reuse
+  code: |
+    d=DetectSquares()
+    for p in ([0,0],[1,0],[0,1]):
+        d.add(p)
+    assert d.count([1,1]) == 1
+    assert d.count([1,1]) == 1
+    d.add([1,1])
+    assert d.count([1,1]) == 1
+    assert d.count([0,0]) == 1
+  hidden: true
+- name: rectangles that are not squares
+  tags:
+  - ordering
+  code: |
+    d=DetectSquares()
+    for p in ([0,0],[0,3],[2,0]):
+        d.add(p)
+    assert d.count([2,3]) == 0
+  hidden: true
+- name: many points and queries
+  tags:
+  - scale
+  code: |
+    d = DetectSquares()
+    k = 70
+    for x in range(k):
+        for y in range(k):
+            d.add([x, y])
+    for _ in range(3000):
+        assert d.count([0, 0]) == k - 1
+    for _ in range(200000):
+        d.add([1000, 1000])
+    assert d.count([1001, 1001]) == 0
+    d.add([1000, 1001]); d.add([1001, 1000])
+    assert d.count([1001, 1001]) == 200000
+  hidden: true
+complexity:
+- op: overall
+  time: O(p)
+  space: O(p)
+extensions:
+- q: What is the per-operation complexity and where does the cost go?
+  kind: complexity
+  key_points:
+  - add is O(1) with a counter dict
+  - 'count scans the distinct stored points: O(p) for p distinct points'
+  - Space O(p) for the point counts
+- q: Speed up count when points cluster.
+  kind: design
+  key_points:
+  - 'Index points by x: map x to a counter of y values'
+  - For the query (x, y) iterate only over y' in column x, set d = y' - y, then check the two columns x +- d
+  - Count is then O(points in the query column)
+- q: Why is it correct to multiply counts?
+  kind: reasoning
+  key_points:
+  - Each of the three corners is chosen independently from its own group of identical points
+  - Different copies are different choices, so multiplicities multiply
+  - Sum across distinct diagonal candidates covers squares on all four sides
+- q: Support removal and concurrent access.
+  kind: design
+  key_points:
+  - remove decrements a counter and deletes the key at zero
+  - Guard the dict with a lock or use sharded counters
+  - count reads a consistent snapshot or accepts a brief lock
+narration: []
+state_aloud:
+- Zero-area squares do not count.
+- Duplicate points multiply the count.
+- Each of the four diagonal directions must be handled.
+walkthrough: |
+  Keep a counter of how many times each point was added, and group them by x coordinate. To count squares with query (x, y), look at stored points in the same column x; the vertical distance d = y' - y (non-zero) gives the side length, so the other two corners are at (x +- d, y) and (x +- d, y'). Multiply the multiplicities of the three corners for each side and sum.

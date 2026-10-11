@@ -1,0 +1,122 @@
+id: count-good-nodes
+title: Count Good Nodes in Binary Tree
+bar_level: 2
+target_minutes: 20
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Count Good Nodes (LC 1448)"
+statement: |
+  In a binary tree, a node is good if no node on the path from the root down to it has a larger value (equal values are fine). Return the number of good nodes. The root is always good. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `[3,1,4,3,None,1,5]` has 4 good nodes: `3` (root), `4`, `3` (under `1`), and `5`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def good_nodes(root):
+      pass
+hints:
+- Each node only needs to know the largest value seen on its path from the root.
+- Pass that running maximum down the recursion.
+- A node is good when its value is at least the running maximum; then the maximum updates for its children.
+follow_ups:
+- Do it iteratively.
+- Count nodes that are strictly greater than every ancestor.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert good_nodes(build_tree([3,1,4,3,None,1,5])) == 4
+- name: empty tree
+  tags:
+  - empty
+  code: |
+    assert good_nodes(None) == 0
+    assert good_nodes(build_tree([1])) == 1
+- name: single node
+  tags:
+  - single
+  code: |
+    assert good_nodes(build_tree([-7])) == 1
+- name: equal values all count
+  tags:
+  - duplicate
+  code: |
+    assert good_nodes(build_tree([2,2,2])) == 3
+- name: decreasing path
+  tags:
+  - boundary
+  code: |
+    assert good_nodes(build_tree([5,4,None,3])) == 1
+- name: negative values
+  tags:
+  - invalid
+  code: |
+    assert good_nodes(build_tree([-1,-5,-3,None,None,-2,-1])) == 2
+- name: big balanced tree
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 2**16 - 1
+    assert good_nodes(build_tree(list(range(1, n + 1)))) == n
+    assert good_nodes(build_tree(list(range(n, 0, -1)))) == 1
+complexity:
+- op: overall
+  time: O(n)
+  space: O(h)
+extensions:
+- q: Why pass the max down instead of computing per node?
+  kind: reasoning
+  key_points:
+  - Looking up ancestors per node costs O(h) each
+  - Carrying the maximum makes each check O(1)
+  - Total work stays O(n)
+- q: Complexity?
+  kind: complexity
+  key_points:
+  - Each node is visited once so O(n) time
+  - Stack depth is the tree height
+  - O(n) in the worst case for a skewed tree
+- q: Iterative version?
+  kind: design
+  key_points:
+  - Stack of (node, max_so_far) pairs
+  - Pop, count if good, push children with updated max
+  - Avoids recursion limits on deep trees
+narration: []
+state_aloud:
+- Root is always good.
+- Equal to the path maximum still counts.
+- 'Negative values: initialise the max with the root, not 0.'
+- Empty tree gives 0.
+walkthrough: |
+  Run a DFS that carries the maximum value seen on the path so far. At a node, it is good if `node.val >= max_so_far`; recurse into both children with `max(max_so_far, node.val)` and add up the counts. Initialise the maximum with negative infinity (or the root) so negative values work.

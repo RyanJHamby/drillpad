@@ -1,0 +1,96 @@
+id: palindrome-partitioning
+title: Palindrome Partitioning
+bar_level: 2
+target_minutes: 22
+patterns:
+- backtracking
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Palindrome Partitioning (LC 131)"
+statement: |
+  Given a string `s`, split it into consecutive pieces so that every piece reads the same forwards and backwards. Return all possible ways to do this, each as a list of the pieces. Any order is fine.
+
+  Example: `partition("aab")` returns `[["a","a","b"],["aa","b"]]`.
+starter: |
+  def partition(s):
+      pass
+hints:
+- At each position choose where the next piece ends; only palindromic prefixes of the remainder are allowed.
+- Recurse from the end of the chosen piece; when you reach len(s) record the list of pieces.
+- Precompute is_pal[i][j] with a DP table so each palindrome check is O(1).
+follow_ups:
+- Return the minimum number of cuts instead.
+- Count the partitions without enumerating them.
+tests:
+- name: short example
+  tags:
+  - ordering
+  code: |
+    r=partition("aab")
+    assert sorted(r)==[["a","a","b"],["aa","b"]]
+- name: single character
+  tags:
+  - single
+  code: |
+    assert partition("a")==[["a"]]
+- name: no multi-letter palindromes
+  tags:
+  - boundary
+  code: |
+    assert partition("abc")==[["a","b","c"]]
+- name: empty string
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert partition("")==[[]]
+- name: whole string is a palindrome
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    r=partition("aba")
+    assert sorted(r)==[["a","b","a"],["aba"]]
+    r=partition("aaa")
+    assert sorted(r)==[["a","a","a"],["a","aa"],["aa","a"],["aaa"]]
+- name: all same letter
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=partition("a"*16)
+    assert len(r)==2**15
+    assert all("".join(p)=="a"*16 for p in r[:100])
+complexity:
+- op: overall
+  time: O(n * 2^n)
+  space: O(n^2)
+extensions:
+- q: What is the worst case and why?
+  kind: complexity
+  key_points:
+  - All-same-letter strings give 2^(n-1) partitions
+  - Each partition costs O(n) to copy so O(n * 2^n)
+  - The DP table is O(n^2) space and O(n^2) time to fill
+- q: How does the palindrome table get filled?
+  kind: code
+  key_points:
+  - is_pal[i][j] true if s[i]==s[j] and (j-i<2 or is_pal[i+1][j-1])
+  - Fill by increasing length or with i descending
+  - Replaces O(n) slicing checks inside the recursion
+- q: How would you adapt it to return only the minimum-cut partition?
+  kind: design
+  key_points:
+  - 'Switch to DP over prefixes: cuts[j]=min(cuts[i-1]+1) for palindromic s[i..j]'
+  - Reconstruct with parent pointers if the partition is needed
+  - Time O(n^2) instead of exponential
+narration: []
+state_aloud:
+- Empty string returns [[]].
+- Every single character is a palindrome so an answer always exists.
+- Copy the path before storing.
+walkthrough: |
+  Precompute a boolean table telling whether each substring is a palindrome. Then run a depth-first search over the start index: for every end index where the substring from start to end is a palindrome, push it to the path and recurse from end + 1. Reaching the end of the string records a copy of the path. Backtracking by popping tries the other end indices.

@@ -1,0 +1,101 @@
+id: coin-change-ii
+title: Coin Change II
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Coin Change II (LC 518)"
+statement: |
+  Given `amount` and a list of coin denominations `coins` (unlimited supply of each), return the number of distinct combinations that sum to `amount`. Order does not matter: `1+2` and `2+1` are the same combination. Amount 0 has exactly one combination (use nothing).
+
+  Example: `coin_change_ii(5, [1,2,5])` returns `4`.
+starter: |
+  def coin_change_ii(amount, coins):
+      pass
+hints:
+- 'Decide coin by coin: for each coin type, how many copies go in?'
+- 'State: ways[i][a] = combinations using the first i coin types to make a. Collapses to one row.'
+- ways[0] = 1; loop coins in the OUTER loop and amounts ascending to count combinations, not permutations.
+follow_ups:
+- Count ordered sequences instead.
+- Fewest coins (Coin Change)?
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert coin_change_ii(5,[1,2,5])==4
+- name: impossible
+  tags:
+  - invalid
+  code: |
+    assert coin_change_ii(3,[2])==0
+- name: exact single coin
+  tags:
+  - single
+  code: |
+    assert coin_change_ii(10,[10])==1
+- name: zero amount
+  tags:
+  - zero-capacity
+  code: |
+    assert coin_change_ii(0,[1,2])==1
+    assert coin_change_ii(0,[])==1
+- name: no coins
+  tags:
+  - empty
+  code: |
+    assert coin_change_ii(5,[])==0
+- name: order trap
+  tags:
+  - ordering
+  code: |
+    assert coin_change_ii(3,[1,2])==2
+    assert coin_change_ii(4,[1,2,3])==4
+- name: euler 31
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert coin_change_ii(200,[1,2,5,10,20,50,100,200])==73682
+- name: large amount
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert coin_change_ii(10000,[1,5,10,25,50,100])==139946140451
+complexity:
+- op: overall
+  time: O(amount * n)
+  space: O(amount)
+  accepted_space:
+  - O(amount * n)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - amount times number of coin types
+  - One array of size amount+1
+  - 2D table is O(amount*n) space
+- q: Why coin loop is outer
+  kind: code
+  key_points:
+  - Fixing the coin order counts each multiset once
+  - Swapping loops counts ordered sequences
+  - dp[a] += dp[a-c] with ascending a allows reuse
+- q: Huge amounts
+  kind: design
+  key_points:
+  - Counts are polynomial in amount so big ints grow
+  - Use a modulus if asked
+  - For many queries, reuse the table up to the max amount
+narration: []
+state_aloud:
+- Amount 0 has one way.
+- Combinations, not permutations.
+- No coins and positive amount gives 0.
+walkthrough: Let `ways[a]` count the combinations of the coins processed so far that sum to `a`, with `ways[0] = 1`. Process one coin type at a time and for each amount ascending do `ways[a] += ways[a - c]`; that allows reusing the coin while the outer loop over coins fixes an order so each multiset is counted once. Time O(amount * coins), space O(amount).

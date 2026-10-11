@@ -1,0 +1,111 @@
+id: gas-station
+title: Gas Station
+bar_level: 2
+target_minutes: 25
+patterns:
+- greedy
+- prefix-sum
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Gas Station (LC 134)"
+statement: |
+  There are `n` stations on a circular route. Station `i` provides `gas[i]` units of fuel and driving from station `i` to the next station `(i+1) % n` costs `cost[i]` units. Your tank starts empty and has unlimited capacity. Return the index of the station where you can start and complete one full lap clockwise, or `-1` if impossible. If a solution exists, it is guaranteed to be unique.
+
+  Example: `can_complete_circuit([1,2,3,4,5], [3,4,5,1,2])` returns `3`.
+starter: |
+  def can_complete_circuit(gas, cost):
+      pass
+hints:
+- If total gas is less than total cost, no start works at all.
+- Let diff[i] = gas[i] - cost[i]. Simulating from every start is O(n^2); look for what a failure at index j tells you about all starts between the start and j.
+- If you run dry after starting at s and reaching j, no station in s..j can work either; try j+1. Combine with the total-sum check.
+follow_ups:
+- Why is the answer unique when it exists?
+- Return all valid starting stations if uniqueness were not guaranteed.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert can_complete_circuit([1,2,3,4,5],[3,4,5,1,2]) == 3
+- name: impossible
+  tags:
+  - invalid
+  code: |
+    assert can_complete_circuit([2,3,4],[3,4,3]) == -1
+- name: single station feasible
+  tags:
+  - single
+  code: |
+    assert can_complete_circuit([5],[4]) == 0
+    assert can_complete_circuit([4],[4]) == 0
+- name: single station infeasible
+  tags:
+  - single
+  - boundary
+  code: |
+    assert can_complete_circuit([1],[2]) == -1
+- name: best single diff is not the start
+  tags:
+  - ordering
+  code: |
+    assert can_complete_circuit([4,1,3,1],[1,5,1,2]) == 2
+  hidden: true
+- name: total exactly zero
+  tags:
+  - boundary
+  code: |
+    assert can_complete_circuit([3,1,1],[1,2,2]) == 0
+    assert can_complete_circuit([2,0,4],[0,3,3]) == 2
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    h = 100000
+    d = [1] * h + [-(h + 1)] + [1]
+    gas = [max(x, 0) for x in d]
+    cost = [max(-x, 0) for x in d]
+    assert can_complete_circuit(gas, cost) == h + 1
+    gas = [1] * 300000
+    cost = [2] * 300000
+    assert can_complete_circuit(gas, cost) == -1
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Prove that skipping to j+1 after failing between s and j is safe.
+  kind: reasoning
+  key_points:
+  - Every prefix sum from s to any k < j was non-negative before the failure at j
+  - Starting at an intermediate k drops a non-negative amount of fuel, so it would fail at j too
+  - Hence all of s..j are eliminated and total >= 0 guarantees the start after the last failure works
+- q: Give the exchange argument for why total >= 0 plus the last reset point is sufficient.
+  kind: reasoning
+  key_points:
+  - Segments before the reset point each have negative net fuel, so total >= 0 means the suffix net covers their deficit
+  - 'Starting at the reset point means every prefix of the lap is covered: suffix first, then deficits are repaid by surplus accrued'
+  - No earlier station can work because it was already shown to run dry
+- q: Compare brute force with the one-pass solution.
+  kind: complexity
+  key_points:
+  - 'Try every start: O(n^2) time, O(1) space'
+  - 'One pass with a running tank, total sum and candidate start: O(n) time'
+  - 'Only three integers kept: O(1) space'
+- q: 'Design: stations are added and removed dynamically and queries repeat; what structure would you use?'
+  kind: design
+  key_points:
+  - Maintain prefix sums of diff in a balanced tree or segment tree
+  - The valid start is the index after the minimum prefix sum when total >= 0
+  - Segment tree with min prefix gives O(log n) updates and queries
+narration: []
+state_aloud:
+- Empty tank at start; tank may reach exactly 0.
+- Total gas < total cost means -1.
+- Circular indexing; single station.
+walkthrough: |
+  If the total of gas minus cost is negative, no start works. Otherwise sweep once keeping a running tank. When it goes negative at index i, no station from the candidate start up to i can be the answer, so reset the tank and set the candidate to i + 1. Because the total is non-negative, the final candidate is the valid start.

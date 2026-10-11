@@ -1,0 +1,167 @@
+id: json-parser
+title: JSON Parser
+bar_level: 3
+target_minutes: 35
+patterns:
+- recursive-descent
+- parsing
+- tokenizer
+- string-escapes
+firm_tags:
+- quant-hft
+statement: |
+  Implement `parse(text)` -> Python value: a JSON parser written by hand (do not use the `json`
+  module, `eval` or `ast`).
+
+  Supported (RFC 8259 subset)
+  - Values: `null` -> `None`, `true`/`false` -> bool, numbers, strings, arrays -> list, objects
+    -> dict. Insignificant whitespace (space, tab, CR, LF) is allowed between tokens.
+  - Numbers: `-?` then `0` or `[1-9][0-9]*`, optional fraction `.digits`, optional exponent
+    `e|E [+-] digits`. Integers (no fraction/exponent) become `int`, others `float`. Leading zeros
+    (`01`), `+1`, `.5`, `1.`, `NaN` are invalid.
+  - Strings: double-quoted; escapes `\" \\ \/ \b \f \n \r \t` and `\uXXXX` (single UTF-16 unit
+    is enough; surrogate pairs are not required). Raw control characters (< 0x20) inside strings
+    are invalid. Unterminated strings and unknown escapes are invalid.
+  - Objects: string keys only; a duplicate key keeps the last value. Trailing commas are invalid.
+  - The whole input must be a single value: trailing non-whitespace or empty input is invalid.
+  - Every error raises `ValueError`.
+
+  Example
+  ```python
+  parse('{"a": [1, 2.5, true, null], "b": "x\\ny"}') == {"a": [1, 2.5, True, None], "b": "x\ny"}
+  ```
+starter: |
+  def parse(text):
+      pass
+hints:
+- 'Write one method per production: value, object, array, string, number, plus a whitespace skipper.'
+- Use the first character to decide which production to run; error on anything else.
+- After the top-level value, skip whitespace and require end of input.
+follow_ups:
+- How would you report line and column in errors?
+- How would you support comments or trailing commas (JSON5)?
+tests:
+- name: scalars and structures
+  tags:
+  - boundary
+  - single
+  code: |
+    assert parse("null") is None and parse("true") is True and parse("false") is False
+    assert parse("0") == 0 and parse("-12") == -12 and parse("3.25") == 3.25
+    assert parse("1e3") == 1000.0 and parse("-2.5E-2") == -0.025
+    assert isinstance(parse("7"), int) and isinstance(parse("7.0"), float) and isinstance(parse("1e2"), float)
+    assert parse('"hi"') == "hi"
+    assert parse("[]") == [] and parse("{}") == {}
+    assert parse(' \n\t [ 1 , 2 ,3 ] ') == [1, 2, 3]
+    assert parse('{"a": {"b": [true, null, {"c": -1}]}, "d": []}') == {"a": {"b": [True, None, {"c": -1}]}, "d": []}
+- name: string escapes
+  tags:
+  - boundary
+  - ordering
+  code: |
+    assert parse(r'"a\nb\tc\\d\"e\/f"') == 'a\nb\tc\\d"e/f'
+    assert parse(r'"\u0041\u00e9\u4e2d"') == "A\u00e9\u4e2d"
+    assert parse(r'"\b\f\r"') == "\b\f\r"
+    assert parse('"unicode \u00e9 raw"') == "unicode \u00e9 raw"
+    assert parse(r'{"k\n": "v"}') == {"k\n": "v"}
+- name: duplicate keys last wins
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    assert parse('{"a": 1, "a": 2, "b": 3}') == {"a": 2, "b": 3}
+    assert list(parse('{"b": 1, "a": 2}')) == ["b", "a"]
+- name: invalid documents raise ValueError
+  tags:
+  - invalid
+  - empty
+  code: |
+    assert parse("[1]") == [1]
+    bad = ["", "   ", "[", "]", "{", '{"a"}', '{"a":}', '{"a" 1}', "{1: 2}", "[1,]", '{"a":1,}', "[1 2]",
+           "01", "+1", ".5", "1.", "-", "1e", "1e+", "NaN", "nul", "tru", "truee", "[1] x", "{} {}",
+           '"abc', '"a\nb"', r'"\x41"', r'"\u12"', r'"\uZZZZ"', "'a'", "[1, 2", '{"a": [1, {"b": 2}}']
+    for b in bad:
+        try:
+            parse(b)
+        except ValueError:
+            continue
+        raise AssertionError("expected ValueError for %r" % b)
+- name: agrees with the stdlib on a corpus
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    import json
+    docs = ['{"users": [{"id": 1, "name": "Ann", "tags": ["a", "b"], "score": 9.5}, {"id": 2, "name": "B\\u00e9", "tags": [], "score": null}]}',
+            "[[[[[]]]], {}, [{}]]", "[0, -0, 0.0, 1E10, 123456789012345678901234567890]",
+            '"line1\\nline2\\ttab"', '{"nested": {"a": {"b": {"c": [1, [2, [3]]]}}}}', "[true, false, null]"]
+    for d in docs:
+        assert parse(d) == json.loads(d), d
+- name: deep nesting and large arrays
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    depth = 200
+    assert parse("[" * depth + "]" * depth) is not None
+    x = parse("[" * depth + "1" + "]" * depth)
+    for _ in range(depth):
+        x = x[0]
+    assert x == 1
+    big = "[" + ",".join(str(i) for i in range(20000)) + "]"
+    assert parse(big) == list(range(20000))
+- name: no json module
+  hidden: true
+  tags:
+  - invalid
+  - single
+  code: |
+    import inspect
+    src = inspect.getsource(parse)
+    assert "json." not in src and "eval(" not in src
+    assert parse('{"a":[1]}') == {"a": [1]}
+complexity:
+- op: parse
+  time: O(n)
+  space: O(d)
+extensions:
+- q: Time and space, and what dominates for big documents?
+  kind: complexity
+  key_points:
+  - 'A single pass over the input: O(n) time, each character visited a constant number of times'
+  - Output size is O(n); parser stack is O(d) for nesting depth d
+  - String building via list/join avoids quadratic concatenation
+- q: Make it a streaming/incremental parser for very large inputs.
+  kind: design
+  key_points:
+  - Tokenizer yields events (start_object, key, value, end_array) like SAX instead of building the tree
+  - Explicit state stack replaces recursion, removing the depth limit
+  - Chunk boundaries need a carry-over buffer for partial tokens
+- q: Security and robustness for untrusted input.
+  kind: design
+  key_points:
+  - Limit nesting depth, string length and total size to prevent stack and memory exhaustion
+  - Reject duplicate keys or NaN/Infinity if the policy requires strictness
+  - Fuzz-test the parser and compare to a reference implementation (differential testing)
+- q: Number handling pitfalls?
+  kind: reasoning
+  key_points:
+  - Distinguish int vs float to avoid losing precision on 64-bit ids
+  - Validate the grammar strictly (no leading zeros, required digits after . and e)
+  - Arbitrary-precision decimals if floats are not acceptable (money)
+narration: []
+state_aloud:
+- Leading zeros, bare dot and bare exponent are invalid.
+- Raw control characters in strings are invalid.
+- 'Duplicate keys: last wins.'
+- Trailing garbage and empty input are errors.
+walkthrough: A recursive-descent parser keeps an index into the text and has one method per grammar production.
+  value dispatches on the first character to object, array, string, number or a literal; strings handle
+  escapes and reject control characters, and numbers follow the strict JSON grammar to decide between
+  int and float. After the root value, whitespace is skipped and any remaining input is an error. Runtime
+  is O(n) with recursion depth equal to the nesting depth.
+anki_queries: []
+categories:
+- systems-impl

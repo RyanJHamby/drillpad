@@ -1,0 +1,173 @@
+id: write-policies
+title: Write-through, write-back and write-around caches
+bar_level: 2
+target_minutes: 25
+patterns: [write-policy, cache-store-interaction, dirty-tracking]
+firm_tags: [ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:58 - *"'
+statement: |
+  A cache sits in front of a slow `store` object with `store.read(key)` and
+  `store.write(key, val)`. Implement three classes, each constructed as `Cls(store)` with
+  `set(key, val)` and `get(key)`:
+
+  - `WriteThroughCache`: `set` writes the store and the cache immediately. `get` serves hits from
+    the cache without touching the store; a miss returns `store.read(key)`.
+  - `WriteBackCache`: `set` updates only the cache and marks the key dirty. `flush()` writes every
+    dirty key to the store once and clears the dirty set. `get` as above.
+  - `WriteAroundCache`: `set` writes only the store and invalidates any cached copy. `get` on a
+    miss reads the store and populates the cache, so a second get is a hit.
+starter: |
+  class WriteThroughCache:
+      def __init__(self, store):
+          pass
+
+  class WriteBackCache:
+      def __init__(self, store):
+          pass
+
+  class WriteAroundCache:
+      def __init__(self, store):
+          pass
+hints:
+  - The three differ only in when and whether the store is touched on set.
+  - Do not call store.read unless the key is missing from the cache.
+follow_ups:
+  - Payments ledger versus logging pipeline: which policy for each?
+  - How do you bound write-back staleness (dirty-set cap, max age)?
+  - How does write-back interact with eviction (cannot evict a dirty entry without flushing)?
+  - What if two threads flush concurrently?
+tests:
+  - name: write-through writes store immediately and hits skip the store
+    tags: [empty, ordering]
+    code: |
+      class Store:
+          def __init__(self): self.d, self.writes, self.reads = {}, [], []
+          def write(self, k, v): self.writes.append((k, v)); self.d[k] = v
+          def read(self, k): self.reads.append(k); return self.d.get(k)
+      s = Store(); c = WriteThroughCache(s)
+      c.set("a", 1)
+      assert s.writes == [("a", 1)]
+      assert c.get("a") == 1 and s.reads == []
+      s.d["z"] = 26
+      assert c.get("z") == 26
+  - name: write-back defers until flush
+    tags: [duplicate, state-reuse]
+    code: |
+      class Store:
+          def __init__(self): self.d, self.writes, self.reads = {}, [], []
+          def write(self, k, v): self.writes.append((k, v)); self.d[k] = v
+          def read(self, k): self.reads.append(k); return self.d.get(k)
+      s = Store(); c = WriteBackCache(s)
+      c.set("a", 1); c.set("a", 2); c.set("b", 3)
+      assert s.writes == [] and c.get("a") == 2 and s.reads == []
+      c.flush()
+      assert sorted(s.writes) == [("a", 2), ("b", 3)]
+      c.flush()
+      assert len(s.writes) == 2, "clean keys must not be rewritten"
+  - name: write-around bypasses cache and invalidates
+    tags: [state-reuse, ordering]
+    code: |
+      class Store:
+          def __init__(self): self.d, self.writes, self.reads = {}, [], []
+          def write(self, k, v): self.writes.append((k, v)); self.d[k] = v
+          def read(self, k): self.reads.append(k); return self.d.get(k)
+      s = Store(); c = WriteAroundCache(s)
+      c.set("a", 1)
+      assert s.writes == [("a", 1)] and s.reads == []
+      assert c.get("a") == 1 and s.reads == ["a"]
+      assert c.get("a") == 1 and s.reads == ["a"]
+      c.set("a", 2)
+      assert c.get("a") == 2 and s.reads == ["a", "a"]
+  - name: write-back re-dirties after flush
+    tags: [state-reuse, duplicate]
+    hidden: true
+    code: |
+      class Store:
+          def __init__(self): self.d, self.writes = {}, []
+          def write(self, k, v): self.writes.append((k, v)); self.d[k] = v
+          def read(self, k): return self.d.get(k)
+      s = Store(); c = WriteBackCache(s)
+      c.set("k", 1); c.flush()
+      c.set("k", 2); c.flush()
+      assert s.writes == [("k", 1), ("k", 2)] and s.d["k"] == 2
+  - name: write-through overwrite reaches store each time
+    tags: [duplicate, ordering]
+    hidden: true
+    code: |
+      class Store:
+          def __init__(self): self.d, self.writes = {}, []
+          def write(self, k, v): self.writes.append((k, v)); self.d[k] = v
+          def read(self, k): return self.d.get(k)
+      s = Store(); c = WriteThroughCache(s)
+      c.set("k", 1); c.set("k", 2)
+      assert s.writes == [("k", 1), ("k", 2)] and c.get("k") == 2
+  - name: empty flush and missing key
+    tags: [empty, invalid]
+    hidden: true
+    code: |
+      class Store:
+          def __init__(self): self.d, self.writes = {}, []
+          def write(self, k, v): self.writes.append((k, v)); self.d[k] = v
+          def read(self, k): return self.d.get(k)
+      s = Store()
+      c = WriteBackCache(s)
+      c.flush()
+      assert s.writes == []
+      assert c.get("nope") is None
+      c.flush()
+      assert s.writes == []
+complexity:
+- op: set/get (cache side)
+  time: O(1)
+  space: O(capacity)
+- op: flush
+  time: O(d)
+  space: O(d)
+extensions:
+- q: 'Payments ledger versus logging pipeline: which policy for each?'
+  kind: reasoning
+  key_points:
+  - 'Payments: write-through (or synchronous store-only) so durability cannot lag'
+  - 'Logging: write-back, losing a few recent writes on crash is acceptable'
+  - Write-around suits write-heavy data that is rarely re-read
+- q: How do you bound write-back staleness?
+  kind: design
+  key_points:
+  - Cap the dirty set size
+  - Max age before flush via a timer
+  - Flush early when either threshold is hit
+  - Crash before flush loses dirty data; say so unprompted
+- q: How does write-back interact with eviction?
+  kind: design
+  key_points:
+  - A dirty entry cannot be evicted without flushing first
+  - Flush-then-evict, or you silently lose data
+  - Eviction policy (LRU/LFU) is orthogonal and layered on top
+- q: What if two threads flush concurrently?
+  kind: design
+  key_points:
+  - They race on the dirty set and may double-write or lose a write
+  - Per-key locks, or a single flush worker consuming from a queue
+  - Snapshot-and-clear the dirty set under a lock
+- q: What is the complexity difference between the three policies?
+  kind: complexity
+  key_points:
+  - All O(1) on the cache side
+  - The store call dominates cost; the distinction is when and whether the store is touched
+  - Write-back flush is O(d) for d dirty keys; write-around guarantees a miss on read-after-write
+narration:
+- There are three policies here, and they differ in when the store gets touched relative to the cache.
+- Write-through is synchronous to both — safest, slowest.
+- Write-back only updates the cache and flushes later — fastest, but data loss risk on crash, worth flagging unprompted.
+- Write-around skips the cache on write entirely, so the next read is always a miss — good when writes are rarely re-read soon after.
+- I'll sketch all three as thin wrappers around a shared slow-store interface so the difference is obvious in the diff.
+state_aloud:
+- 'Write-through: what happens if the store write succeeds but the cache write fails (or vice versa)? Order matters — state which you do first and why.'
+- 'Write-back: crash before flush loses dirty data — this is the core tradeoff, say it unprompted, don''t wait to be asked.'
+- 'Write-back: flushing needs its own concurrency story (a background thread, same shape as the TTL sweeper in problem 5) and a policy for flush ordering/batching.'
+- 'Write-around: a read immediately after a write is always a guaranteed miss — fine for write-heavy/rarely-reread data, bad for read-after-write-heavy workloads.'
+- 'All three: what''s the eviction policy for the cache itself? These three are orthogonal to LRU/LFU — you still need one layered on top.'
+walkthrough: |
+  The three policies differ only in when the backing store is touched relative to the cache write, not in asymptotic cost, which is O(1) cache work plus the store call. Write-through writes both synchronously, which is safest and slowest. Write-back updates only the cache and flushes dirty entries later, which is fastest but loses unflushed data on a crash. Write-around writes the store directly and skips the cache, so a read right after a write is always a miss. Each is a thin wrapper around a shared slow-store interface, and an eviction policy such as LRU or LFU is still needed on top.
+categories: [systems-impl]

@@ -1,0 +1,100 @@
+id: network-delay-time
+title: Network Delay Time
+bar_level: 2
+target_minutes: 22
+patterns:
+- shortest-path
+- heap-top-k
+firm_tags:
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Network Delay Time (LC 743)"
+statement: |
+  A network has `n` nodes labelled `1` to `n`. The list `times` holds directed edges `[u, v, w]`: a signal sent from `u` reaches `v` after `w` time units. A signal starts at node `k`. Return the time it takes for all `n` nodes to receive the signal, or `-1` if some node is never reached.
+
+  Example: `network_delay_time([[2,1,1],[2,3,1],[3,4,1]], 4, 2)` returns `2`.
+starter: |
+  def network_delay_time(times, n, k):
+      pass
+hints:
+- The time to reach all nodes is the largest shortest-path distance from k.
+- Edge weights are non-negative, so Dijkstra with a min-heap fits.
+- If fewer than n nodes ever get a distance, return -1; skip stale heap entries when popping.
+follow_ups:
+- Return the path to the slowest node.
+- What changes if weights can be negative?
+tests:
+- name: example
+  tags:
+  - time
+  code: |
+    assert network_delay_time([[2,1,1],[2,3,1],[3,4,1]],4,2)==2
+- name: unreachable node
+  tags:
+  - invalid
+  code: |
+    assert network_delay_time([[1,2,1]],2,2)==-1
+- name: single node
+  tags:
+  - single
+  code: |
+    assert network_delay_time([],1,1)==0
+- name: parallel edges take the cheapest
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    assert network_delay_time([[1,2,5],[1,2,1]],2,1)==1
+- name: shorter route via intermediate
+  tags:
+  - ordering
+  hidden: true
+  code: |
+    t=[[1,2,10],[1,3,1],[3,2,1]]
+    assert network_delay_time(t,3,1)==2
+- name: source with no outgoing edges
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    assert network_delay_time([[1,2,1]],3,3)==-1
+- name: long chain in adversarial order
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=20000
+    t=[[i,i+1,1] for i in range(n-1,0,-1)]
+    assert network_delay_time(t,n,1)==n-1
+complexity:
+- op: overall
+  time: O(E log V)
+  space: O(V + E)
+extensions:
+- q: Why not Bellman-Ford here?
+  kind: complexity
+  key_points:
+  - It is O(V*E), too slow for large graphs
+  - Weights are non-negative so Dijkstra applies
+  - Bellman-Ford is only needed for negative edges
+- q: Why can Dijkstra ignore stale heap entries?
+  kind: reasoning
+  key_points:
+  - 'Lazy deletion: a node can be pushed several times'
+  - Pop gives its final distance the first time; later pops have larger distance
+  - Skip if popped distance exceeds the recorded best
+- q: How would you use this for real network latency monitoring?
+  kind: design
+  key_points:
+  - Edge weights are measured RTTs and change over time
+  - Recompute incrementally or rerun on a topology snapshot
+  - Report the max as the broadcast completion time and flag unreachable nodes
+narration: []
+state_aloud:
+- Unreachable nodes mean -1.
+- Nodes are 1-indexed.
+- Single node needs zero time.
+walkthrough: |
+  Build an adjacency list and run Dijkstra from k using a min-heap of (distance, node). When popping, ignore entries whose distance is worse than the recorded one. Relax each outgoing edge and push improvements. At the end, if the number of reached nodes is below n return -1; otherwise the answer is the maximum distance among all nodes, since the signal is complete when the farthest node hears it.

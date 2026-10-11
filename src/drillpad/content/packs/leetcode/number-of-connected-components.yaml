@@ -1,0 +1,93 @@
+id: number-of-connected-components
+title: Number of Connected Components in an Undirected Graph
+bar_level: 2
+target_minutes: 20
+patterns:
+- union-find
+- graph-bfs-dfs
+firm_tags:
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Number Connected Components (LC 323)"
+statement: |
+  A graph has `n` nodes labelled `0..n-1` and a list of undirected `edges`. Return how many connected components it has (isolated nodes count as their own component).
+
+  Example: `count_components(5, [[0,1],[1,2],[3,4]])` returns `2`.
+starter: |
+  def count_components(n, edges):
+      pass
+hints:
+- Start with n components; every edge that joins two different components reduces the count by one.
+- Union-Find answers 'are these already connected?' in near O(1).
+- Use path compression (and union by size/rank) to keep the trees flat.
+follow_ups:
+- Solve it with BFS/DFS and compare.
+- What if edges arrive online and you must report the count after each?
+tests:
+- name: two components
+  tags:
+  - ordering
+  code: |
+    assert count_components(5,[[0,1],[1,2],[3,4]])==2
+- name: no nodes
+  tags:
+  - empty
+  code: |
+    assert count_components(0,[])==0
+- name: isolated nodes
+  tags:
+  - single
+  code: |
+    assert count_components(1,[])==1
+    assert count_components(4,[])==4
+- name: all joined by a cycle
+  tags:
+  - boundary
+  code: |
+    assert count_components(4,[[0,1],[1,2],[2,3],[3,0]])==1
+- name: repeated and self edges
+  tags:
+  - duplicate
+  code: |
+    assert count_components(3,[[0,1],[0,1],[1,0],[2,2]])==2
+- name: long path
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    assert count_components(n,[[i,i+1] for i in range(n-1)])==1
+    assert count_components(n,[[i,i+1] for i in range(0,n-1,2)])==n//2
+complexity:
+- op: overall
+  time: O(E * α(V))
+  space: O(V)
+extensions:
+- q: Union-Find optimizations
+  kind: complexity
+  key_points:
+  - Path compression flattens trees on find
+  - Union by size/rank keeps them shallow
+  - Together near-constant amortized (inverse Ackermann)
+- q: Online edge stream
+  kind: design
+  key_points:
+  - Keep the DSU alive and decrement a counter on each successful union
+  - Query count in O(1)
+  - Deletions are not supported; need offline or link-cut trees
+- q: BFS/DFS alternative
+  kind: reasoning
+  key_points:
+  - Build adjacency lists and flood fill each unvisited node
+  - O(V+E) time and space
+  - Better if you need component membership lists, not online updates
+narration: []
+state_aloud:
+- n = 0.
+- Isolated nodes are components.
+- Duplicate and self-loop edges must not change the count.
+- Avoid recursive find on long chains.
+walkthrough: |
+  Initialize each node as its own set with `components = n`. For each edge find both roots; if they differ, union them and decrement the counter. Path compression done iteratively keeps `find` fast even on chain-like inputs, and duplicate or self edges simply find equal roots and do nothing.

@@ -1,0 +1,247 @@
+id: kv-store-ttl-backup-restore
+title: In-memory key-field store with TTL, backup and restore
+bar_level: 3
+target_minutes: 35
+patterns:
+- kv-store
+- ttl
+- snapshot-restore
+- absolute-timestamps
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Implement `InMemoryDB`, a store of `key -> field -> value` (all strings). Every call takes an
+  integer timestamp `ts`; timestamps never decrease across calls. Build it in four levels.
+
+  Level 1/2:
+  - `set_at(key, field, value, ts)`: set or overwrite (an overwrite clears any earlier TTL).
+  - `get_at(key, field, ts) -> value | None`.
+  - `delete_at(key, field, ts) -> bool`: True if the field existed and was live.
+  - `scan_at(key, ts) -> ["field(value)", ...]` sorted by field name; `scan_by_prefix_at(key,
+    prefix, ts)` the same restricted to field names starting with prefix.
+  Level 3 (TTL):
+  - `set_at_with_ttl(key, field, value, ts, ttl)`: the field is live in `[ts, ts + ttl)`; it is
+    absent for `at >= ts + ttl`. Expired fields are invisible to get/delete/scan/backup.
+  Level 4 (backup/restore):
+  - `backup(ts) -> int`: snapshot every LIVE field at `ts`; return how many were captured.
+    (A second backup at the same ts replaces the first.)
+  - `restore(ts, target_ts) -> bool`: replace the whole database with the latest backup whose
+    timestamp is <= `target_ts`; return False and change nothing if there is none. A field's
+    REMAINING ttl at backup time is preserved relative to the restore time: a field with 60
+    units left at backup becomes live until `ts + 60`. Backups survive restores.
+starter: |
+  class InMemoryDB:
+      def __init__(self):
+          pass
+hints:
+- Store (value, set_ts, ttl) so liveness is a pure function of the query timestamp; no sweeper needed.
+- A snapshot must be an independent copy; store remaining ttl (set_ts + ttl - backup_ts) in it.
+- Keep a sorted list of backup timestamps and bisect_right for the latest one <= target.
+follow_ups:
+- How would restore differ if TTLs were kept absolute? (Your doc's reference solution does that; which
+  semantics does the interviewer want? Ask.)
+- How do you avoid copying the whole DB on each backup (copy-on-write, persistent maps, operation log)?
+- How would you add transactions (begin/commit/rollback)?
+- How would you persist this?
+stages:
+  - level: 0
+    kind: part
+    prompt: |
+      Implement the basic set/get/delete/scan operations without TTL or backup.
+    minutes: 12
+    tests:
+      - name: basic set/get/delete/scan/prefix
+        tags:
+        - empty
+        - single
+        - ordering
+        code: |
+          db = InMemoryDB()
+          assert db.get_at("k", "f", 0) is None and db.scan_at("k", 0) == []
+          db.set_at("k", "b", "2", 1); db.set_at("k", "a", "1", 2); db.set_at("k", "ab", "3", 3)
+          assert db.get_at("k", "a", 4) == "1" and db.get_at("k", "zz", 4) is None
+          assert db.get_at("other", "a", 4) is None
+          assert db.scan_at("k", 4) == ["a(1)", "ab(3)", "b(2)"]
+          assert db.scan_by_prefix_at("k", "a", 4) == ["a(1)", "ab(3)"]
+          assert db.scan_by_prefix_at("k", "x", 4) == []
+          assert db.delete_at("k", "a", 5) is True and db.delete_at("k", "a", 5) is False
+          assert db.scan_at("k", 5) == ["ab(3)", "b(2)"]
+      - name: overwrite replaces value and ttl
+        tags:
+        - duplicate
+        - time
+        code: |
+          db = InMemoryDB()
+          db.set_at_with_ttl("k", "f", "old", 0, 10)
+          db.set_at("k", "f", "new", 5)
+          assert db.get_at("k", "f", 100) == "new", "plain set clears the earlier ttl"
+          db.set_at_with_ttl("k", "f", "newer", 100, 5)
+          assert db.get_at("k", "f", 104) == "newer" and db.get_at("k", "f", 105) is None
+  - level: 1
+    kind: part
+    prompt: |
+      Add TTL support: implement set_at_with_ttl so entries expire after a specified duration.
+      Expired fields must be invisible to get, delete, scan, and backup operations.
+    minutes: 10
+    tests:
+      - name: ttl is half-open [ts, ts+ttl)
+        tags:
+        - time
+        - boundary
+        code: |
+          db = InMemoryDB()
+          db.set_at_with_ttl("k", "f", "v", 5, 10)
+          assert db.get_at("k", "f", 5) == "v"
+          assert db.get_at("k", "f", 14) == "v"
+          assert db.get_at("k", "f", 15) is None, "expired exactly at ts + ttl"
+          assert db.delete_at("k", "f", 15) is False
+      - name: scan hides expired fields
+        tags:
+        - time
+        - ordering
+        code: |
+          db = InMemoryDB()
+          db.set_at("k", "keep", "1", 0)
+          db.set_at_with_ttl("k", "gone", "2", 0, 10)
+          db.set_at_with_ttl("k", "later", "3", 0, 50)
+          assert db.scan_at("k", 9) == ["gone(2)", "keep(1)", "later(3)"]
+          assert db.scan_at("k", 10) == ["keep(1)", "later(3)"]
+          assert db.scan_by_prefix_at("k", "l", 49) == ["later(3)"] and db.scan_by_prefix_at("k", "l", 50) == []
+  - level: 2
+    kind: part
+    prompt: |
+      Add backup and restore: implement backup(ts) to snapshot all live fields, and restore(ts, target_ts)
+      to revert the database to a prior snapshot. TTL remaining duration must be preserved.
+    minutes: 10
+    tests:
+      - name: backup counts live fields and restore recomputes ttl
+        tags:
+        - time
+        - state-reuse
+        code: |
+          db = InMemoryDB()
+          db.set_at("a", "x", "1", 0)
+          db.set_at_with_ttl("a", "t", "2", 0, 100)       # 60 left at ts 40
+          db.set_at_with_ttl("b", "dead", "3", 0, 10)     # already expired at 40
+          assert db.backup(40) == 2, "expired fields are not counted"
+          db.set_at("a", "x", "CHANGED", 41); db.delete_at("a", "t", 42)
+          assert db.restore(200, 50) is True
+          assert db.scan_at("a", 200) == ["t(2)", "x(1)"]
+          assert db.get_at("a", "t", 259) == "2", "60 units of ttl remain, measured from the restore time"
+          assert db.get_at("a", "t", 260) is None
+          assert db.get_at("b", "dead", 200) is None
+      - name: restore picks latest backup at or before target
+        tags:
+        - boundary
+        - invalid
+        - ordering
+        hidden: true
+        code: |
+          db = InMemoryDB()
+          assert db.restore(5, 5) is False, "no backup yet"
+          db.set_at("k", "f", "v1", 1); assert db.backup(10) == 1
+          db.set_at("k", "f", "v2", 11); assert db.backup(20) == 1
+          db.set_at("k", "f", "v3", 21)
+          assert db.restore(30, 19) is True and db.get_at("k", "f", 30) == "v1"
+          assert db.restore(31, 20) is True and db.get_at("k", "f", 31) == "v2", "backup ts == target is included"
+          assert db.restore(32, 1000) is True and db.get_at("k", "f", 32) == "v2", "backups survive a restore"
+          assert db.restore(33, 9) is False and db.get_at("k", "f", 33) == "v2", "failed restore leaves state alone"
+      - name: restore brings back deleted and drops later keys
+        tags:
+        - state-reuse
+        - empty
+        hidden: true
+        code: |
+          db = InMemoryDB()
+          db.set_at("k", "f", "v", 1)
+          db.backup(5)
+          db.delete_at("k", "f", 6); db.set_at("new", "n", "1", 7)
+          assert db.scan_at("k", 8) == [] and db.scan_at("new", 8) == ["n(1)"]
+          db.restore(9, 5)
+          assert db.scan_at("k", 9) == ["f(v)"] and db.scan_at("new", 9) == []
+          db.set_at("k", "f", "mut", 10)
+          db.restore(11, 5)
+          assert db.get_at("k", "f", 11) == "v", "mutating after a restore must not corrupt the stored backup"
+      - name: many keys and backups
+        tags:
+        - scale
+        - time
+        hidden: true
+        code: |
+          db = InMemoryDB()
+          for k in range(50):
+              for f in range(400):
+                  db.set_at_with_ttl(f"key{k}", f"field{f:04d}", str(f), 0, 1000 + f)
+          for t in range(0, 200, 10):
+              assert db.backup(t) == 50 * 400
+          assert db.backup(1100) == 50 * 299
+          assert len(db.scan_by_prefix_at("key7", "field00", 5)) == 100
+          db.restore(5000, 1099)
+          assert len(db.scan_at("key3", 5000)) == 400
+  - level: 3
+    kind: followup
+    prompt: |
+      Optimize backup and restore to avoid O(N) copies. Describe a copy-on-write or persistent
+      data structure approach, or an operation log with snapshots. What are the trade-offs?
+    minutes: 0
+    tests: []  # discussion-only stage: nothing executable to assert
+complexity:
+- op: set/get/delete
+  time: O(1)
+  space: O(N)
+- op: scan_at
+  time: O(F log F)
+  space: O(F)
+- op: backup
+  time: O(N)
+  space: O(N)
+- op: restore
+  time: O(N)
+  space: O(N)
+extensions:
+- q: 'Level 5: add begin() / commit() / rollback() transactions over set/delete.'
+  kind: code
+  key_points:
+  - begin pushes an undo log (or overlay dict) onto a stack; nested transactions are supported
+  - rollback restores the previous values including 'absent' and TTL metadata
+  - commit of an inner transaction merges its changes into the parent, not the base store
+- q: Add compaction of expired fields so memory does not grow forever.
+  kind: code
+  key_points:
+  - Lazy purge on access plus a periodic sweep, or a min-heap by expiry with stale-entry checks
+  - Because liveness is decided by query timestamp, purging may only remove fields expired at the latest
+    timestamp seen
+  - Backups must remain valid after compaction
+- q: How do you make backup cheaper than O(N)?
+  kind: design
+  key_points:
+  - Copy-on-write or persistent (immutable) maps so a snapshot shares structure with live state
+  - Or an append-only operation log with periodic checkpoints and replay to a target timestamp
+  - State the space/time tradeoff against restore latency
+- q: Cost of each level and of scan; what dominates?
+  kind: complexity
+  key_points:
+  - 'Point operations are O(1); scan sorts F live fields: O(F log F)'
+  - Backup and restore are O(N) in total fields with deep copies
+  - Memory is O(N) live plus O(B * N) for B backups unless structure is shared
+- q: What is the subtle choice in restoring TTLs?
+  kind: reasoning
+  key_points:
+  - Absolute expiry timestamps would let restored fields expire immediately or never; storing remaining
+    ttl rebases onto restore time
+  - The two readings of the spec differ; ask the interviewer which is intended
+  - Fields already expired at backup time must not be captured
+narration: []
+state_aloud:
+- Liveness is decided by comparing the query timestamp to set_ts + ttl, half-open interval.
+- A plain set clears a previous TTL; delete of an expired field returns False.
+- Backups are deep copies and must not alias live state; restore from a mutated store must not corrupt
+  them.
+- 'Restore semantics for TTL are ambiguous: I am rebasing remaining ttl onto the restore time.'
+walkthrough: |
+  Entries are stored as (value, set_ts, ttl) so liveness is a function of the query timestamp and no background sweeper is needed. Scan filters live fields and sorts by name. A backup captures only live fields, converting each ttl into the remaining ttl at backup time, and records the timestamp in a sorted list; restore bisects for the latest backup at or before the target and rebuilds the store from it with each remaining ttl rebased onto the restore timestamp, leaving the stored backups untouched. Source: standard formulation.
+categories:
+- ai-infra
+- systems-impl

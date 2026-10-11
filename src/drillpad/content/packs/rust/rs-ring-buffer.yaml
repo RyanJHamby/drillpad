@@ -1,0 +1,288 @@
+title: Fixed-capacity Ring Buffer<T>
+target_minutes: 25
+patterns:
+- ring-buffer
+- modular-index
+- option-slots
+- result-err-returns-value
+- boxed-iterator
+firm_tags:
+- quant-hft
+- ai-infra
+categories:
+- systems-impl
+statement: |2
+
+  Implement a generic fixed-capacity FIFO ring buffer over a pre-allocated `Vec<Option<T>>` (no `T: Clone`, `Copy` or
+  `Default` bounds anywhere, and no `VecDeque`).
+
+  ```rust
+  struct RingBuffer<T> { /* slots, head, len */ }
+
+  impl<T> RingBuffer<T> {
+      fn new(capacity: usize) -> Self;                         // capacity may be 0
+      fn push(&mut self, value: T) -> Result<(), T>;           // Err(value) hands the value BACK when full
+      fn push_overwrite(&mut self, value: T) -> Option<T>;     // when full, drops the oldest and returns it
+      fn pop(&mut self) -> Option<T>;                          // oldest first (FIFO)
+      fn peek(&self) -> Option<&T>;                            // the oldest, not removed
+      fn len(&self) -> usize;
+      fn capacity(&self) -> usize;
+      fn is_empty(&self) -> bool;
+      fn is_full(&self) -> bool;
+      fn iter(&self) -> Box<dyn Iterator<Item = &T> + '_>;     // oldest to newest, without consuming
+  }
+  ```
+
+  `push` on a full buffer must not lose the value: it returns `Err(value)`. With capacity 0 the buffer is always both
+  empty and full: `push` returns `Err`, and `push_overwrite` returns the pushed value straight back as `Some(value)`
+  (it cannot be stored). Indices must wrap correctly after many push/pop cycles.
+
+  Example (capacity 2): `push(1)`, `push(2)`, `push(3)` gives `Err(3)`; `pop()` gives `Some(1)`.
+starter: |2
+
+  struct RingBuffer<T> {
+      slots: Vec<Option<T>>,
+      head: usize,
+      len: usize,
+  }
+
+  impl<T> RingBuffer<T> {
+      fn new(capacity: usize) -> Self {
+          todo!()
+      }
+
+      fn push(&mut self, value: T) -> Result<(), T> {
+          todo!()
+      }
+
+      fn push_overwrite(&mut self, value: T) -> Option<T> {
+          todo!()
+      }
+
+      fn pop(&mut self) -> Option<T> {
+          todo!()
+      }
+
+      fn peek(&self) -> Option<&T> {
+          todo!()
+      }
+
+      fn len(&self) -> usize {
+          todo!()
+      }
+
+      fn capacity(&self) -> usize {
+          todo!()
+      }
+
+      fn is_empty(&self) -> bool {
+          todo!()
+      }
+
+      fn is_full(&self) -> bool {
+          todo!()
+      }
+
+      fn iter(&self) -> Box<dyn Iterator<Item = &T> + '_> {
+          todo!()
+      }
+  }
+hints:
+- '`vec![None; n]` needs `Option<T>: Clone`. Without a `Clone` bound build the slots with `(0..capacity).map(|_| None).collect()` or `std::iter::repeat_with(|| None)`.'
+- Keep `head` (index of the oldest) and `len`; the next free slot is `(head + len) % cap`, and the modulo must never run when `cap == 0` (division by zero panics), so check capacity first. Moving a value OUT of a slot while keeping the Vec intact is `self.slots[i].take()`, which leaves `None` behind.
+- '`push` into a full buffer: return `Err(value)` before touching anything: that is why the error type is `T`. `push_overwrite` when full: `take()` the oldest slot, store the new value in that same slot, advance `head`, and keep `len` unchanged. `iter` can be `(0..self.len).map(move |k| self.slots[(self.head + k) % cap].as_ref().unwrap())` boxed.'
+follow_ups:
+- Why is Err(value) the right error type for push? What would you lose with Err(()) or a panic?
+- 'How would you make this lock-free single-producer single-consumer (hint: atomics, power-of-two mask)?'
+- What changes if capacity is a const generic [Option<T>; N] instead of a Vec?
+- Why use head + len instead of head + tail indices? What ambiguity does tail == head create?
+tests:
+- name: fifo order and wraparound
+  tags:
+  - ordering
+  - boundary
+  code: |
+    let mut rb = RingBuffer::new(3);
+    assert!(rb.push(1).is_ok());
+    assert!(rb.push(2).is_ok());
+    assert!(rb.push(3).is_ok());
+    assert!(rb.is_full());
+    assert_eq!(rb.pop(), Some(1));
+    assert!(rb.push(4).is_ok()); // wraps around the end of the Vec
+    assert_eq!(rb.pop(), Some(2));
+    assert_eq!(rb.pop(), Some(3));
+    assert_eq!(rb.pop(), Some(4));
+    assert_eq!(rb.pop(), None);
+    assert!(rb.is_empty());
+  hidden: false
+- name: push on full returns the value back
+  tags:
+  - boundary
+  - invalid
+  code: |
+    let mut rb = RingBuffer::new(2);
+    assert_eq!(rb.push(String::from("a")), Ok(()));
+    assert_eq!(rb.push(String::from("b")), Ok(()));
+    let rejected = rb.push(String::from("c"));
+    assert_eq!(rejected, Err(String::from("c")));
+    assert_eq!(rb.len(), 2);
+    assert_eq!(rb.peek().map(|s| s.as_str()), Some("a")); // unchanged
+    assert_eq!(rb.pop().as_deref(), Some("a"));
+    assert_eq!(rb.push(String::from("c")), Ok(()));
+  hidden: false
+- name: empty buffer
+  tags:
+  - empty
+  code: |
+    let mut rb: RingBuffer<i32> = RingBuffer::new(4);
+    assert_eq!(rb.len(), 0);
+    assert_eq!(rb.capacity(), 4);
+    assert!(rb.is_empty() && !rb.is_full());
+    assert_eq!(rb.pop(), None);
+    assert_eq!(rb.peek(), None);
+    assert_eq!(rb.iter().count(), 0);
+  hidden: false
+- name: iter is oldest to newest and non-consuming
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    let mut rb = RingBuffer::new(4);
+    for i in 1..=4 { rb.push(i).unwrap(); }
+    rb.pop();
+    rb.pop();
+    rb.push(5).unwrap();
+    rb.push(6).unwrap(); // data now wraps: [5, 6, 3, 4] with head at 2
+    let seen: Vec<i32> = rb.iter().copied().collect();
+    assert_eq!(seen, vec![3, 4, 5, 6]);
+    assert_eq!(rb.len(), 4);
+    assert_eq!(rb.peek(), Some(&3));
+    let again: Vec<&i32> = rb.iter().collect();
+    assert_eq!(again, vec![&3, &4, &5, &6]);
+  hidden: false
+- name: capacity zero and one
+  tags:
+  - zero-capacity
+  - single
+  hidden: true
+  code: |
+    let mut z = RingBuffer::new(0);
+    assert!(z.is_empty() && z.is_full());
+    assert_eq!(z.push(1), Err(1));
+    assert_eq!(z.push_overwrite(2), Some(2));
+    assert_eq!(z.pop(), None);
+    assert_eq!(z.iter().count(), 0);
+    let mut o = RingBuffer::new(1);
+    assert_eq!(o.push('a'), Ok(()));
+    assert_eq!(o.push('b'), Err('b'));
+    assert_eq!(o.push_overwrite('c'), Some('a'));
+    assert_eq!(o.peek(), Some(&'c'));
+    assert_eq!(o.pop(), Some('c'));
+    assert!(o.is_empty());
+- name: push_overwrite drops the oldest
+  tags:
+  - ordering
+  - duplicate
+  hidden: true
+  code: |
+    let mut rb = RingBuffer::new(3);
+    assert_eq!(rb.push_overwrite(1), None);
+    assert_eq!(rb.push_overwrite(2), None);
+    assert_eq!(rb.push_overwrite(3), None);
+    assert_eq!(rb.push_overwrite(4), Some(1));
+    assert_eq!(rb.push_overwrite(5), Some(2));
+    assert_eq!(rb.len(), 3);
+    assert_eq!(rb.iter().copied().collect::<Vec<_>>(), vec![3, 4, 5]);
+    assert_eq!(rb.pop(), Some(3));
+    assert_eq!(rb.push_overwrite(6), None);
+    assert_eq!(rb.iter().copied().collect::<Vec<_>>(), vec![4, 5, 6]);
+- name: values are moved, never cloned or leaked
+  tags:
+  - state-reuse
+  - duplicate
+  hidden: true
+  code: |
+    use std::rc::Rc;
+    struct NoClone(Rc<()>);
+    let token = Rc::new(());
+    let mut rb = RingBuffer::new(2);
+    rb.push(NoClone(Rc::clone(&token))).ok().unwrap();
+    rb.push(NoClone(Rc::clone(&token))).ok().unwrap();
+    assert_eq!(Rc::strong_count(&token), 3);
+    let back = rb.push(NoClone(Rc::clone(&token)));
+    assert!(back.is_err());
+    assert_eq!(Rc::strong_count(&token), 4);
+    drop(back);
+    assert_eq!(Rc::strong_count(&token), 3);
+    let old = rb.push_overwrite(NoClone(Rc::clone(&token)));
+    assert!(old.is_some());
+    drop(old);
+    assert_eq!(Rc::strong_count(&token), 3);
+    drop(rb);
+    assert_eq!(Rc::strong_count(&token), 1);
+- name: many cycles keep indices correct
+  tags:
+  - scale
+  - boundary
+  hidden: true
+  code: |
+    let mut rb = RingBuffer::new(7);
+    let mut next_in = 0u64;
+    let mut next_out = 0u64;
+    for round in 0..200_000u64 {
+        let pushes = (round % 5) as usize + 1;
+        for _ in 0..pushes {
+            if rb.push(next_in).is_ok() { next_in += 1; }
+        }
+        let pops = (round % 4) as usize + 1;
+        for _ in 0..pops {
+            if let Some(v) = rb.pop() {
+                assert_eq!(v, next_out);
+                next_out += 1;
+            }
+        }
+        assert_eq!(rb.len() as u64, next_in - next_out);
+    }
+complexity:
+- op: push / push_overwrite / pop / peek
+  time: O(1)
+  space: O(1)
+- op: iter (full traversal)
+  time: O(n)
+  space: O(1)
+- op: buffer overall
+  time: O(1)
+  space: O(capacity)
+extensions:
+- q: Why does push return Result<(), T> with the value inside Err, and why Vec<Option<T>> for the slots?
+  kind: design
+  key_points:
+  - 'Ownership: push takes the value by move, so on failure it must give it back or the caller loses it; Err(value) makes ''full'' unignorable (#[must_use]) and lossless'
+  - Option<T> slots let you move a value out with take() while keeping the Vec fully initialized, so no unsafe or MaybeUninit and no Default/Clone bound on T
+  - Python's deque(maxlen=n) silently discards; Rust makes overwrite-vs-reject an explicit API choice (push vs push_overwrite)
+- q: What are the costs, and how would you avoid the modulo on a hot path?
+  kind: complexity
+  key_points:
+  - 'All operations are O(1) with one allocation up front: no reallocation unlike Vec growth'
+  - 'Modulo (division) is slowish: round capacity up to a power of two and use `& (cap - 1)`, as high-performance queues do'
+  - Space is O(capacity) fixed regardless of occupancy, plus the Option discriminant per slot unless T has a niche
+- q: How would you turn this into a single-producer single-consumer queue shared between two threads?
+  kind: design
+  key_points:
+  - Split into Producer and Consumer handles over Arc<Inner> where head and tail are AtomicUsize with Acquire/Release ordering
+  - The slots become UnsafeCell<MaybeUninit<T>>, so unsafe is required; the safe API relies on exactly one producer and one consumer (the handles are Send but not Clone)
+  - T must be Send; keep head and tail on separate cache lines to avoid false sharing
+state_aloud:
+- Capacity 0 is both empty and full; avoid `% 0` which panics.
+- 'push on a full buffer returns Err(value): the value is never dropped silently.'
+- 'Wraparound: next write index is (head + len) % capacity; test after many cycles.'
+- 'Build slots without Clone: use repeat_with(|| None), not vec![None; n].'
+- iter is oldest to newest and does not consume the buffer.
+walkthrough: |2
+
+  The buffer is a `Vec<Option<T>>` of fixed size with a `head` index of the oldest element and a `len`; the next free slot is `(head + len) % capacity`. `Option::take` moves a value out of a slot while keeping the Vec valid, which is what lets it work for any `T` without `Clone` or `unsafe`, and `push` returns `Err(value)` when full so ownership of the rejected value goes back to the caller. Compared with Python's `collections.deque(maxlen=n)`, which silently drops, the Rust API forces you to choose between rejecting (`push`) and overwriting the oldest (`push_overwrite`).
+id: rs-ring-buffer
+language: rust
+bar_level: 2
+narration: []
+anki_queries: []

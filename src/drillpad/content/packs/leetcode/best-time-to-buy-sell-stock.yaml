@@ -1,0 +1,97 @@
+id: best-time-to-buy-sell-stock
+title: Best Time to Buy and Sell Stock
+bar_level: 1
+target_minutes: 10
+patterns:
+- sliding-window
+- dp-1d
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Best Time Buy Sell Stock (LC 121)"
+statement: |
+  `prices[i]` is a stock's price on day `i`. Choose one day to buy and a later day to sell, and return the largest possible profit. If no profitable trade exists, return `0`.
+
+  Example: `max_profit([7, 1, 5, 3, 6, 4])` returns `5` (buy at 1, sell at 6).
+starter: |
+  def max_profit(prices):
+      pass
+hints:
+- Trying every buy/sell pair is O(n^2).
+- As you sweep left to right, track the lowest price seen so far.
+- Profit if selling today is `price - min_so_far`; keep the best such value.
+follow_ups:
+- Allow unlimited transactions (LC 122).
+- Allow at most two transactions.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert max_profit([7,1,5,3,6,4])==5
+- name: falling prices
+  tags:
+  - invalid
+  code: |
+    assert max_profit([7,6,4,3,1])==0
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert max_profit([])==0
+- name: single day
+  tags:
+  - single
+  code: |
+    assert max_profit([5])==0
+- name: low at the very end is useless
+  tags:
+  - boundary
+  code: |
+    assert max_profit([3,8,1])==5
+    assert max_profit([2,4])==2
+- name: flat prices
+  tags:
+  - duplicate
+  code: |
+    assert max_profit([3,3,3,3])==0
+- name: long decreasing series
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    assert max_profit(list(range(n,0,-1)))==0
+    assert max_profit(list(range(n)))==n-1
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why is a single pass enough?
+  kind: complexity
+  key_points:
+  - The best sell on day i uses the minimum of days before i
+  - That minimum can be maintained incrementally
+  - O(n) time, O(1) space
+- q: Unlimited transactions.
+  kind: design
+  key_points:
+  - Sum every positive day-to-day increase
+  - Greedy captures every upswing
+  - Still O(n), O(1)
+- q: At most k transactions.
+  kind: reasoning
+  key_points:
+  - DP over (transactions, day) with buy/sell states
+  - O(nk) time, O(k) space with rolling state
+  - Cap k at n/2 to avoid wasted work
+narration: []
+state_aloud:
+- No profitable trade returns 0.
+- Must sell after buying.
+- Empty and single-day inputs.
+walkthrough: |
+  Sweep the prices while remembering the cheapest price so far. For each day, the best profit selling today is `price - cheapest`; update the answer with it, then update `cheapest`. Because the minimum only considers earlier days, you never sell before buying.

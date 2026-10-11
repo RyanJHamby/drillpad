@@ -1,0 +1,146 @@
+id: snake-game
+title: Snake Game
+bar_level: 2
+target_minutes: 22
+patterns:
+- deque
+- simulation
+- hash-set
+- grid
+firm_tags: []
+statement: |
+  Implement `SnakeGame(width, height, food)` (LeetCode 353). The snake starts at `(0, 0)` with
+  length 1 on a `height x width` grid; coordinates are `(row, col)`. `food` is a list of
+  `[row, col]` positions that appear one at a time: the next food only appears after the previous
+  one has been eaten (it never appears on the snake).
+
+  `move(direction)` with `direction` in `"U"`, `"D"`, `"L"`, `"R"` returns the score after the
+  move, or `-1` if the game is over (hit a wall, or ran into its own body). Eating food grows the
+  snake by one and increases the score by one. The tail cell is vacated by the move, so moving into
+  the cell the tail is leaving is legal (unless the snake just ate, in which case the tail does
+  not move). After the game is over every further `move` returns `-1`.
+
+  Example
+  ```python
+  g = SnakeGame(3, 2, [[1, 2], [0, 1]])
+  g.move("R") -> 0; g.move("D") -> 0; g.move("R") -> 1; g.move("U") -> 1; g.move("L") -> 2; g.move("U") -> -1
+  ```
+starter: |
+  class SnakeGame:
+      def __init__(self, width, height, food):
+          pass
+
+      def move(self, direction):
+          pass
+hints:
+- Keep the body in a deque (head at the front) and a set of occupied cells.
+- Decide whether this move eats; if not, pop the tail before checking collisions.
+- Once the game is over, remember it and keep returning -1.
+follow_ups:
+- How would you place food randomly but deterministically for tests?
+- How would you prevent reversing direction into yourself?
+tests:
+- name: leetcode example
+  tags:
+  - ordering
+  - boundary
+  code: |
+    g = SnakeGame(3, 2, [[1, 2], [0, 1]])
+    assert [g.move(d) for d in "RDRULU"] == [0, 0, 1, 1, 2, -1]
+- name: wall collisions and game over sticks
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    g = SnakeGame(2, 2, [])
+    assert g.move("R") == 0
+    assert g.move("R") == -1
+    assert g.move("D") == -1 and g.move("L") == -1
+    g2 = SnakeGame(2, 2, [])
+    assert g2.move("U") == -1
+    assert g2.move("D") == -1
+- name: self collision after growing
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    g = SnakeGame(5, 5, [[0, 1], [0, 2], [0, 3], [1, 3]])
+    assert [g.move(d) for d in "RRR"] == [1, 2, 3]
+    assert g.move("D") == 4                   # snake length 5
+    assert g.move("L") == 4
+    assert g.move("U") == -1                  # runs into its own body
+- name: moving into the vacated tail is legal
+  hidden: true
+  tags:
+  - boundary
+  - ordering
+  code: |
+    g = SnakeGame(3, 3, [[0, 1], [1, 1], [1, 0]])
+    assert [g.move(d) for d in "RDL"] == [1, 2, 3]       # length 4 occupying (0,0)(0,1)(1,1)(1,0)
+    assert g.move("U") == 3                               # head to (0,0) = the tail's cell, which leaves
+- name: single cell board and no food
+  hidden: true
+  tags:
+  - single
+  - empty
+  code: |
+    g = SnakeGame(1, 1, [])
+    assert g.move("L") == -1
+    g = SnakeGame(1, 3, [])
+    assert g.move("D") == 0 and g.move("D") == 0 and g.move("D") == -1
+- name: long game is fast
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    n = 60
+    food = [[0, c] for c in range(1, n)]
+    g = SnakeGame(n, 2, food)
+    for i in range(1, n):
+        assert g.move("R") == i
+    assert g.move("D") == n - 1
+    for _ in range(n - 2):
+        assert g.move("L") == n - 1
+complexity:
+- op: move
+  time: O(1)
+  space: O(n)
+extensions:
+- q: Per-move cost and space?
+  kind: complexity
+  key_points:
+  - 'O(1): deque append/pop on the ends and set lookups'
+  - Space O(snake length + food) -- the set mirrors the deque for O(1) collision checks
+  - Scanning the body list for collisions would be O(length) per move
+- q: 'Structure it as a real game: separate model, rules and rendering; add speed and obstacles.'
+  kind: design
+  key_points:
+  - Immutable move results or an event list (ate, died) keep the model testable and the UI thin
+  - Random food placement needs the empty-cell set (or reservoir sampling) to avoid placing on the snake
+  - Tick-based loop with input queue and direction-reversal guard
+- q: Multiplayer snakes on a shared board.
+  kind: design
+  key_points:
+  - Authoritative server steps all snakes per tick; clients send intents only
+  - Head-to-head and head-to-body collision rules must be defined for simultaneous moves
+  - Shared occupancy map (cell -> owner) generalises the single-snake set
+- q: 'The tail edge case: why remove the tail before the collision check?'
+  kind: reasoning
+  key_points:
+  - The tail cell is freed on the same tick, so entering it is legal
+  - If the snake eats, the tail does not move, so that cell stays occupied
+  - Order of operations (eat? vacate? check) is the whole difficulty
+narration: []
+state_aloud:
+- Tail vacates the cell it leaves on a non-eating move.
+- Eating does not move the tail.
+- Food appears only after the previous is eaten.
+- Game over is permanent.
+walkthrough: The snake body is a deque with the head at the front, mirrored by a set for O(1) collision
+  tests. A move computes the new head, rejects walls, and if it does not land on the current food pops
+  the tail (and removes it from the set) before testing for a self-collision; eating keeps the tail and
+  increments the score and food pointer. Each move is O(1).
+anki_queries: []
+categories:
+- systems-impl

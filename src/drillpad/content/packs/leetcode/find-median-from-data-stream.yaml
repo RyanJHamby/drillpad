@@ -1,0 +1,134 @@
+id: find-median-from-data-stream
+title: Find Median from Data Stream
+bar_level: 3
+target_minutes: 38
+patterns:
+- heap-top-k
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+- trading
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Find Median Data Stream (LC 295)"
+statement: |
+  Implement `MedianFinder` supporting `add_num(num)` (add an integer from the stream) and `find_median()` (the median of all numbers so far: the middle value if the count is odd, or the average of the two middle values if even, as a float). `find_median` is only called after at least one number was added.
+
+  Example: add 1, add 2, `find_median()` is `1.5`; add 3, `find_median()` is `2`.
+starter: |
+  class MedianFinder:
+      def __init__(self):
+          pass
+
+      def add_num(self, num):
+          pass
+
+      def find_median(self):
+          pass
+hints:
+- The median sits at the boundary between the smaller half and the larger half of the data.
+- Keep the smaller half in a max-heap and the larger half in a min-heap.
+- Rebalance after each insert so the sizes differ by at most 1, then read from the heap tops.
+follow_ups:
+- 'Numbers are all within 0..100: can you do better?'
+- Support a sliding window with deletions.
+tests:
+- name: two then three
+  tags:
+  - ordering
+  code: |
+    m = MedianFinder()
+    m.add_num(1); m.add_num(2)
+    assert m.find_median() == 1.5
+    m.add_num(3)
+    assert m.find_median() == 2
+- name: single value
+  tags:
+  - single
+  code: |
+    m = MedianFinder()
+    m.add_num(7)
+    assert m.find_median() == 7
+- name: duplicates
+  tags:
+  - duplicate
+  code: |
+    m = MedianFinder()
+    for x in (5,5,5,5):
+        m.add_num(x)
+    assert m.find_median() == 5
+    m.add_num(1)
+    assert m.find_median() == 5
+- name: negatives
+  tags:
+  - invalid
+  code: |
+    m = MedianFinder()
+    for x in (-1,-2,-3):
+        m.add_num(x)
+    assert m.find_median() == -2
+    m.add_num(-4)
+    assert m.find_median() == -2.5
+- name: descending insertion
+  tags:
+  - ordering
+  code: |
+    m = MedianFinder()
+    res = []
+    for x in (9,8,7,6,5):
+        m.add_num(x)
+        res.append(m.find_median())
+    assert res == [9, 8.5, 8, 7.5, 7]
+- name: median query repeated without adds
+  tags:
+  - state-reuse
+  code: |
+    m = MedianFinder()
+    m.add_num(4); m.add_num(10)
+    assert m.find_median() == 7
+    assert m.find_median() == 7
+    m.add_num(1)
+    assert m.find_median() == 4
+- name: large stream with a query each step
+  hidden: true
+  tags:
+  - scale
+  code: |
+    m = MedianFinder()
+    for i in range(1, 200001):
+        m.add_num(i)
+        assert m.find_median() == (i + 1) / 2
+complexity:
+- op: add_num
+  time: O(log n)
+  space: O(n)
+- op: find_median
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Compare with sorting on every query.
+  kind: complexity
+  key_points:
+  - Sorting per query is O(n log n)
+  - Keeping a sorted list with bisect gives O(n) insert due to shifting
+  - Two heaps give O(log n) insert and O(1) median
+- q: Values limited to 0..100?
+  kind: design
+  key_points:
+  - Keep a counting array of 101 buckets
+  - Find the median by scanning buckets in O(100)
+  - Add is O(1) and memory is constant
+- q: Sliding window median?
+  kind: design
+  key_points:
+  - Heaps need deletion of arbitrary items
+  - Use lazy deletion with a counter and rebalance sizes
+  - Or a sorted container / order-statistic tree
+narration: []
+state_aloud:
+- Odd versus even count.
+- Duplicates and negatives.
+- Keep the heaps balanced within one element.
+- Return a float for even counts.
+walkthrough: |
+  Maintain two heaps: `low`, a max-heap (negated) of the smaller half, and `high`, a min-heap of the larger half. On insert, push into `low`, move `low`'s maximum to `high`, and if `high` is now larger than `low`, move its minimum back. That keeps `low` equal in size to `high` or one bigger and every low value no larger than every high value. The median is `low`'s top when sizes differ, else the mean of the two tops.

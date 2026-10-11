@@ -1,0 +1,172 @@
+id: transaction-dedup
+title: 'Transaction deduplication: exact id, then near-duplicates'
+bar_level: 2
+target_minutes: 20
+patterns:
+- hash-set
+- composite-key
+- time-window
+- idempotency
+firm_tags:
+- distsys
+anki_queries: []
+statement: |
+  Implement `dedupe(transactions, window=None) -> list`. Each transaction is a dict with keys
+  `id`, `account_id`, `amount`, `description`, `timestamp` (int seconds). `id` may be `None` or
+  absent. Return the transactions to keep, in input order, without mutating the input.
+
+  1. Exact duplicates: a transaction whose non-None `id` was already KEPT is dropped.
+  2. If `window` is not None, near duplicates are also dropped: a transaction is dropped when a
+     previously KEPT transaction has the same `(account_id, amount, description)` and a
+     timestamp within `window` seconds (`abs(diff) <= window`, in either direction since input
+     may be unsorted). Only kept transactions are compared (a dropped one never extends a chain).
+  Records without an id are never exact duplicates but can still be near duplicates.
+starter: |
+  def dedupe(transactions, window=None):
+      pass
+hints:
+- Stage 1 is a set of seen ids. Stage 2 keys on (account_id, amount, description).
+- Per key keep the kept timestamps in a sorted list and use bisect to find one within the window instead
+  of scanning.
+- 'Decide out loud why the window exists: two real $5 coffees in one day must not collapse.'
+follow_ups:
+- What identity key do you trust when upstream does not guarantee unique ids?
+- 'Back the dedup store with a TTL cache (Redis) in production: what window does the TTL equal?'
+- What if a retry has a slightly different amount or description (fuzzy match)?
+- How do you make this idempotent across process restarts?
+tests:
+- name: exact id duplicates keep the first occurrence
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    def tx(id, ts, amount=500, desc="coffee", acct="a1"):
+        return {"id": id, "account_id": acct, "amount": amount, "description": desc, "timestamp": ts}
+
+    t = [tx("1", 0), tx("2", 500, desc="x"), tx("1", 900, amount=7), tx("3", 1000, desc="y")]
+    out = dedupe(t)
+    assert [x["id"] for x in out] == ["1", "2", "3"]
+    assert out[0] is t[0], "the first record is kept as is"
+    assert len(t) == 4, "input must not be mutated"
+- name: empty and single
+  tags:
+  - empty
+  - single
+  code: |
+    def tx(id, ts, amount=500, desc="coffee", acct="a1"):
+        return {"id": id, "account_id": acct, "amount": amount, "description": desc, "timestamp": ts}
+
+    assert dedupe([]) == [] and dedupe([], window=60) == []
+    one = [tx("1", 5)]
+    assert dedupe(one, window=60) == one
+- name: near duplicates collapse inside the window
+  tags:
+  - time
+  - boundary
+  code: |
+    def tx(id, ts, amount=500, desc="coffee", acct="a1"):
+        return {"id": id, "account_id": acct, "amount": amount, "description": desc, "timestamp": ts}
+
+    t = [tx("1", 100), tx("2", 160), tx("3", 161 + 100)]
+    out = dedupe(t, window=60)
+    assert [x["id"] for x in out] == ["1", "3"], "exactly `window` apart is a duplicate; beyond it is not"
+    assert [x["id"] for x in dedupe(t)] == ["1", "2", "3"], "no window means exact-id only"
+- name: different fields are not duplicates
+  tags:
+  - duplicate
+  - single
+  code: |
+    def tx(id, ts, amount=500, desc="coffee", acct="a1"):
+        return {"id": id, "account_id": acct, "amount": amount, "description": desc, "timestamp": ts}
+
+    t = [tx("1", 0), tx("2", 1, amount=501), tx("3", 2, desc="tea"), tx("4", 3, acct="a2"), tx("5", 4)]
+    assert [x["id"] for x in dedupe(t, window=60)] == ["1", "2", "3", "4"]
+- name: missing ids
+  tags:
+  - invalid
+  - empty
+  code: |
+    def tx(id, ts, amount=500, desc="coffee", acct="a1"):
+        return {"id": id, "account_id": acct, "amount": amount, "description": desc, "timestamp": ts}
+
+    a = tx(None, 0); b = tx(None, 5); c = {"account_id": "a1", "amount": 500, "description": "coffee", "timestamp": 6}
+    assert dedupe([a, b, c]) == [a, b, c], "records without ids are never exact duplicates"
+    assert dedupe([a, b, c], window=60) == [a], "but they still collapse as near-duplicates"
+- name: compared against kept records only
+  tags:
+  - boundary
+  - ordering
+  hidden: true
+  code: |
+    def tx(id, ts, amount=500, desc="coffee", acct="a1"):
+        return {"id": id, "account_id": acct, "amount": amount, "description": desc, "timestamp": ts}
+
+    t = [tx("1", 0), tx("2", 50), tx("3", 100)]
+    out = dedupe(t, window=60)
+    assert [x["id"] for x in out] == ["1", "3"], "50 is dropped; 100 is 100 from the kept 0 so it stays"
+- name: unsorted input
+  tags:
+  - ordering
+  - time
+  hidden: true
+  code: |
+    def tx(id, ts, amount=500, desc="coffee", acct="a1"):
+        return {"id": id, "account_id": acct, "amount": amount, "description": desc, "timestamp": ts}
+
+    t = [tx("1", 100), tx("2", 50), tx("3", 300), tx("4", 130)]
+    assert [x["id"] for x in dedupe(t, window=60)] == ["1", "3"], "50 and 130 are both within 60 of kept 100"
+- name: large stream
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def tx(id, ts, amount=500, desc="coffee", acct="a1"):
+        return {"id": id, "account_id": acct, "amount": amount, "description": desc, "timestamp": ts}
+
+    t = [tx(i, i * 10, amount=i % 100, desc=f"d{i % 7}") for i in range(60000)]
+    t += [tx(f"dup{i}", i * 10 + 3, amount=i % 100, desc=f"d{i % 7}") for i in range(60000)]
+    out = dedupe(t, window=30)
+    assert len(out) == 60000 and all(isinstance(x["id"], int) for x in out)
+complexity:
+- op: overall
+  time: O(n log k)
+  space: O(n)
+extensions:
+- q: 'Level 2: also treat a different description with the same merchant/account/amount inside the window
+    as a duplicate (normalised description).'
+  kind: code
+  key_points:
+  - Normalise descriptions (case, whitespace, punctuation, trailing reference numbers) before keying
+  - Keep the window rule and the kept-only comparison
+  - Make normalisation a separate, testable function
+- q: 'Level 3: make it streaming with bounded memory.'
+  kind: code
+  key_points:
+  - Evict per-key timestamps older than the window and ids older than a retention horizon
+  - Requires roughly time-ordered input or an allowed lateness bound; state the assumption
+  - Output order and idempotent replays must still be deterministic
+- q: What does a production dedup service look like?
+  kind: design
+  key_points:
+  - Idempotency-key store with TTL (Redis or a DB unique index) checked before the write
+  - 'Choice of identity key and window is a precision/recall trade: false merges lose real transactions'
+  - Reconciliation job audits suspected duplicates rather than silently deleting
+- q: Cost with a linear scan versus sorted lists?
+  kind: complexity
+  key_points:
+  - A scan over kept timestamps per key is O(k) per transaction, O(n^2) worst case on one key
+  - Sorted list + bisect lookup is O(log k) but insort shifts O(k); a balanced tree or time-bucketing
+    avoids that
+  - Space is O(n) for kept records and ids
+narration: []
+state_aloud:
+- 'Identity decision: id first, composite key (account, amount, description) second, and the window prevents
+  merging legitimate repeats.'
+- Only kept transactions are compared, so a dropped near-duplicate cannot chain-extend the window.
+- Is id ever absent, or present-but-different across retries? That decides whether id can be trusted at
+  all.
+- Input may be unsorted, so the window check is symmetric.
+walkthrough: |
+  First pass drops any transaction whose id is already in a seen set. If a window is given, the composite key (account_id, amount, description) maps to a sorted list of kept timestamps; bisect finds the first kept timestamp at or above ts - window and the transaction is a near duplicate if that timestamp is also within ts + window. Kept transactions register their id and timestamp. This runs in one pass, O(log k) per lookup. Source: standard formulation.
+categories:
+- fintech

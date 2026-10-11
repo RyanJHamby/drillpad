@@ -1,0 +1,129 @@
+id: reverse-nodes-in-k-group
+title: Reverse Nodes in k-Group
+bar_level: 3
+target_minutes: 38
+patterns:
+- linked-list
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Reverse the nodes of a linked list `k` at a time and return the new head. If the number of remaining nodes is less than `k`, leave that tail group as is. You may only relink nodes, not change their values. `ListNode`, `build_list` and `to_list` are provided.
+
+  Example: with `k = 2`, `[1,2,3,4,5]` becomes `[2,1,4,3,5]`; with `k = 3` it becomes `[3,2,1,4,5]`.
+prelude: |
+  class ListNode:
+      def __init__(self, val=0, next=None):
+          self.val = val
+          self.next = next
+
+  def build_list(vals):
+      head = None
+      for v in reversed(vals):
+          head = ListNode(v, head)
+      return head
+
+  def to_list(head):
+      out = []
+      while head:
+          out.append(head.val)
+          head = head.next
+      return out
+starter: |
+  def reverse_k_group(head, k):
+      pass
+hints:
+- 'Break the job into: find the next group of k, reverse it, reconnect it.'
+- Before reversing, walk k nodes ahead; if you run out, the rest stays untouched.
+- A dummy head and a pointer to the node before each group make reconnecting uniform.
+follow_ups:
+- Do it recursively and compare stack depth.
+- Also reverse the leftover short group (variant).
+tests:
+- name: k = 2
+  tags:
+  - ordering
+  code: |
+    assert to_list(reverse_k_group(build_list([1,2,3,4,5]), 2)) == [2,1,4,3,5]
+- name: k = 3
+  tags:
+  - ordering
+  code: |
+    assert to_list(reverse_k_group(build_list([1,2,3,4,5]), 3)) == [3,2,1,4,5]
+- name: k = 1 leaves it unchanged
+  tags:
+  - boundary
+  code: |
+    assert to_list(reverse_k_group(build_list([1,2,3]), 1)) == [1,2,3]
+- name: k equals length
+  tags:
+  - boundary
+  code: |
+    assert to_list(reverse_k_group(build_list([1,2,3,4]), 4)) == [4,3,2,1]
+- name: k larger than length
+  tags:
+  - boundary
+  code: |
+    assert to_list(reverse_k_group(build_list([1,2]), 5)) == [1,2]
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert reverse_k_group(None, 3) is None
+    assert to_list(reverse_k_group(build_list([1,2]), 2)) == [2,1]
+- name: single node
+  tags:
+  - single
+  code: |
+    assert to_list(reverse_k_group(build_list([9]), 2)) == [9]
+    assert to_list(reverse_k_group(build_list([9]), 1)) == [9]
+- name: exact multiple with repeats
+  tags:
+  - duplicate
+  code: |
+    assert to_list(reverse_k_group(build_list([1,1,2,2,3,3]), 2)) == [1,1,2,2,3,3]
+    assert to_list(reverse_k_group(build_list([1,1,2,2,3,3]), 3)) == [2,1,1,3,3,2]
+- name: long list
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n, k = 200000, 3
+    vals = list(range(n))
+    exp = []
+    for i in range(0, n - n % k, k):
+        exp += vals[i:i+k][::-1]
+    exp += vals[n - n % k:]
+    assert to_list(reverse_k_group(build_list(vals), k)) == exp
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Recursive vs iterative space?
+  kind: complexity
+  key_points:
+  - Recursive uses O(n / k) stack frames
+  - Iterative relinking uses O(1) extra space
+  - Each node is touched a constant number of times either way
+- q: Why check for k nodes before reversing?
+  kind: reasoning
+  key_points:
+  - A short tail must remain in original order
+  - Reversing first then undoing costs a second pass
+  - Scanning ahead is O(k) per group, O(n) total
+- q: Reverse the short tail too?
+  kind: design
+  key_points:
+  - Skip the pre-check and always reverse what is there
+  - Handle the last group the same way with fewer than k nodes
+  - Still linear time and constant space
+narration: []
+state_aloud:
+- k = 1 means no change.
+- k greater than the length means no change.
+- 'Fewer than k nodes remain at the end: keep original order.'
+- Reconnect each reversed group to the next one.
+walkthrough: |
+  Use a dummy head and keep `group_prev`, the node just before the current group. Scan k nodes ahead to find the group's last node; if there are fewer than k, finish. Reverse the k nodes in place so the first of them now points at the node after the group, then point `group_prev` at the group's new first node and advance `group_prev` to the group's old first node. Each node is relinked once, in linear time with constant space.

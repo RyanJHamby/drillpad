@@ -1,0 +1,215 @@
+id: in-memory-sql-table
+title: In-memory Table with Queries
+bar_level: 3
+target_minutes: 35
+patterns:
+- in-memory-database
+- hash-index
+- query-engine
+- secondary-index
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement `Table(columns)`, a tiny in-memory table. `columns` is a list of column names.
+
+  - `insert(row)` -> int row id (1, 2, 3, ...). `row` is a dict whose keys must be exactly the
+    columns, otherwise `ValueError`. The table stores a copy.
+  - `select(where=None, order_by=None, desc=False, limit=None, columns=None)` -> list of dict
+    copies.
+    - `where`: list of `(column, op, value)` conditions ANDed together; `op` is one of
+      `"="`, `"!="`, `"<"`, `"<="`, `">"`, `">="`. `None` or `[]` matches all rows.
+    - Results are in insertion order unless `order_by` (a column) is given; sorting is stable
+      (ties keep insertion order, also when `desc=True`). `limit` applies after sorting.
+    - `columns` projects to those columns.
+    - Unknown column in `where`/`order_by`/`columns` raises `KeyError`; unknown op `ValueError`.
+  - `update(where, changes)` -> number of rows changed (`changes` is a dict of column -> value).
+  - `delete(where)` -> number of rows deleted.
+  - `create_index(column)`: build a hash index used for `"="` conditions. It must be kept in sync
+    by insert/update/delete. After every `select`, `self.last_scanned` is the number of rows
+    examined: with an index on an `=` condition column it is the size of the matching bucket,
+    otherwise the whole table.
+
+  Example
+  ```python
+  t = Table(["id", "name", "age"]); t.insert({"id": 1, "name": "a", "age": 30})
+  t.select(where=[("age", ">=", 18)], order_by="name", limit=5, columns=["name"])
+  ```
+starter: |
+  class Table:
+      def __init__(self, columns):
+          pass
+
+      def insert(self, row):
+          pass
+
+      def select(self, where=None, order_by=None, desc=False, limit=None, columns=None):
+          pass
+
+      def update(self, where, changes):
+          pass
+
+      def delete(self, where):
+          pass
+
+      def create_index(self, column):
+          pass
+hints:
+- Store rows in a dict keyed by row id so insertion order and deletion are cheap.
+- Write one _match(where) that picks the smallest hash-index bucket for = conditions, then filters.
+- Keep indexes updated in insert, update (only for changed columns) and delete.
+follow_ups:
+- How would you implement LIMIT with ORDER BY using a heap?
+- How would you add UNIQUE constraints and primary keys?
+tests:
+- name: insert and select basics
+  tags:
+  - empty
+  - invalid
+  code: |
+    t = Table(["id", "name", "age"])
+    assert t.select() == []
+    assert t.insert({"id": 1, "name": "ann", "age": 30}) == 1
+    assert t.insert({"id": 2, "name": "bob", "age": 17}) == 2
+    for bad in ({"id": 3}, {"id": 3, "name": "x", "age": 1, "extra": 1}):
+        try:
+            t.insert(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+    rows = t.select()
+    assert rows == [{"id": 1, "name": "ann", "age": 30}, {"id": 2, "name": "bob", "age": 17}]
+    rows[0]["name"] = "mutated"
+    assert t.select()[0]["name"] == "ann", "select must return copies"
+- name: where ops order limit projection
+  tags:
+  - ordering
+  - boundary
+  code: |
+    t = Table(["id", "name", "age"])
+    for i, (n, a) in enumerate([("c", 20), ("a", 30), ("b", 20), ("d", 40)], 1):
+        t.insert({"id": i, "name": n, "age": a})
+    assert [r["id"] for r in t.select(where=[("age", ">=", 20), ("age", "<", 40)])] == [1, 2, 3]
+    assert [r["id"] for r in t.select(where=[("name", "!=", "a")])] == [1, 3, 4]
+    assert [r["name"] for r in t.select(order_by="name")] == ["a", "b", "c", "d"]
+    assert [r["id"] for r in t.select(order_by="age", desc=True)] == [4, 2, 1, 3]
+    assert [r["id"] for r in t.select(order_by="age")] == [1, 3, 2, 4]
+    assert t.select(order_by="age", limit=2, columns=["name"]) == [{"name": "c"}, {"name": "b"}]
+    assert t.select(where=[("age", ">", 100)]) == []
+- name: update and delete
+  tags:
+  - state-reuse
+  - duplicate
+  code: |
+    t = Table(["id", "tag"])
+    for i in range(1, 6):
+        t.insert({"id": i, "tag": "x" if i % 2 else "y"})
+    assert t.update([("tag", "=", "x")], {"tag": "z"}) == 3
+    assert [r["id"] for r in t.select(where=[("tag", "=", "z")])] == [1, 3, 5]
+    assert t.delete([("id", ">", 3)]) == 2
+    assert [r["id"] for r in t.select()] == [1, 2, 3]
+    assert t.delete([("id", "=", 99)]) == 0
+    assert t.insert({"id": 9, "tag": "q"}) == 6
+- name: unknown column and op
+  tags:
+  - invalid
+  - single
+  code: |
+    t = Table(["a", "b"])
+    t.insert({"a": 1, "b": 2})
+    for fn, exc in ((lambda: t.select(where=[("zz", "=", 1)]), KeyError),
+                    (lambda: t.select(order_by="zz"), KeyError),
+                    (lambda: t.select(columns=["zz"]), KeyError),
+                    (lambda: t.select(where=[("a", "~", 1)]), ValueError),
+                    (lambda: t.update([], {"zz": 1}), KeyError)):
+        try:
+            fn()
+        except exc:
+            pass
+        else:
+            raise AssertionError("expected %s" % exc.__name__)
+- name: index is used and stays in sync
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    t = Table(["id", "grp"])
+    for i in range(1000):
+        t.insert({"id": i, "grp": i % 10})
+    t.select(where=[("grp", "=", 3)])
+    assert t.last_scanned == 1000
+    t.create_index("grp")
+    rows = t.select(where=[("grp", "=", 3)])
+    assert t.last_scanned == 100 and len(rows) == 100
+    t.insert({"id": 5000, "grp": 3})
+    assert len(t.select(where=[("grp", "=", 3)])) == 101
+    t.update([("id", "=", 5000)], {"grp": 4})
+    assert len(t.select(where=[("grp", "=", 3)])) == 100
+    assert len(t.select(where=[("grp", "=", 4)])) == 101
+    t.delete([("grp", "=", 4)])
+    assert t.select(where=[("grp", "=", 4)]) == [] and t.last_scanned == 0
+    assert [r["id"] for r in t.select(where=[("grp", "=", 3)])][:3] == [3, 13, 23]
+- name: index combined with other conditions
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    t = Table(["id", "grp", "v"])
+    t.create_index("grp")
+    for i in range(50):
+        t.insert({"id": i, "grp": i % 5, "v": i})
+    r = t.select(where=[("grp", "=", 2), ("v", ">", 20)], order_by="v", desc=True, limit=3)
+    assert [x["id"] for x in r] == [47, 42, 37]
+    assert t.last_scanned == 10
+complexity:
+- op: insert
+  time: O(i)
+  space: O(c)
+- op: select with index
+  time: O(m log m)
+  space: O(m)
+- op: select without index
+  time: O(n)
+  space: O(m)
+extensions:
+- q: Cost of select with and without an index (n rows, m matches, i indexes)?
+  kind: complexity
+  key_points:
+  - Without an index every select is an O(n) scan plus O(m log m) if sorting
+  - A hash index on = turns candidate lookup into O(1) + O(m); range conditions need a sorted/B-tree index
+  - Each index costs O(1) per insert/update/delete and O(n) extra space
+- q: How would you support range queries and ORDER BY efficiently?
+  kind: design
+  key_points:
+  - Sorted structure (B-tree, skip list or sorted list with bisect) per indexed column
+  - Choose the most selective available index and filter the remaining conditions
+  - Composite indexes serve multi-column predicates and ordering
+- q: Add transactions and thread-safety.
+  kind: design
+  key_points:
+  - Coarse lock first; then MVCC or a write-ahead undo log for rollback
+  - Undo log of (row id, old row) lets a transaction roll back updates, deletes and index changes
+  - Reader-writer lock or snapshot reads avoid blocking readers
+- q: Persist the table and recover after a crash.
+  kind: design
+  key_points:
+  - Append-only write-ahead log of mutations, replayed at startup
+  - Periodic snapshots truncate the log; fsync policy trades durability and latency
+  - Indexes are rebuilt from rows on load rather than stored
+narration: []
+state_aloud:
+- Select returns copies so callers cannot corrupt the table.
+- Stable ordering for ties, including descending.
+- Index maintenance on update and delete, including emptied buckets.
+- Validate columns and ops up front.
+walkthrough: Rows are stored in an insertion-ordered dict by id and each secondary index maps a value
+  to a set of row ids. A shared matcher validates the conditions, uses the smallest index bucket for an
+  equality condition when available (otherwise scans everything), and filters the remaining conditions.
+  select sorts, limits and projects copies; update and delete maintain every index. Indexed equality lookups
+  cost O(m) rather than O(n).
+anki_queries: []
+categories:
+- systems-impl

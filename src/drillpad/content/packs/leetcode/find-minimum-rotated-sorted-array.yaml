@@ -1,0 +1,99 @@
+id: find-minimum-rotated-sorted-array
+title: Find Minimum in Rotated Sorted Array
+bar_level: 2
+target_minutes: 20
+patterns:
+- binary-search
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Find Min Rotated Sorted (LC 153)"
+statement: |
+  A sorted array of distinct integers was rotated by an unknown number of positions (for example `[0,1,2,4,5,6,7]` becomes `[4,5,6,7,0,1,2]`). Return the minimum element in O(log n) time.
+
+  Example: `find_min([3,4,5,1,2])` returns `1`.
+starter: |
+  def find_min(nums):
+      pass
+hints:
+- The minimum is the rotation point, where the order drops.
+- 'Compare nums[mid] with nums[hi]: if mid is greater, the minimum is strictly to the right.'
+- Otherwise the minimum is at mid or to its left, so set hi = mid (not mid - 1).
+follow_ups:
+- What changes if duplicates are allowed?
+- Also return the rotation count.
+tests:
+- name: rotated
+  tags:
+  - ordering
+  code: |
+    assert find_min([3,4,5,1,2])==1
+    assert find_min([4,5,6,7,0,1,2])==0
+- name: not rotated
+  tags:
+  - boundary
+  code: |
+    assert find_min([1,2,3,4,5])==1
+- name: single element
+  tags:
+  - single
+  code: |
+    assert find_min([9])==9
+- name: two elements
+  tags:
+  - zero-capacity
+  code: |
+    assert find_min([2,1])==1
+    assert find_min([1,2])==1
+- name: rotated by n-1
+  tags:
+  - invalid
+  code: |
+    assert find_min([5,1,2,3,4])==1
+    assert find_min([2,3,4,5,1])==1
+- name: negative values
+  tags:
+  - duplicate
+  code: |
+    assert find_min([-1,0,5,-9,-5])==-9
+- name: big array many rotations
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=1000000
+    base=list(range(n))
+    for k in (0,1,500000,999999):
+        arr=base[k:]+base[:k]
+        assert find_min(arr)==0
+complexity:
+- op: overall
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: Complexity and why not min().
+  kind: complexity
+  key_points:
+  - Binary search is O(log n) versus O(n) for min()
+  - Space O(1)
+  - Relies on sorted-then-rotated structure
+- q: Handle duplicates (LC 154).
+  kind: design
+  key_points:
+  - When nums[mid] == nums[hi] shrink hi by one
+  - Worst case degrades to O(n)
+  - Cannot do better in general
+- q: Why compare to the right end and not the left?
+  kind: reasoning
+  key_points:
+  - Right end distinguishes both rotated and unrotated arrays
+  - Comparing to nums[lo] is ambiguous when the window is already sorted
+  - Using hi = mid keeps the candidate minimum in range
+narration: []
+state_aloud:
+- Not rotated (rotation by 0).
+- One or two elements.
+- Distinct values assumption.
+walkthrough: |
+  Keep `lo`, `hi` over a window that always contains the minimum. If `nums[mid] > nums[hi]` the drop lies to the right of mid, so `lo = mid + 1`; otherwise the minimum is at `mid` or left, so `hi = mid`. When `lo == hi` that index holds the minimum.

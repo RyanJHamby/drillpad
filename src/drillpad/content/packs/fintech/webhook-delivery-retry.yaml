@@ -1,0 +1,226 @@
+id: webhook-delivery-retry
+title: Webhook Delivery with Retry and Ordering
+bar_level: 3
+target_minutes: 35
+patterns:
+- queue
+- exponential-backoff
+- head-of-line-blocking
+- dead-letter
+- deque
+firm_tags:
+- distsys
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `WebhookDispatcher`, an at-least-once webhook delivery engine with per-endpoint ordering.
+  Time is injected: nothing sleeps, the caller drives the clock by calling `tick(now)`.
+
+  `WebhookDispatcher(send, max_attempts=5, base_delay=1, max_delay=60)`.
+  `send(url, event_id, seq, payload)` is the transport; it returns a truthy value on success (a 2xx) and a
+  falsy value or raises on failure.
+
+  * `enqueue(url, event_id, payload, now)` appends an event to that endpoint's queue and returns `True`.
+    Each endpoint numbers its events `seq = 1, 2, 3, ...` in enqueue order. An `event_id` that was ever
+    enqueued for that `url` (even if already delivered or dead) is ignored and the call returns `False`.
+    A new event is due immediately (`next_at = now`).
+  * Ordering: events for one endpoint must be delivered in enqueue order. Only the head of an endpoint's queue
+    may be attempted; if the head is waiting for a retry, everything behind it waits too. Different endpoints
+    are independent: a stuck endpoint must not delay another.
+  * `tick(now)` visits endpoints in order of first enqueue. For each endpoint, while the head exists and
+    `head.next_at <= now`: call `send`. On success pop it, record `(url, event_id, "delivered")` and continue
+    with the next head. On failure increment the head's attempt count; if attempts have reached `max_attempts`
+    pop it into the dead-letter list, record `"dead"` and continue with the next head; otherwise set
+    `next_at = now + min(max_delay, base_delay * 2**(attempts-1))`, record `"retry"` and stop for this endpoint.
+    `tick` returns the list of records in the order they happened.
+  * `dead_letters()` returns `[(url, event_id), ...]` in the order events died.
+  * `pending(url)` is the number of events still queued for that endpoint (0 for unknown urls).
+  * `next_due()` returns the smallest `next_at` among queue heads, or `None` when nothing is queued.
+starter: |
+  class WebhookDispatcher:
+      def __init__(self, send, max_attempts=5, base_delay=1, max_delay=60):
+          pass
+
+      def enqueue(self, url, event_id, payload, now):
+          pass
+
+      def tick(self, now):
+          pass
+
+      def dead_letters(self):
+          pass
+
+      def pending(self, url):
+          pass
+
+      def next_due(self):
+          pass
+hints:
+- One deque per endpoint (dict url -> deque) gives O(1) pop from the front; list.pop(0) is O(n).
+- Keep attempts and next_at on the head event; only the head is ever scheduled, which is what enforces
+  ordering.
+- Treat an exception from send exactly like a falsy return, and remember event ids per endpoint in a set
+  for dedup.
+follow_ups:
+- Delivery is at-least-once. What must the receiver do, and what do you put in the payload to help?
+- How do you sign the payload (HMAC) and why compare signatures with hmac.compare_digest?
+- Strict ordering makes one bad endpoint grow an unbounded queue. What do you do about it?
+tests:
+- name: delivers in order with per endpoint sequence numbers
+  tags:
+  - ordering
+  - empty
+  code: |
+    log = []
+    d = WebhookDispatcher(lambda url, eid, seq, payload: log.append((url, eid, seq, payload)) or True)
+    assert d.enqueue("u1", "e1", {"n": 1}, 0) is True
+    d.enqueue("u2", "x1", "p", 0)
+    d.enqueue("u1", "e2", {"n": 2}, 0)
+    out = d.tick(0)
+    assert out == [("u1", "e1", "delivered"), ("u1", "e2", "delivered"), ("u2", "x1", "delivered")]
+    assert log == [("u1", "e1", 1, {"n": 1}), ("u1", "e2", 2, {"n": 2}), ("u2", "x1", 1, "p")]
+    assert d.pending("u1") == 0 and d.next_due() is None and d.pending("nope") == 0
+- name: exponential backoff schedule and cap
+  tags:
+  - time
+  - boundary
+  code: |
+    d = WebhookDispatcher(lambda *a: False, max_attempts=5, base_delay=2, max_delay=10)
+    d.enqueue("u", "e", None, 100)
+    assert d.tick(99) == [] and d.next_due() == 100
+    assert d.tick(100) == [("u", "e", "retry")] and d.next_due() == 102
+    assert d.tick(101) == [], "not due yet"
+    assert d.tick(102) == [("u", "e", "retry")] and d.next_due() == 106
+    assert d.tick(106) == [("u", "e", "retry")] and d.next_due() == 114
+    assert d.tick(114) == [("u", "e", "retry")] and d.next_due() == 124, "delay capped at max_delay=10"
+    assert d.tick(124) == [("u", "e", "dead")] and d.next_due() is None
+    assert d.dead_letters() == [("u", "e")] and d.pending("u") == 0
+- name: head of line blocking is per endpoint
+  tags:
+  - ordering
+  - concurrency
+  code: |
+    fail = {"u1": True}
+    sent = []
+    def send(url, eid, seq, payload):
+        if fail.get(url):
+            return False
+        sent.append((url, eid))
+        return True
+    d = WebhookDispatcher(send, max_attempts=3, base_delay=5)
+    d.enqueue("u1", "a", 0, 0)
+    d.enqueue("u1", "b", 0, 0)
+    d.enqueue("u2", "c", 0, 0)
+    assert d.tick(0) == [("u1", "a", "retry"), ("u2", "c", "delivered")]
+    assert sent == [("u2", "c")], "b must not overtake a"
+    assert d.pending("u1") == 2
+    fail["u1"] = False
+    assert d.tick(4) == []
+    assert d.tick(5) == [("u1", "a", "delivered"), ("u1", "b", "delivered")]
+    assert sent[1:] == [("u1", "a"), ("u1", "b")]
+- name: dead event unblocks the followers
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    sent = []
+    def send(url, eid, seq, payload):
+        if eid == "bad":
+            return False
+        sent.append(eid)
+        return True
+    d = WebhookDispatcher(send, max_attempts=2, base_delay=1)
+    for e in ["bad", "g1", "g2"]:
+        d.enqueue("u", e, None, 0)
+    assert d.tick(0) == [("u", "bad", "retry")]
+    assert d.tick(1) == [("u", "bad", "dead"), ("u", "g1", "delivered"), ("u", "g2", "delivered")]
+    assert d.dead_letters() == [("u", "bad")] and sent == ["g1", "g2"]
+- name: duplicate event ids and exceptions
+  tags:
+  - duplicate
+  - invalid
+  hidden: true
+  code: |
+    def send(url, eid, seq, payload):
+        if payload == "boom":
+            raise RuntimeError("socket reset")
+        return True
+    d = WebhookDispatcher(send, max_attempts=2)
+    assert d.enqueue("u", "e1", "boom", 0) is True
+    assert d.enqueue("u", "e1", "other", 0) is False, "duplicate while queued"
+    assert d.enqueue("v", "e1", "ok", 0) is True, "ids are scoped per endpoint"
+    assert d.tick(0) == [("u", "e1", "retry"), ("v", "e1", "delivered")]
+    assert d.enqueue("v", "e1", "again", 1) is False, "duplicate after delivery"
+    assert d.enqueue("v", "e2", "ok", 1) is True
+    assert d.tick(1) == [("u", "e1", "dead"), ("v", "e2", "delivered")]
+    assert d.enqueue("u", "e1", "boom", 2) is False, "duplicate after dead"
+- name: events enqueued later are not due early
+  tags:
+  - time
+  - single
+  hidden: true
+  code: |
+    d = WebhookDispatcher(lambda *a: True)
+    d.enqueue("u", "a", 0, 10)
+    d.enqueue("u", "b", 0, 20)
+    assert d.next_due() == 10
+    assert d.tick(15) == [("u", "a", "delivered")]
+    assert d.next_due() == 20
+    assert d.tick(20) == [("u", "b", "delivered")]
+- name: large backlog on one endpoint
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 300000
+    seen = []
+    d = WebhookDispatcher(lambda url, eid, seq, payload: seen.append(seq) or True)
+    for i in range(n):
+        d.enqueue("u", i, None, 0)
+    out = d.tick(0)
+    assert len(out) == n and seen[0] == 1 and seen[-1] == n and d.pending("u") == 0
+complexity:
+- op: enqueue
+  time: O(1)
+  space: O(e)
+- op: tick
+  time: O(E + d)
+  space: O(1)
+extensions:
+- q: 'Level 2: add jitter to the backoff without losing determinism in tests.'
+  kind: code
+  key_points:
+  - Inject a random source (or a jitter function) so tests can seed it
+  - 'Use full jitter: delay = random(0, capped_exponential)'
+  - Jitter prevents synchronised retry storms against a recovering endpoint
+- q: 'Level 3: stop delivering to an endpoint after N consecutive dead events (circuit breaker) and resume
+    after a cool-down.'
+  kind: code
+  key_points:
+  - Track consecutive failures per endpoint and an open_until timestamp
+  - While open, tick skips the endpoint but keeps queueing
+  - 'Half-open probe: one attempt after cool-down decides to close or re-open'
+- q: How would you build this as a distributed service handling millions of endpoints?
+  kind: design
+  key_points:
+  - Partition endpoints by hash so one worker owns an endpoint's queue, preserving per-endpoint order
+  - Durable queue plus a delay index (sorted set by next_at) instead of scanning all endpoints
+  - Receiver dedups on event_id; sender signs payloads (HMAC) and exposes a replay UI for dead letters
+- q: tick scans every endpoint. How do you make tick cost proportional to the work due?
+  kind: complexity
+  key_points:
+  - Keep a min-heap keyed by head next_at so only due endpoints are touched
+  - Each send or reschedule costs O(log E) on the heap
+  - Per-endpoint deque keeps pop-front O(1); a list would make a large backlog O(n^2)
+narration: []
+state_aloud:
+- Delivery is at-least-once, so event_id and seq go in the call so the receiver can dedupe.
+- Ordering is per endpoint, enforced by only ever attempting the queue head; a waiting head blocks followers.
+- 'Retry classification: here every falsy return or exception is retryable; in production 4xx (except
+  429) is permanent.'
+- 'Backoff is base * 2^(attempts-1) capped at max_delay; boundaries: due when next_at <= now, dead when
+  attempts reach max_attempts.'
+- 'Dead events must not block the endpoint forever: pop them to the dead-letter list and carry on.'
+walkthrough: |
+  Per endpoint, keep a deque of events plus a set of event ids seen. tick iterates endpoints in first-seen order and drains each queue head while it is due: success pops and continues, failure bumps attempts and either dead-letters (then continues) or schedules the next_at with capped exponential backoff (then stops, which blocks followers and keeps ordering). Time never advances inside the code; the caller passes now. Source: standard formulation.

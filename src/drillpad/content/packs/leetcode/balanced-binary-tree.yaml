@@ -1,0 +1,123 @@
+id: balanced-binary-tree
+title: Balanced Binary Tree
+bar_level: 1
+target_minutes: 15
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Balanced Binary Tree (LC 110)"
+statement: |
+  A binary tree is height-balanced if, for every node, the heights of its left and right subtrees differ by at most 1. Return `True` if the tree is height-balanced and `False` otherwise. The empty tree is balanced. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `[3,9,20,None,None,15,7]` is balanced; `[1,2,2,3,3,None,None,4,4]` is not.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def is_balanced(root):
+      pass
+hints:
+- Computing height at every node from scratch repeats a lot of work.
+- Return the height from a helper and let it signal failure with a sentinel like -1.
+- If either child is already unbalanced, stop early and propagate the failure upward.
+follow_ups:
+- Why can a tree look balanced at the root and still fail?
+- Make it O(n) rather than O(n log n) or O(n^2).
+tests:
+- name: balanced
+  tags:
+  - ordering
+  code: |
+    assert is_balanced(build_tree([3,9,20,None,None,15,7])) is True
+- name: unbalanced
+  tags:
+  - ordering
+  code: |
+    assert is_balanced(build_tree([1,2,2,3,3,None,None,4,4])) is False
+- name: empty tree
+  tags:
+  - empty
+  code: |
+    assert is_balanced(None) is True
+    assert is_balanced(build_tree([1,2,None,3])) is False
+- name: single node
+  tags:
+  - single
+  code: |
+    assert is_balanced(build_tree([1])) is True
+    assert is_balanced(build_tree([1,2])) is True
+- name: root fine, deeper node broken
+  tags:
+  - boundary
+  code: |
+    assert is_balanced(build_tree([1,2,2,3,None,None,3,4,None,None,4])) is False
+- name: equal values
+  tags:
+  - duplicate
+  code: |
+    assert is_balanced(build_tree([5,5,5,5,5,5,5])) is True
+- name: big balanced tree
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 2**16 - 1
+    assert is_balanced(build_tree([1]*n)) is True
+    assert is_balanced(build_tree([1]*n + [1])) is True
+complexity:
+- op: overall
+  time: O(n)
+  space: O(h)
+extensions:
+- q: Cost of the top-down height approach?
+  kind: complexity
+  key_points:
+  - Calling height at every node is O(n log n) when balanced
+  - It degrades to O(n^2) on a skewed tree
+  - The bottom-up version with a sentinel is O(n)
+- q: Design the bottom-up check.
+  kind: design
+  key_points:
+  - Return height, or -1 if a subtree is unbalanced
+  - Short-circuit as soon as a child returns -1
+  - Check abs(left - right) <= 1 at each node
+- q: Why check every node, not only the root?
+  kind: reasoning
+  key_points:
+  - Balance is defined per node
+  - A deep subtree can be skewed even if root heights match
+  - One violation anywhere makes the whole tree unbalanced
+narration: []
+state_aloud:
+- Empty tree is balanced.
+- Check balance at every node, not just the root.
+- Use a sentinel to stop early.
+- Skewed chains of length 2 or more are not balanced.
+walkthrough: |
+  A helper returns each subtree's height, or `-1` if that subtree is already unbalanced. At a node, if either child returned `-1`, or their heights differ by more than 1, return `-1`; otherwise return `1 + max(left, right)`. The tree is balanced exactly when the helper does not return `-1` for the root. Each node is visited once.

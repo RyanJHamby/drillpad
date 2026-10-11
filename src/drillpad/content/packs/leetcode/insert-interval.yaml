@@ -1,0 +1,114 @@
+id: insert-interval
+title: Insert Interval
+bar_level: 2
+target_minutes: 20
+patterns:
+- intervals
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Insert Interval (LC 57)"
+statement: |
+  `intervals` is a list of non-overlapping closed intervals `[start, end]` sorted by start. Insert `new` into it, merging any intervals that overlap (sharing an endpoint counts as overlapping), and return the resulting sorted, non-overlapping list. Do not mutate the input.
+
+  Example: `insert_interval([[1,3],[6,9]], [2,5])` returns `[[1,5],[6,9]]`.
+starter: |
+  def insert_interval(intervals, new):
+      pass
+hints:
+- Because the list is already sorted, you do not need to sort again.
+- 'Split the list into three parts: intervals entirely before new, intervals overlapping new, intervals entirely after.'
+- 'Walk once: copy while end < new.start, merge while start <= new.end by taking min start and max end, then copy the rest.'
+follow_ups:
+- Do it with binary search to find the boundaries.
+- What if the list is a linked list or a stream?
+tests:
+- name: overlaps one
+  tags:
+  - ordering
+  code: |
+    assert insert_interval([[1,3],[6,9]],[2,5]) == [[1,5],[6,9]]
+- name: overlaps several
+  tags:
+  - boundary
+  code: |
+    assert insert_interval([[1,2],[3,5],[6,7],[8,10],[12,16]],[4,8]) == [[1,2],[3,10],[12,16]]
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert insert_interval([],[5,7]) == [[5,7]]
+- name: goes first and last
+  tags:
+  - ordering
+  code: |
+    assert insert_interval([[3,4]],[1,2]) == [[1,2],[3,4]]
+    assert insert_interval([[1,2]],[3,4]) == [[1,2],[3,4]]
+- name: touching endpoints merge
+  tags:
+  - boundary
+  code: |
+    assert insert_interval([[1,2],[5,6]],[2,5]) == [[1,6]]
+    assert insert_interval([[1,2]],[2,2]) == [[1,2]]
+- name: new swallows or is swallowed
+  tags:
+  - duplicate
+  code: |
+    assert insert_interval([[2,3],[4,5]],[0,10]) == [[0,10]]
+    assert insert_interval([[0,10]],[3,4]) == [[0,10]]
+  hidden: true
+- name: input not mutated
+  tags:
+  - state-reuse
+  code: |
+    a=[[1,3],[6,9]]
+    n=[2,5]
+    assert insert_interval(a,n)==[[1,5],[6,9]]
+    assert a==[[1,3],[6,9]] and n==[2,5]
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    a = [[i * 3, i * 3 + 1] for i in range(300000)]
+    for k in range(40):
+        r = insert_interval(a, [1, 899990])
+        assert r[0] == [0, 899990] and len(r) == 4
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why is this O(n) rather than O(n log n)?
+  kind: complexity
+  key_points:
+  - Input is already sorted, so no sort is needed
+  - Single pass over the intervals
+  - Output list is O(n) space
+- q: 'Use binary search: what does it buy you and what is still linear?'
+  kind: complexity
+  key_points:
+  - Binary search finds the first overlapping and last overlapping interval in O(log n)
+  - Merging the k overlapping ones costs O(k)
+  - Building a new list is still O(n) with arrays; with a balanced tree the update is O(log n + k)
+- q: 'Design: many inserts over time into a calendar.'
+  kind: design
+  key_points:
+  - Keep intervals in a sorted container (balanced tree / sorted list) keyed by start
+  - Find the left neighbour and walk right while overlapping, delete and coalesce
+  - Amortised each interval is removed at most once
+- q: Edge-case reasoning for the overlap test.
+  kind: reasoning
+  key_points:
+  - Overlap iff existing.start <= new.end and existing.end >= new.start
+  - 'Closed intervals: touching endpoints overlap'
+  - Merged interval takes min of starts and max of ends
+narration: []
+state_aloud:
+- Empty input list.
+- New interval before everything / after everything.
+- Touching endpoints merge; containment either direction.
+walkthrough: |
+  Three phases in one pass over the sorted list. First copy every interval that ends before `new` starts. Then, while the next interval starts at or before `new`'s end, absorb it by taking the smaller start and larger end. Append the merged interval and finally copy the remaining intervals. No sort, and the input is not mutated.

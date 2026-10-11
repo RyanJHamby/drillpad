@@ -1,0 +1,100 @@
+id: course-schedule
+title: Course Schedule
+bar_level: 2
+target_minutes: 25
+patterns:
+- topological-sort
+- graph-bfs-dfs
+firm_tags:
+- ai-infra
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Course Schedule (LC 207)"
+statement: |
+  There are `n` courses numbered `0..n-1`. Each pair `[a, b]` in `prereqs` means you must finish course `b` before course `a`. Return `True` if it is possible to finish all courses, `False` if the prerequisites contain a cycle.
+
+  Example: `can_finish(2, [[1,0]])` is `True`; `can_finish(2, [[1,0],[0,1]])` is `False`.
+starter: |
+  def can_finish(n, prereqs):
+      pass
+hints:
+- Model it as a directed graph; the answer is whether the graph is acyclic.
+- 'Kahn''s algorithm: repeatedly remove nodes with indegree 0.'
+- If you process fewer than n nodes, a cycle blocked the rest.
+follow_ups:
+- Also return a valid order.
+- How would you detect the specific cycle?
+tests:
+- name: simple chain
+  tags:
+  - ordering
+  code: |
+    assert can_finish(2,[[1,0]]) is True
+- name: two-node cycle
+  tags:
+  - invalid
+  code: |
+    assert can_finish(2,[[1,0],[0,1]]) is False
+- name: no courses
+  tags:
+  - empty
+  code: |
+    assert can_finish(0,[]) is True
+    assert can_finish(1,[[0,0]]) is False
+- name: no prerequisites
+  tags:
+  - single
+  code: |
+    assert can_finish(1,[]) is True
+    assert can_finish(5,[]) is True
+- name: duplicate edges and diamond
+  tags:
+  - duplicate
+  code: |
+    assert can_finish(4,[[1,0],[1,0],[2,1],[3,1],[3,2]]) is True
+- name: cycle hidden behind an acyclic prefix
+  tags:
+  - boundary
+  code: |
+    assert can_finish(5,[[1,0],[2,1],[3,2],[1,3]]) is False
+- name: long chain
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=100000
+    assert can_finish(n,[[i+1,i] for i in range(n-1)]) is True
+    assert can_finish(n,[[i+1,i] for i in range(n-1)]+[[0,n-1]]) is False
+complexity:
+- op: overall
+  time: O(V + E)
+  space: O(V + E)
+extensions:
+- q: DFS with colors instead
+  kind: code
+  key_points:
+  - 'Three states: unvisited, visiting, done'
+  - A back edge to a visiting node is a cycle
+  - Recursion depth risk on long chains
+- q: Complexity
+  kind: complexity
+  key_points:
+  - Building adjacency O(V+E)
+  - Each node and edge processed once
+  - Space O(V+E)
+- q: 'Design: build system dependency resolver'
+  kind: design
+  key_points:
+  - Detect and report the cycle path for users
+  - Parallelize nodes with indegree 0 per wave
+  - Cache results and recompute only affected subgraph
+narration: []
+state_aloud:
+- Zero courses.
+- Self-dependency is a cycle.
+- Duplicate edges inflate indegree consistently, which is fine.
+- Disconnected components.
+walkthrough: |
+  Build adjacency lists and indegree counts, then run Kahn's algorithm: enqueue every course with indegree 0, pop one, and decrement the indegree of its dependents, enqueueing those that reach 0. If all n courses were popped there is no cycle; otherwise the leftover nodes form or depend on a cycle. Duplicate edges are harmless because indegree counts them consistently.

@@ -1,0 +1,228 @@
+id: event-bus-pubsub
+title: Pub/Sub Event Bus
+bar_level: 3
+target_minutes: 35
+patterns:
+- pub-sub
+- observer
+- thread-safety
+- reentrancy
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement a thread-safe, synchronous `EventBus`.
+
+  - `subscribe(topic, handler)` -> a token (any hashable) identifying this subscription. The topic
+    `"*"` receives events from every topic. The same handler may be subscribed more than once;
+    each subscription is separate.
+  - `unsubscribe(token)` -> `True` if removed, `False` if the token is unknown.
+  - `publish(topic, event)` -> int: call `handler(event)` in the publisher's thread for every
+    matching subscription (topic subscribers first, then `"*"` ones, each group in subscription
+    order). Returns the number of handlers that completed WITHOUT raising. A handler that raises
+    must not stop delivery to the others and must not propagate.
+  - Delivery works on a snapshot: handlers may subscribe/unsubscribe (even themselves) or publish
+    other events from inside a handler without deadlock. Never hold your internal lock while
+    calling handlers. A handler removed before its turn in the current publish may still receive
+    that event (snapshot semantics).
+
+  Example
+  ```python
+  bus = EventBus(); got = []
+  tok = bus.subscribe("a", got.append)
+  bus.publish("a", 1) -> 1;  bus.unsubscribe(tok);  bus.publish("a", 2) -> 0
+  ```
+starter: |
+  import threading
+
+  class EventBus:
+      def __init__(self):
+          pass
+
+      def subscribe(self, topic, handler):
+          pass
+
+      def unsubscribe(self, token):
+          pass
+
+      def publish(self, topic, event):
+          pass
+hints:
+- Keep topic -> list of (token, handler) under a lock; return a token from subscribe.
+- In publish, copy the matching handlers while holding the lock, then release it before calling them.
+- Wrap each handler call in try/except and count only the successful ones.
+follow_ups:
+- How would you guarantee a handler never sees an event after unsubscribe returns?
+- How would you add a typed event hierarchy (subscribe to base class)?
+tests:
+- name: basic delivery and unsubscribe
+  tags:
+  - ordering
+  - boundary
+  code: |
+    bus = EventBus()
+    a, b = [], []
+    t1 = bus.subscribe("x", a.append)
+    t2 = bus.subscribe("y", b.append)
+    assert bus.publish("x", 1) == 1 and bus.publish("y", 2) == 1
+    assert bus.publish("none", 3) == 0
+    assert a == [1] and b == [2]
+    assert bus.unsubscribe(t1) is True and bus.unsubscribe(t1) is False
+    assert bus.publish("x", 4) == 0 and a == [1]
+- name: wildcard and order
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    bus = EventBus()
+    log = []
+    bus.subscribe("*", lambda e: log.append(("star", e)))
+    bus.subscribe("t", lambda e: log.append(("t1", e)))
+    bus.subscribe("t", lambda e: log.append(("t2", e)))
+    assert bus.publish("t", 7) == 3
+    assert log == [("t1", 7), ("t2", 7), ("star", 7)]
+    h = log.append
+    bus.subscribe("d", h); bus.subscribe("d", h)
+    assert bus.publish("d", 0) == 3   # two "d" subscriptions plus the wildcard
+- name: handler errors are isolated
+  tags:
+  - invalid
+  - ordering
+  code: |
+    bus = EventBus()
+    got = []
+    def bad(e): raise RuntimeError("boom")
+    bus.subscribe("t", bad)
+    bus.subscribe("t", got.append)
+    assert bus.publish("t", "e") == 1
+    assert got == ["e"]
+- name: reentrant subscribe unsubscribe publish
+  tags:
+  - concurrency
+  - state-reuse
+  code: |
+    import threading
+    bus = EventBus()
+    out = []
+    holder = {}
+    def once(e):
+        out.append(("once", e))
+        bus.unsubscribe(holder["tok"])
+    holder["tok"] = bus.subscribe("t", once)
+    def chain(e):
+        out.append(("chain", e))
+        if e == 1:
+            bus.publish("t", 2)
+            bus.subscribe("t", lambda x: out.append(("late", x)))
+    bus.subscribe("t", chain)
+    res = {}
+    th = threading.Thread(target=lambda: res.setdefault("n", bus.publish("t", 1)), daemon=True)
+    th.start(); th.join(timeout=5)
+    assert not th.is_alive(), "deadlock: lock held while calling handlers"
+    assert out[0] == ("once", 1)
+    assert ("once", 2) not in out
+    assert bus.publish("t", 3) == 2
+- name: concurrent publishers
+  hidden: true
+  tags:
+  - concurrency
+  - scale
+  code: |
+    import threading
+    bus = EventBus()
+    counts = [0, 0, 0]
+    lock = threading.Lock()
+    def mk(i):
+        def h(e):
+            with lock: counts[i] += 1
+        return h
+    for i in range(3): bus.subscribe("t", mk(i))
+    def pub():
+        for k in range(300): bus.publish("t", k)
+    ts = [threading.Thread(target=pub, daemon=True) for _ in range(6)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=8)
+    assert not any(t.is_alive() for t in ts)
+    assert counts == [1800, 1800, 1800], counts
+- name: subscription churn during publish
+  hidden: true
+  tags:
+  - concurrency
+  - state-reuse
+  code: |
+    import threading
+    bus = EventBus()
+    stable = []
+    bus.subscribe("t", stable.append)
+    stop = threading.Event()
+    errors = []
+    def churn():
+        try:
+            while not stop.is_set():
+                tok = bus.subscribe("t", lambda e: None)
+                bus.unsubscribe(tok)
+        except Exception as e:
+            errors.append(repr(e))
+    def pub():
+        try:
+            for k in range(1000): bus.publish("t", k)
+        except Exception as e:
+            errors.append(repr(e))
+    c = [threading.Thread(target=churn, daemon=True) for _ in range(3)]
+    p = threading.Thread(target=pub, daemon=True)
+    for t in c: t.start()
+    p.start(); p.join(timeout=8)
+    stop.set()
+    for t in c: t.join(timeout=5)
+    assert not errors, errors
+    assert not p.is_alive()
+    assert len(stable) == 1000
+complexity:
+- op: publish
+  time: O(s)
+  space: O(s)
+- op: subscribe
+  time: O(1) amortized
+  space: O(1)
+- op: unsubscribe
+  time: O(s)
+  space: O(1)
+extensions:
+- q: Cost of publish with s matching subscribers?
+  kind: complexity
+  key_points:
+  - O(s) to snapshot and O(s) handler calls; the lock is held only for the snapshot
+  - Unsubscribe is O(s_topic) with a list; an ordered dict per topic makes it O(1)
+  - Space is O(total subscriptions)
+- q: Make delivery asynchronous with back-pressure. What changes?
+  kind: design
+  key_points:
+  - Per-subscriber bounded queue plus worker thread so slow subscribers do not block publishers
+  - 'Overflow policy: block, drop-oldest or drop-newest, chosen per topic'
+  - Per-subscriber ordering is preserved; cross-subscriber ordering is not
+- q: Scale it across processes/machines and keep delivery guarantees explicit.
+  kind: design
+  key_points:
+  - Broker with topics/partitions; at-least-once with consumer offsets or acks, so handlers must be idempotent
+  - Partition by key for per-key ordering
+  - Dead-letter queue for poison messages instead of dropping errors silently
+- q: Why snapshot and release the lock before calling handlers?
+  kind: reasoning
+  key_points:
+  - Handlers may re-enter the bus (subscribe, unsubscribe, publish) and would deadlock on a non-reentrant
+    lock
+  - A slow handler would otherwise block all other bus operations
+  - 'Trade-off: a just-unsubscribed handler can still see an in-flight event'
+narration: []
+state_aloud:
+- Do not hold the lock while running handlers.
+- One bad handler must not break the others.
+- Snapshot semantics and what that implies for unsubscribe-in-handler.
+- 'Ordering: per-topic subscription order.'
+walkthrough: Subscriptions live in a dict of topic to ordered (token, handler) lists guarded by a lock.
+  publish copies the matching handlers (topic then wildcard) under the lock, releases it, and calls each
+  handler in a try/except, counting successes. Because no lock is held during callbacks, handlers can
+  re-enter the bus safely. Publish is O(s) for s subscribers.
+anki_queries: []
+categories:
+- systems-impl

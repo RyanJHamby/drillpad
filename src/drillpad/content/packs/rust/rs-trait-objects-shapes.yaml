@@ -1,0 +1,265 @@
+title: 'Trait Objects: Box<dyn Shape>'
+target_minutes: 15
+patterns:
+- trait-objects
+- dyn-dispatch
+- default-methods
+- vec-box-dyn
+firm_tags: []
+categories:
+- systems-impl
+statement: |2
+
+  Model shapes with a trait and use them through `Box<dyn Shape>`.
+
+  ```rust
+  trait Shape {
+      fn area(&self) -> f64;
+      fn name(&self) -> &str;                 // "circle", "rectangle", "triangle"
+      fn describe(&self) -> String { ... }    // DEFAULT method: format!("{} with area {:.2}", name, area)
+  }
+
+  struct Circle { radius: f64 }
+  struct Rectangle { width: f64, height: f64 }
+  struct Triangle { base: f64, height: f64 }   // area = base * height / 2
+  // impl Shape for each (circle area uses std::f64::consts::PI)
+
+  fn total_area(shapes: &[Box<dyn Shape>]) -> f64;                       // 0.0 for an empty slice
+  fn largest<'a>(shapes: &'a [Box<dyn Shape>]) -> Option<&'a dyn Shape>; // None if empty; the FIRST one wins ties
+  fn names_by_area(shapes: &[Box<dyn Shape>]) -> Vec<String>;            // names sorted by ascending area (stable)
+  ```
+
+  `describe` must be a default method on the trait (implementors do not write it), and the trait must stay
+  object-safe. Tests define their own extra `Shape` implementors, so match the signatures above exactly.
+
+  Example: `describe()` of `Rectangle { width: 2.0, height: 3.0 }` is `"rectangle with area 6.00"`.
+starter: |2
+
+  trait Shape {
+      fn area(&self) -> f64;
+      fn name(&self) -> &str;
+      fn describe(&self) -> String {
+          todo!()
+      }
+  }
+
+  struct Circle {
+      radius: f64,
+  }
+
+  struct Rectangle {
+      width: f64,
+      height: f64,
+  }
+
+  struct Triangle {
+      base: f64,
+      height: f64,
+  }
+
+  impl Shape for Circle {
+      fn area(&self) -> f64 {
+          todo!()
+      }
+      fn name(&self) -> &str {
+          todo!()
+      }
+  }
+
+  impl Shape for Rectangle {
+      fn area(&self) -> f64 {
+          todo!()
+      }
+      fn name(&self) -> &str {
+          todo!()
+      }
+  }
+
+  impl Shape for Triangle {
+      fn area(&self) -> f64 {
+          todo!()
+      }
+      fn name(&self) -> &str {
+          todo!()
+      }
+  }
+
+  fn total_area(shapes: &[Box<dyn Shape>]) -> f64 {
+      todo!()
+  }
+
+  fn largest<'a>(shapes: &'a [Box<dyn Shape>]) -> Option<&'a dyn Shape> {
+      todo!()
+  }
+
+  fn names_by_area(shapes: &[Box<dyn Shape>]) -> Vec<String> {
+      todo!()
+  }
+hints:
+- '`fn name(&self) -> &str` can return a string literal: `"circle"` is `&''static str`, which coerces to the shorter lifetime of `&self`.'
+- Calling `self.area()` and `self.name()` inside the default `describe` works because default methods can call the trait's other methods; format with `{:.2}`.
+- '`f64` is not `Ord`, so `max_by_key` will not compile. Use `partial_cmp(...).unwrap()` with `max_by`/`sort_by`, or write a loop. `iter().map(|b| b.as_ref())` turns `&Box<dyn Shape>` into `&dyn Shape`. `max_by` returns the LAST maximum, so watch the tie rule.'
+follow_ups:
+- What makes a trait object-safe, and what would break if Shape had a generic method or returned Self?
+- 'Compare Vec<Box<dyn Shape>> with an enum Shape { Circle(..), Rect(..) }: when do you pick each?'
+- 'What is a vtable and what does dynamic dispatch cost compared to a generic fn<T: Shape>?'
+- How would you make the trait usable across threads?
+tests:
+- name: areas and names
+  tags:
+  - single
+  - invalid
+  code: |
+    let eps = 1e-9;
+    let c = Circle { radius: 2.0 };
+    let r = Rectangle { width: 3.0, height: 4.0 };
+    let t = Triangle { base: 6.0, height: 5.0 };
+    assert!((c.area() - std::f64::consts::PI * 4.0).abs() < eps);
+    assert_eq!(r.area(), 12.0);
+    assert_eq!(t.area(), 15.0);
+    assert_eq!((c.name(), r.name(), t.name()), ("circle", "rectangle", "triangle"));
+  hidden: false
+- name: describe is a default method
+  tags:
+  - single
+  - boundary
+  code: |
+    let r = Rectangle { width: 2.0, height: 3.0 };
+    assert_eq!(r.describe(), "rectangle with area 6.00");
+    let c = Circle { radius: 1.0 };
+    assert_eq!(c.describe(), "circle with area 3.14");
+    struct Dot;
+    impl Shape for Dot {
+        fn area(&self) -> f64 { 0.0 }
+        fn name(&self) -> &str { "dot" }
+    }
+    assert_eq!(Dot.describe(), "dot with area 0.00");
+    let boxed: Box<dyn Shape> = Box::new(Triangle { base: 3.0, height: 3.0 });
+    assert_eq!(boxed.describe(), "triangle with area 4.50");
+  hidden: false
+- name: total area over a heterogeneous Vec
+  tags:
+  - ordering
+  - empty
+  code: |
+    let none: Vec<Box<dyn Shape>> = Vec::new();
+    assert_eq!(total_area(&none), 0.0);
+    let shapes: Vec<Box<dyn Shape>> = vec![
+        Box::new(Rectangle { width: 2.0, height: 5.0 }),
+        Box::new(Triangle { base: 4.0, height: 3.0 }),
+        Box::new(Circle { radius: 1.0 }),
+    ];
+    let expected = 10.0 + 6.0 + std::f64::consts::PI;
+    assert!((total_area(&shapes) - expected).abs() < 1e-9);
+    assert_eq!(total_area(&shapes[..2]), 16.0);
+  hidden: false
+- name: largest returns a borrowed trait object
+  tags:
+  - single
+  - ordering
+  - empty
+  code: |
+    let none: Vec<Box<dyn Shape>> = Vec::new();
+    assert!(largest(&none).is_none());
+    let shapes: Vec<Box<dyn Shape>> = vec![
+        Box::new(Rectangle { width: 1.0, height: 1.0 }),
+        Box::new(Circle { radius: 2.0 }),
+        Box::new(Triangle { base: 2.0, height: 2.0 }),
+    ];
+    let big = largest(&shapes).unwrap();
+    assert_eq!(big.name(), "circle");
+    assert_eq!(shapes.len(), 3); // only borrowed, still owned by the Vec
+    let one: Vec<Box<dyn Shape>> = vec![Box::new(Triangle { base: 1.0, height: 1.0 })];
+    assert_eq!(largest(&one).unwrap().name(), "triangle");
+  hidden: false
+- name: largest ties go to the first
+  tags:
+  - duplicate
+  - ordering
+  hidden: true
+  code: |
+    let shapes: Vec<Box<dyn Shape>> = vec![
+        Box::new(Rectangle { width: 2.0, height: 3.0 }),
+        Box::new(Triangle { base: 4.0, height: 3.0 }),
+        Box::new(Rectangle { width: 1.0, height: 1.0 }),
+    ];
+    assert_eq!(largest(&shapes).unwrap().name(), "rectangle");
+    let tie: Vec<Box<dyn Shape>> = vec![
+        Box::new(Triangle { base: 4.0, height: 3.0 }),
+        Box::new(Rectangle { width: 2.0, height: 3.0 }),
+    ];
+    assert_eq!(largest(&tie).unwrap().name(), "triangle");
+- name: names sorted by area (stable)
+  tags:
+  - ordering
+  - duplicate
+  hidden: true
+  code: |
+    let shapes: Vec<Box<dyn Shape>> = vec![
+        Box::new(Circle { radius: 2.0 }),
+        Box::new(Rectangle { width: 1.0, height: 2.0 }),
+        Box::new(Triangle { base: 4.0, height: 1.0 }),
+        Box::new(Rectangle { width: 1.0, height: 1.0 }),
+    ];
+    assert_eq!(names_by_area(&shapes), vec!["rectangle", "rectangle", "triangle", "circle"]);
+    let mut tie: Vec<Box<dyn Shape>> = Vec::new();
+    tie.push(Box::new(Triangle { base: 4.0, height: 3.0 }));
+    tie.push(Box::new(Rectangle { width: 2.0, height: 3.0 }));
+    assert_eq!(names_by_area(&tie), vec!["triangle", "rectangle"]);
+    assert!(names_by_area(&[]).is_empty());
+- name: many shapes
+  tags:
+  - scale
+  hidden: true
+  code: |
+    let mut shapes: Vec<Box<dyn Shape>> = Vec::new();
+    for i in 0..100_000 {
+        let k = (i % 100) as f64 + 1.0;
+        match i % 3 {
+            0 => shapes.push(Box::new(Rectangle { width: k, height: 2.0 })),
+            1 => shapes.push(Box::new(Triangle { base: k, height: 2.0 })),
+            _ => shapes.push(Box::new(Circle { radius: 0.5 })),
+        }
+    }
+    assert!(total_area(&shapes) > 0.0);
+    assert_eq!(names_by_area(&shapes).len(), 100_000);
+    assert_eq!(largest(&shapes).unwrap().area(), 200.0);
+complexity:
+- op: total_area / largest
+  time: O(n)
+  space: O(1)
+- op: names_by_area
+  time: O(n log n)
+  space: O(n)
+extensions:
+- q: When would you choose an enum over Box<dyn Shape>, and what makes a trait object-safe?
+  kind: design
+  key_points:
+  - 'Enum: closed set of variants, exhaustive match, no allocation or vtable; adding an operation is easy, adding a variant touches every match'
+  - 'dyn Trait: open set, downstream crates can add shapes; adding a variant is easy, adding a trait method touches every impl'
+  - 'Object-safe: no methods returning Self, no generic methods (unless where Self: Sized), no Self: Sized supertrait bound'
+- q: What do total_area, largest and the sort cost, and what does dynamic dispatch add?
+  kind: complexity
+  key_points:
+  - 'total_area and largest are one pass: O(n) time, O(1) space'
+  - Sorting names by area is O(n log n) time with an O(n) Vec of (area, name) or references
+  - Each call goes through a vtable pointer (indirect call, no inlining) and each shape is a separate heap allocation; generics would monomorphize but only for one concrete type per Vec
+- q: How would you make a Vec<Box<dyn Shape>> shareable across threads?
+  kind: design
+  key_points:
+  - 'Add the bound: Box<dyn Shape + Send> to move it, Box<dyn Shape + Send + Sync> (or a Shape: Send + Sync supertrait) to share by reference'
+  - Wrap in Arc<Vec<..>> for read-only sharing, Arc<Mutex<..>> for mutation
+  - Rc<dyn Shape> is not Send; use Arc<dyn Shape> across threads
+state_aloud:
+- 'Empty slice: total_area is 0.0 and largest is None, not a panic.'
+- 'f64 is not Ord: compare with partial_cmp (NaN would make unwrap panic, so say how you treat it).'
+- 'Tie rule for largest: first wins; max_by returns the last maximum so use a strict > loop.'
+- largest returns a borrow into the Vec, it does not take ownership.
+walkthrough: |2
+
+  A trait is Rust's interface: each shape struct implements `area` and `name`, and `describe` is a default method defined once on the trait. `Vec<Box<dyn Shape>>` stores different concrete types behind a pointer and a vtable, which is dynamic dispatch like Python's duck typing but checked at compile time, and `largest` returns an `Option<&dyn Shape>` borrowed from the slice rather than moving anything out. Because `f64` is only `PartialOrd`, comparisons use `partial_cmp`, and a plain loop with strict `>` keeps the first maximum.
+id: rs-trait-objects-shapes
+language: rust
+bar_level: 1
+narration: []
+anki_queries: []

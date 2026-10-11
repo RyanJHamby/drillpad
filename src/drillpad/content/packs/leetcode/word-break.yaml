@@ -1,0 +1,101 @@
+id: word-break
+title: Word Break
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Word Break (LC 139)"
+statement: |
+  Given a string `s` and a list `word_dict` of words, decide whether `s` can be split into a sequence of dictionary words. Words may be reused any number of times. The empty string can be split (return `True`).
+
+  Example: `word_break("leetcode", ["leet","code"])` returns `True`.
+starter: |
+  def word_break(s, word_dict):
+      pass
+hints:
+- If the last word is w, the rest of the string before it must itself be breakable.
+- 'State: ok[i] is True when the prefix s[:i] can be segmented.'
+- ok[0] = True; ok[i] is True if some word w ends at i with ok[i-len(w)] True.
+follow_ups:
+- Return all possible sentences (Word Break II).
+- How would a trie help?
+tests:
+- name: two words
+  tags:
+  - ordering
+  code: |
+    assert word_break("leetcode",["leet","code"])==True
+- name: reuse
+  tags:
+  - duplicate
+  code: |
+    assert word_break("applepenapple",["apple","pen"])==True
+- name: fails
+  tags:
+  - invalid
+  code: |
+    assert word_break("catsandog",["cats","dog","sand","and","cat"])==False
+- name: empty string
+  tags:
+  - empty
+  code: |
+    assert word_break("",["a"])==True
+- name: empty dict
+  tags:
+  - empty
+  code: |
+    assert word_break("a",[])==False
+- name: single
+  tags:
+  - single
+  code: |
+    assert word_break("a",["a"])==True
+- name: overlapping words
+  tags:
+  - boundary
+  code: |
+    assert word_break("aaaa",["a","aa"])==True
+    assert word_break("aaaaaaa",["aaaa","aaa"])==True
+- name: exponential trap
+  tags:
+  - scale
+  hidden: true
+  code: |
+    words = ["a" * k for k in range(1, 60)]
+    assert word_break("a" * 3000 + "b", words)==False
+    assert word_break("a" * 3000, words)==True
+complexity:
+- op: overall
+  time: O(n * L)
+  space: O(n)
+  accepted_time:
+  - O(n^2)
+extensions:
+- q: Complexity and bounds
+  kind: complexity
+  key_points:
+  - n positions times the number of candidate word lengths L
+  - Substring hashing costs up to L per check
+  - O(n) boolean table
+- q: Return all sentences (Word Break II)
+  kind: code
+  key_points:
+  - Memoise the list of sentences per start index
+  - Output may be exponential
+  - Use the boolean DP first to prune dead ends
+- q: Dictionary with many words
+  kind: design
+  key_points:
+  - Use a trie so only prefixes that exist are explored
+  - Or group words by length and check only those lengths
+  - Hash set of words for membership
+narration: []
+state_aloud:
+- Empty string is segmentable.
+- Words may be reused.
+- Empty dictionary only matches the empty string.
+walkthrough: 'Let `ok[i]` mean the prefix `s[:i]` can be segmented, with `ok[0] = True`. For each end position `i`, try each distinct word length `L` in the dictionary: if `ok[i-L]` and `s[i-L:i]` is a word, set `ok[i]`. The answer is `ok[n]`. Time is O(n * distinct lengths) substring checks, space O(n).'

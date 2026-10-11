@@ -1,0 +1,284 @@
+id: cpp-spsc-ring-buffer
+title: Lock-free SPSC Ring Buffer
+language: cpp
+bar_level: 3
+target_minutes: 40
+patterns:
+- lock-free
+- spsc
+- acquire-release
+- ring-buffer
+- false-sharing
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Implement `template <class T, std::size_t N> class SpscQueue` (C++20), a bounded single-producer /
+  single-consumer lock-free queue. `N` is a power of two (enforce with `static_assert`). No mutexes, no
+  `std::queue`; use `std::atomic` indices and choose the memory orders deliberately. `T` is default constructible
+  and assignable, so a `std::array<T, N>` buffer is fine.
+
+  API:
+  - `bool try_push(const T&)` / `bool try_push(T&&)`: called only by the producer thread; returns false if full
+  - `bool try_pop(T& out)`: called only by the consumer thread; returns false if empty
+  - `size_t size_approx() const`: racy snapshot of the element count
+  - `static constexpr size_t capacity()` returns `N`; all `N` slots must be usable (use monotonically increasing
+    indices and mask with `N - 1`, rather than wasting a slot to tell full from empty)
+
+  Guarantees to preserve: FIFO order, no lost or duplicated items, and the consumer must see the fully written
+  payload of any element it pops. Keep the producer's index and the consumer's index on separate cache lines
+  (`alignas(64)`) to avoid false sharing.
+
+  Example:
+  ```cpp
+  SpscQueue<int, 4> q;
+  q.try_push(1); q.try_push(2);
+  int x; q.try_pop(x);   // x == 1
+  ```
+starter: |
+  // N must be a power of two; all N slots are usable.
+  template <class T, std::size_t N>
+  class SpscQueue {
+      static_assert(N > 0 && (N & (N - 1)) == 0, "N must be a power of two");
+  public:
+      // Producer thread only. Returns false if the queue is full.
+      bool try_push(const T& v) { (void)v; return false; }
+      bool try_push(T&& v) { (void)v; return false; }
+      // Consumer thread only. Returns false if the queue is empty.
+      bool try_pop(T& out) { (void)out; return false; }
+      // Approximate (racy) element count.
+      std::size_t size_approx() const { return 0; }
+      static constexpr std::size_t capacity() { return N; }
+  };
+prelude: |
+  // Spins (yielding) until pred() is true or ~3 seconds pass; returns whether pred() became true.
+  template <class Pred>
+  bool spin_until(Pred pred) {
+      auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+      while (!pred()) {
+          if (std::chrono::steady_clock::now() > deadline) return false;
+          std::this_thread::yield();
+      }
+      return true;
+  }
+hints:
+- 'Two atomic counters that only ever grow: tail_ (producer writes) and head_ (consumer writes). Slot
+  = index & (N-1); full when tail - head == N, empty when head == tail.'
+- 'Each side may read its OWN index with relaxed, but must load the OTHER side''s index with acquire and
+  publish its own with release: the release store of tail_ is what makes the written slot visible.'
+- Put head_ and tail_ in separate alignas(64) members; otherwise every push/pop invalidates the other
+  core's cache line (false sharing).
+follow_ups:
+- Why is memory_order_relaxed on the publishing store a bug even though x86 happens to hide it?
+- How does index caching (each side caches the other's last seen index) reduce cache traffic?
+- What changes for MPSC or MPMC (CAS on indices, per-slot sequence numbers as in Vyukov's queue)?
+- Why use unsigned monotonically increasing indices, and what happens at wraparound of size_t?
+tests:
+- name: empty pop and single push
+  tags:
+  - empty
+  - single
+  code: |
+    SpscQueue<int, 8> q;
+    int out = -1;
+    CHECK(!q.try_pop(out));
+    CHECK(q.try_push(42));
+    CHECK(q.try_pop(out));
+    CHECK_EQ(out, 42);
+    CHECK(!q.try_pop(out));
+- name: fifo order
+  tags:
+  - ordering
+  code: |
+    SpscQueue<int, 8> q;
+    for (int i = 0; i < 5; i++) CHECK(q.try_push(i));
+    CHECK_EQ(q.size_approx(), 5u);
+    for (int i = 0; i < 5; i++) { int out = -1; CHECK(q.try_pop(out)); CHECK_EQ(out, i); }
+    CHECK_EQ(q.size_approx(), 0u);
+- name: full queue rejects push
+  tags:
+  - boundary
+  - scale
+  code: |
+    SpscQueue<int, 4> q;
+    using Q4 = SpscQueue<int, 4>;
+    CHECK_EQ(Q4::capacity(), 4u);
+    for (int i = 0; i < 4; i++) CHECK(q.try_push(i));
+    CHECK(!q.try_push(99));
+    int out;
+    CHECK(q.try_pop(out));
+    CHECK_EQ(out, 0);
+    CHECK(q.try_push(99));
+    for (int want : {1, 2, 3, 99}) { CHECK(q.try_pop(out)); CHECK_EQ(out, want); }
+    CHECK(!q.try_pop(out));
+- name: wraps around many times
+  tags:
+  - boundary
+  - ordering
+  code: |
+    SpscQueue<int, 4> q;
+    int next_in = 0, next_out = 0, out;
+    for (int round = 0; round < 1000; round++) {
+        int burst = 1 + round % 4;
+        for (int i = 0; i < burst; i++) CHECK(q.try_push(next_in++));
+        for (int i = 0; i < burst; i++) { CHECK(q.try_pop(out)); CHECK_EQ(out, next_out++); }
+    }
+    CHECK(!q.try_pop(out));
+- name: capacity one
+  tags:
+  - zero-capacity
+  - single
+  code: |
+    SpscQueue<int, 1> q;
+    int out;
+    CHECK(q.try_push(7));
+    CHECK(!q.try_push(8));
+    CHECK(q.try_pop(out));
+    CHECK_EQ(out, 7);
+    CHECK(q.try_push(9));
+    CHECK(q.try_pop(out));
+    CHECK_EQ(out, 9);
+- name: move-only and string payloads
+  hidden: true
+  tags:
+  - single
+  - state-reuse
+  code: |
+    SpscQueue<std::string, 4> q;
+    std::string s(100, 'x');
+    CHECK(q.try_push(std::move(s)));
+    CHECK(q.try_push(std::string("tail")));
+    std::string out;
+    CHECK(q.try_pop(out));
+    CHECK_EQ(out, std::string(100, 'x'));
+    CHECK(q.try_pop(out));
+    CHECK_EQ(out, "tail");
+- name: two threads preserve order and lose nothing
+  tags:
+  - concurrency
+  - scale
+  - ordering
+  code: |
+    constexpr int kItems = 300000;
+    SpscQueue<int, 1024> q;
+    std::atomic<bool> bad{false};
+    std::atomic<int> received{0};
+    std::thread consumer([&] {
+        int expect = 0;
+        while (expect < kItems) {
+            int v;
+            if (q.try_pop(v)) {
+                if (v != expect) { bad = true; return; }
+                ++expect;
+                received.store(expect, std::memory_order_relaxed);
+            } else if (!spin_until([&] { return q.size_approx() > 0; })) { bad = true; return; }
+        }
+    });
+    std::thread producer([&] {
+        for (int i = 0; i < kItems; i++) {
+            while (!q.try_push(i)) {
+                if (bad) return;
+                std::this_thread::yield();
+            }
+        }
+    });
+    producer.join();
+    consumer.join();
+    CHECK(!bad);
+    CHECK_EQ(received.load(), kItems);
+- name: payload written before publish is visible
+  hidden: true
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    struct Msg { long a, b, c, d; };
+    constexpr int kItems = 100000;
+    SpscQueue<Msg, 64> q;
+    std::atomic<bool> bad{false};
+    std::thread consumer([&] {
+        for (long i = 0; i < kItems;) {
+            Msg m;
+            if (q.try_pop(m)) {
+                if (m.a != i || m.b != i * 2 || m.c != i * 3 || m.d != i * 4) { bad = true; return; }
+                ++i;
+            } else if (bad) return;
+            else std::this_thread::yield();
+        }
+    });
+    std::thread producer([&] {
+        for (long i = 0; i < kItems; i++) {
+            Msg m{i, i * 2, i * 3, i * 4};
+            while (!q.try_push(m)) { if (bad) return; std::this_thread::yield(); }
+        }
+    });
+    producer.join();
+    consumer.join();
+    CHECK(!bad);
+- name: indices sit on separate cache lines
+  hidden: true
+  tags:
+  - boundary
+  code: |
+    SpscQueue<int, 8> q;
+    CHECK(q.try_push(1));
+    using Q8 = SpscQueue<int, 8>;
+    CHECK(alignof(Q8) >= 64);
+    CHECK(sizeof(Q8) >= 128);
+complexity:
+- op: try_push
+  time: O(1) worst case
+  space: O(1)
+- op: try_pop
+  time: O(1) worst case
+  space: O(1)
+- op: queue
+  time: O(1)
+  space: O(N)
+extensions:
+- q: Which memory orders does each operation need and why?
+  kind: reasoning
+  key_points:
+  - 'Producer: relaxed load of own tail_, acquire load of head_ (so the consumer''s read of the slot happens-before
+    our overwrite), release store of tail_ to publish the payload'
+  - 'Consumer mirrors this: acquire load of tail_, release store of head_ after it finished reading the
+    slot'
+  - A relaxed publish lets the consumer observe the new index before the payload write, reading garbage
+    on ARM or after compiler reordering
+- q: What are the progress guarantees and what is the cost model?
+  kind: complexity
+  key_points:
+  - 'Wait-free for both sides: every call completes in a bounded number of steps with no loops or CAS'
+  - No allocation; steady-state cost is two cache-line transfers per item at worst
+  - Batching pops/pushes or caching the remote index amortizes cache-line ping-pong
+- q: How do you lay the object out for performance (cache lines, padding, ABI)?
+  kind: design
+  key_points:
+  - head_ and tail_ each on their own 64-byte line (alignas(64)) to avoid false sharing; use std::hardware_destructive_interference_size
+    where available, but beware it varies by ABI/-march
+  - Keep the buffer on its own line(s) so readers of indices do not share with payload
+  - Choose N power of two so index & (N-1) replaces a modulo; over-aligned types need aligned new when
+    heap-allocated
+- q: Extend to multiple producers.
+  kind: design
+  key_points:
+  - 'Producers must claim a slot with fetch_add or CAS on tail_, then publish individually: per-slot sequence
+    numbers (Vyukov bounded MPMC)'
+  - 'Progress degrades to lock-free: a stalled producer between claim and publish blocks consumers at
+    that slot'
+  - Or shard into one SPSC queue per producer and have the consumer poll them, which keeps wait-free hot
+    paths
+narration: []
+state_aloud:
+- 'State the threading contract: exactly one producer thread and one consumer thread, otherwise it is
+  a data race.'
+- 'Full vs empty: monotonic indices with tail - head == N avoid the wasted slot.'
+- 'Acquire/release pairing: the release store publishes the payload, the acquire load of the same index
+  consumes it.'
+- False sharing between head_ and tail_ is a performance bug, not a correctness bug; mention alignas(64).
+walkthrough: |
+  Two ever-increasing indices, each written by exactly one thread, so no CAS is needed: the producer writes the slot then release-stores `tail_`, the consumer acquire-loads `tail_`, reads the slot and release-stores `head_`, which hands the slot back. The acquire/release pairs are the happens-before edges that make the payload visible; `alignas(64)` keeps the two indices from sharing a cache line. A Python Queue takes a lock and the GIL hides races; here correctness is exactly the memory-ordering argument.
+anki_queries: []
+categories:
+- trading
+- systems-impl

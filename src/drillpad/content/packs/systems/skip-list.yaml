@@ -1,0 +1,214 @@
+id: skip-list
+title: Skip List
+bar_level: 3
+target_minutes: 35
+patterns:
+- skip-list
+- probabilistic
+- ordered-set
+- injectable-rng
+firm_tags:
+- ai-infra
+- distsys
+statement: |
+  Implement `SkipList(p=0.5, max_level=16, rng=None)`, an ordered set of comparable keys. `rng` is
+  a `random.Random` (default `random.Random()`); use only `rng.random()` for coin flips: a new node
+  gets level 1, and while `rng.random() < p` and level < `max_level` its level increases by one.
+
+  - `add(key)` -> `True` if inserted, `False` if already present.
+  - `remove(key)` -> `True` if removed, `False` if absent.
+  - `key in sl` (`__contains__`), `len(sl)`, iteration in ascending order (`__iter__`).
+  - `ceiling(key)` -> smallest stored key `>= key`, or `None`.
+  - `range_query(lo, hi)` -> list of keys with `lo <= k < hi` in ascending order.
+  - Search must start from the highest level and drop down (expected O(log n)); correctness must
+    not depend on the random levels (even if `rng.random()` is constant).
+
+  Example
+  ```python
+  sl = SkipList(rng=random.Random(1)); [sl.add(x) for x in (5, 1, 3)]
+  list(sl) == [1, 3, 5]; sl.ceiling(2) == 3; sl.range_query(1, 5) == [1, 3]
+  ```
+starter: |
+  import random
+
+  class SkipList:
+      def __init__(self, p=0.5, max_level=16, rng=None):
+          pass
+
+      def add(self, key):
+          pass
+
+      def remove(self, key):
+          pass
+
+      def __contains__(self, key):
+          pass
+
+      def __len__(self):
+          pass
+
+      def __iter__(self):
+          pass
+
+      def ceiling(self, key):
+          pass
+
+      def range_query(self, lo, hi):
+          pass
+hints:
+- Each node holds a forward-pointer array whose length is its level; the head sentinel has max_level pointers.
+- Search from the top level down, recording the predecessor at every level in an update array.
+- Insert/remove splice using the update array; shrink the list's current level when top levels empty out.
+follow_ups:
+- How would you implement rank/order-statistics queries (kth element)?
+- What changes to support duplicate keys?
+tests:
+- name: basic ordered set
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    import random
+    sl = SkipList(rng=random.Random(1))
+    assert len(sl) == 0 and list(sl) == []
+    assert [sl.add(x) for x in (5, 1, 3, 3, 5)] == [True, True, True, False, False]
+    assert list(sl) == [1, 3, 5] and len(sl) == 3
+    assert 3 in sl and 4 not in sl
+    assert sl.remove(3) is True and sl.remove(3) is False and 3 not in sl
+    assert list(sl) == [1, 5]
+- name: ceiling and range
+  tags:
+  - boundary
+  - ordering
+  code: |
+    import random
+    sl = SkipList(rng=random.Random(2))
+    for x in (10, 20, 30, 40):
+        sl.add(x)
+    assert sl.ceiling(5) == 10 and sl.ceiling(20) == 20 and sl.ceiling(21) == 30
+    assert sl.ceiling(41) is None
+    assert sl.range_query(10, 40) == [10, 20, 30]
+    assert sl.range_query(11, 20) == []
+    assert sl.range_query(0, 100) == [10, 20, 30, 40]
+    assert sl.range_query(50, 60) == []
+- name: empty and single
+  tags:
+  - empty
+  - single
+  code: |
+    import random
+    sl = SkipList(rng=random.Random(3))
+    assert sl.ceiling(1) is None and sl.range_query(0, 10) == [] and sl.remove(1) is False
+    assert 1 not in sl
+    sl.add(1)
+    assert list(sl) == [1] and sl.ceiling(0) == 1
+    sl.remove(1)
+    assert len(sl) == 0 and list(sl) == []
+    sl.add(2)
+    assert list(sl) == [2]
+- name: matches sorted model
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    import random
+    r = random.Random(11)
+    sl = SkipList(rng=random.Random(5))
+    model = set()
+    for _ in range(4000):
+        x = r.randrange(300)
+        if r.random() < 0.55:
+            assert sl.add(x) == (x not in model); model.add(x)
+        else:
+            assert sl.remove(x) == (x in model); model.discard(x)
+        if r.random() < 0.05:
+            assert list(sl) == sorted(model) and len(sl) == len(model)
+    lo, hi = 50, 120
+    assert sl.range_query(lo, hi) == sorted(k for k in model if lo <= k < hi)
+    assert all((k in sl) == (k in model) for k in range(300))
+    c = sl.ceiling(77)
+    assert c == min((k for k in model if k >= 77), default=None)
+    assert len(model) > 10
+- name: correct for degenerate rng
+  hidden: true
+  tags:
+  - boundary
+  - ordering
+  code: |
+    class Const:
+        def __init__(self, v): self.v = v
+        def random(self): return self.v
+    for v in (0.99, 0.0):         # all level 1 (a linked list) and all max level
+        sl = SkipList(max_level=4, rng=Const(v))
+        for x in (4, 2, 9, 7, 1):
+            sl.add(x)
+        assert list(sl) == [1, 2, 4, 7, 9] and sl.ceiling(5) == 7
+        sl.remove(4); sl.remove(9)
+        assert list(sl) == [1, 2, 7] and 9 not in sl
+- name: sorted insert is logarithmic
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    import random, time
+    sl = SkipList(rng=random.Random(9))
+    t0 = time.monotonic()
+    for i in range(20000):
+        sl.add(i)
+    assert len(sl) == 20000 and sl.ceiling(19999) == 19999
+    assert all(i in sl for i in range(0, 20000, 97))
+    assert time.monotonic() - t0 < 6
+complexity:
+- op: add
+  time: O(log n) expected
+  space: O(n)
+- op: remove
+  time: O(log n) expected
+  space: O(n)
+- op: contains
+  time: O(log n) expected
+  space: O(n)
+- op: range_query
+  time: O(log n + k) expected
+  space: O(k)
+extensions:
+- q: Expected and worst-case costs, and the space overhead?
+  kind: complexity
+  key_points:
+  - Search/insert/delete are O(log n) expected; worst case is O(n) if the random levels degenerate
+  - 'Expected space O(n): average pointers per node is 1/(1-p) = 2 for p = 0.5'
+  - range_query is O(log n + k) because it seeks once then walks level 0
+- q: Why do databases (Redis sorted sets, LevelDB memtables) use skip lists instead of balanced trees?
+  kind: design
+  key_points:
+  - 'Simpler code: no rotations; ordered iteration and range scans are a linked-list walk'
+  - 'Concurrent versions are easier: lock-free insertion by CAS on individual next pointers'
+  - 'Trade-off: worse cache locality than B-trees and probabilistic rather than guaranteed bounds'
+- q: How would you make it thread-safe?
+  kind: design
+  key_points:
+  - Coarse reader-writer lock is correct but limits scalability
+  - Lock-free (CAS on next pointers with marked-for-deletion bits, as in Java's ConcurrentSkipListMap)
+  - Readers can traverse without locks if nodes are never freed while visible (epoch-based reclamation)
+- q: How do you pick p and max_level?
+  kind: reasoning
+  key_points:
+  - p = 1/2 or 1/4; smaller p means fewer pointers but longer expected search
+  - max_level ~ log_{1/p}(N_max); 16 levels covers about 65k keys at p=1/2, 32 for billions
+  - Inject the RNG so tests are deterministic
+narration: []
+state_aloud:
+- Expected, not worst-case, O(log n).
+- Duplicate adds return False.
+- Correctness must not depend on the random levels.
+- Update array defaults to head for levels above the current height.
+walkthrough: Nodes carry a random height and an array of forward pointers; a head sentinel has the maximum
+  height. Every operation walks from the highest active level downwards, moving right while the next key
+  is smaller, and records the predecessor at each level. add and remove splice nodes into or out of each
+  level they occupy using those predecessors; membership, ceiling and range queries use the level-0 successor.
+  Expected O(log n) per operation.
+anki_queries: []
+categories:
+- systems-impl

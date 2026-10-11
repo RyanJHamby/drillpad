@@ -1,0 +1,123 @@
+id: subtree-of-another-tree
+title: Subtree of Another Tree
+bar_level: 1
+target_minutes: 15
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Subtree of Another Tree (LC 572)"
+statement: |
+  Return `True` if the tree `sub` appears as a subtree of `root`: there is some node in `root` whose entire subtree (shape and values, down to the leaves) is identical to `sub`. An empty `sub` matches any tree. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `[3,4,5,1,2]` contains `[4,1,2]`, but `[3,4,5,1,2,None,None,None,None,0]` does not (the extra `0` makes the subtree differ).
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def is_subtree(root, sub):
+      pass
+hints:
+- If you already had an "are these two trees identical" helper, what would you call it on?
+- Try the identical-tree check at every node of `root`.
+- The match must cover the full subtree down to the leaves, not just the top of `sub`.
+follow_ups:
+- Do better than O(n * m) in the worst case.
+- Serialize both trees and use string matching; what pitfalls arise?
+tests:
+- name: subtree present
+  tags:
+  - ordering
+  code: |
+    assert is_subtree(build_tree([3,4,5,1,2]), build_tree([4,1,2])) is True
+- name: extra descendant breaks the match
+  tags:
+  - boundary
+  code: |
+    assert is_subtree(build_tree([3,4,5,1,2,None,None,None,None,0]), build_tree([4,1,2])) is False
+- name: empty sub
+  tags:
+  - empty
+  code: |
+    assert is_subtree(build_tree([1]), None) is True
+    assert is_subtree(None, build_tree([1])) is False
+- name: single node
+  tags:
+  - single
+  code: |
+    assert is_subtree(build_tree([1]), build_tree([1])) is True
+    assert is_subtree(build_tree([1]), build_tree([2])) is False
+- name: repeated values
+  tags:
+  - duplicate
+  code: |
+    assert is_subtree(build_tree([1,1]), build_tree([1])) is True
+    assert is_subtree(build_tree([1,1]), build_tree([1,1])) is True
+    assert is_subtree(build_tree([1,1,1]), build_tree([1,None,1])) is False
+- name: whole tree is a subtree of itself
+  tags:
+  - ordering
+  code: |
+    assert is_subtree(build_tree([2,1,3]), build_tree([2,1,3])) is True
+- name: sub matches at a leaf
+  hidden: true
+  tags:
+  - boundary
+  code: |
+    assert is_subtree(build_tree([5,3,8,1,4]), build_tree([4])) is True
+complexity:
+- op: overall
+  time: O(n * m)
+  space: O(h)
+extensions:
+- q: Complexity of the straightforward approach?
+  kind: complexity
+  key_points:
+  - Up to n starting points, each compare costs up to m
+  - Worst case O(n * m)
+  - Space is recursion depth
+- q: Faster approach?
+  kind: design
+  key_points:
+  - Serialize both trees with null markers and delimiters
+  - Substring search with KMP gives O(n + m)
+  - Without markers and delimiters the string match gives false positives
+- q: Why the whole subtree and not just a prefix match?
+  kind: reasoning
+  key_points:
+  - A subtree includes all descendants
+  - Extra children in root at the match point make it different
+  - The identical-tree check must reject that
+narration: []
+state_aloud:
+- Empty sub matches everything; empty root with non-empty sub does not.
+- Repeated values mean several candidate nodes.
+- Match must include all descendants.
+- The whole tree counts as its own subtree.
+walkthrough: |
+  Reuse an identical-tree helper. If `sub` is empty, return `True`; if `root` is empty, return `False`. Otherwise `sub` is a subtree if it is identical to the tree at `root`, or is a subtree of the left child, or of the right child. Each starting node costs at most the size of `sub` to check.

@@ -1,0 +1,103 @@
+id: reconstruct-itinerary
+title: Reconstruct Itinerary
+bar_level: 3
+target_minutes: 38
+patterns:
+- graph-bfs-dfs
+- eulerian-path
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Reconstruct Itinerary (LC 332)"
+statement: |
+  You hold a list of airline `tickets`, each a pair `[from, to]` of airport codes. Rebuild the trip that starts at `"JFK"` and uses every ticket exactly once. If several valid itineraries exist, return the one that is smallest when compared as a list of strings (lexicographic order, element by element). A valid itinerary is guaranteed to exist. With no tickets the answer is `["JFK"]`.
+
+  Example: `find_itinerary([["MUC","LHR"],["JFK","MUC"],["SFO","SJC"],["LHR","SFO"]])` returns `["JFK","MUC","LHR","SFO","SJC"]`.
+starter: |
+  def find_itinerary(tickets):
+      pass
+hints:
+- Every ticket must be used once, so you are looking for an Eulerian path, not a simple path.
+- A greedy walk taking the smallest destination can strand you at a dead end with tickets left; that dead end belongs at the end of the route.
+- 'Hierholzer''s algorithm: DFS taking the smallest unused edge, append the airport to the answer when it has no more outgoing tickets, and reverse at the end.'
+follow_ups:
+- Detect when no valid itinerary exists.
+- Return the count of valid itineraries.
+tests:
+- name: linear chain
+  tags:
+  - ordering
+  code: |
+    t=[["MUC","LHR"],["JFK","MUC"],["SFO","SJC"],["LHR","SFO"]]
+    assert find_itinerary(t)==["JFK","MUC","LHR","SFO","SJC"]
+- name: smallest choice with a cycle
+  tags:
+  - ordering
+  - boundary
+  code: |
+    t=[["JFK","SFO"],["JFK","ATL"],["SFO","ATL"],["ATL","JFK"],["ATL","SFO"]]
+    assert find_itinerary(t)==["JFK","ATL","JFK","SFO","ATL","SFO"]
+- name: single ticket
+  tags:
+  - single
+  code: |
+    assert find_itinerary([["JFK","AAA"]])==["JFK","AAA"]
+- name: no tickets
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert find_itinerary([])==["JFK"]
+- name: dead end goes last
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    t=[["JFK","KUL"],["JFK","NRT"],["NRT","JFK"]]
+    assert find_itinerary(t)==["JFK","NRT","JFK","KUL"]
+- name: duplicate tickets
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    t=[["JFK","A"],["JFK","A"],["A","JFK"]]
+    assert find_itinerary(t)==["JFK","A","JFK","A"]
+- name: very long itinerary
+  tags:
+  - scale
+  hidden: true
+  code: |
+    t=[["JFK","A"],["A","JFK"]]*50000
+    r=find_itinerary(t)
+    assert len(r)==100001 and r==["JFK","A"]*50000+["JFK"]
+complexity:
+- op: overall
+  time: O(E log E)
+  space: O(E)
+extensions:
+- q: Where does the log factor come from and how can you remove it?
+  kind: complexity
+  key_points:
+  - Sorting each adjacency list or using a heap per airport
+  - Total edges E so sorting costs O(E log E)
+  - Hierholzer itself is O(E); the order requirement adds the log
+- q: Why does appending on exit and reversing work?
+  kind: reasoning
+  key_points:
+  - A node is appended only after all its outgoing edges are consumed
+  - Dead-end subtours are therefore placed after the main route
+  - Reversing the post-order yields the Eulerian path in lexicographic preference
+- q: How would you detect that no itinerary exists?
+  kind: design
+  key_points:
+  - 'Check degree conditions: at most one node with out-in = 1 and one with in-out = 1'
+  - Verify the start node is the valid one
+  - After running, a result shorter than E+1 means the graph was disconnected
+narration: []
+state_aloud:
+- With no tickets the answer is just JFK.
+- Repeated tickets are distinct edges.
+- Dead-end branches must be visited last.
+walkthrough: |
+  Build an adjacency list per airport sorted so the smallest destination is popped first (store it in reverse and pop from the end). Run an iterative Hierholzer: keep a stack starting at JFK; while the top airport has unused tickets push its next destination, otherwise pop it onto the route. The popped order is the itinerary reversed, so reverse it before returning. Dead-end airports are popped first, which puts them at the end of the answer.

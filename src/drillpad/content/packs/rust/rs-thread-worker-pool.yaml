@@ -1,0 +1,272 @@
+title: Worker Pool with Channels and Arc<Mutex>
+target_minutes: 40
+patterns:
+- thread-pool
+- mpsc-channel
+- arc-mutex-receiver
+- join-on-drop
+- send-bound
+firm_tags:
+- ai-infra
+- distsys
+categories:
+- systems-impl
+statement: |2
+
+  Build a fixed-size thread pool from `std::thread` and `std::sync::mpsc` only.
+
+  ```rust
+  use std::sync::mpsc;
+
+  type Job = Box<dyn FnOnce() + Send + 'static>;
+
+  struct ThreadPool { /* workers, sender */ }
+
+  impl ThreadPool {
+      fn new(size: usize) -> ThreadPool;                   // size >= 1: spawn that many worker threads
+      fn size(&self) -> usize;
+      fn execute<F>(&self, f: F) where F: FnOnce() + Send + 'static;
+      fn submit<T, F>(&self, f: F) -> mpsc::Receiver<T>    // run f on the pool; the receiver yields its result
+          where F: FnOnce() -> T + Send + 'static, T: Send + 'static;
+  }
+  // Drop for ThreadPool: stop accepting work, let workers finish every queued job, then join all workers.
+  ```
+
+  Requirements:
+
+  - Jobs go through ONE `mpsc` channel; workers share its `Receiver` as `Arc<Mutex<mpsc::Receiver<Job>>>`.
+  - Jobs run in parallel across workers (two jobs that wait for each other on a `Barrier(2)` must complete with `size >= 2`).
+  - A job that **panics must not kill its worker** (use `std::panic::catch_unwind`); later jobs still run.
+  - `submit`'s receiver must yield `Err` on `recv()` if the job panicked (the sender is dropped without sending).
+  - Dropping the pool runs all already-queued jobs to completion and joins every worker. Hold the receiver lock only
+    while waiting for a job, never while running it, or the pool is effectively single-threaded.
+  - With `size == 1`, jobs run in submission order (FIFO).
+
+  Example: submit 100 increments of an `AtomicUsize`, drop the pool, and the counter reads 100.
+starter: |2
+
+  use std::sync::{mpsc, Arc, Mutex};
+  use std::thread;
+
+  type Job = Box<dyn FnOnce() + Send + 'static>;
+
+  struct ThreadPool {
+      workers: Vec<thread::JoinHandle<()>>,
+      sender: Option<mpsc::Sender<Job>>,
+  }
+
+  impl ThreadPool {
+      fn new(size: usize) -> ThreadPool {
+          todo!()
+      }
+
+      fn size(&self) -> usize {
+          todo!()
+      }
+
+      fn execute<F>(&self, f: F)
+      where
+          F: FnOnce() + Send + 'static,
+      {
+          todo!()
+      }
+
+      fn submit<T, F>(&self, f: F) -> mpsc::Receiver<T>
+      where
+          F: FnOnce() -> T + Send + 'static,
+          T: Send + 'static,
+      {
+          todo!()
+      }
+  }
+
+  impl Drop for ThreadPool {
+      fn drop(&mut self) {
+          // TODO: close the channel, then join every worker
+      }
+  }
+hints:
+- '`Receiver` is not `Clone` and not `Sync`: to share it between workers wrap it as `Arc<Mutex<Receiver<Job>>>` and give each worker `Arc::clone`. The worker loop is `loop { let msg = rx.lock().unwrap().recv(); match msg { Ok(job) => job(), Err(_) => break } }`.'
+- 'The temporary `MutexGuard` in `let msg = rx.lock().unwrap().recv();` is dropped at the end of that statement, so the lock is NOT held while `job()` runs. Writing `while let Ok(job) = rx.lock().unwrap().recv() { job() }` keeps the guard alive for the whole loop body and serializes your pool: a classic bug.'
+- 'Shutdown: `drop(self.sender.take())` closes the channel; every `recv()` then returns `Err` once the queue is drained, so workers exit their loop; then `for h in self.workers.drain(..) { let _ = h.join(); }`. Wrap each job in `std::panic::catch_unwind(AssertUnwindSafe(job))` so a panic does not end the thread.'
+follow_ups:
+- Why do jobs need the Send + 'static bounds? What would the compiler say if you removed 'static?
+- Why Arc<Mutex<Receiver>> instead of one channel per worker? What are the tradeoffs?
+- What changes if a job panics while holding the receiver mutex (lock poisoning)?
+- How would you add graceful shutdown with a timeout, or a bounded queue with backpressure (sync_channel)?
+tests:
+- name: all queued jobs run before drop returns
+  tags:
+  - concurrency
+  - state-reuse
+  code: |
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    let counter = Arc::new(AtomicUsize::new(0));
+    {
+        let pool = ThreadPool::new(4);
+        for _ in 0..100 {
+            let c = Arc::clone(&counter);
+            pool.execute(move || { c.fetch_add(1, Ordering::SeqCst); });
+        }
+    } // drop joins workers after the queue drains
+    assert_eq!(counter.load(Ordering::SeqCst), 100);
+  hidden: false
+- name: submit returns results
+  tags:
+  - single
+  - concurrency
+  code: |
+    let pool = ThreadPool::new(3);
+    assert_eq!(pool.size(), 3);
+    let rx = pool.submit(|| 2 + 2);
+    assert_eq!(rx.recv().unwrap(), 4);
+    let rxs: Vec<_> = (0..20u64).map(|i| pool.submit(move || i * i)).collect();
+    let got: Vec<u64> = rxs.into_iter().map(|r| r.recv().unwrap()).collect();
+    assert_eq!(got, (0..20u64).map(|i| i * i).collect::<Vec<_>>());
+    let s = pool.submit(|| String::from("owned result"));
+    assert_eq!(s.recv().unwrap(), "owned result");
+  hidden: false
+- name: single worker is FIFO
+  tags:
+  - ordering
+  - zero-capacity
+  - concurrency
+  code: |
+    use std::sync::{Arc, Mutex};
+    let log = Arc::new(Mutex::new(Vec::new()));
+    {
+        let pool = ThreadPool::new(1);
+        for i in 0..50 {
+            let log = Arc::clone(&log);
+            pool.execute(move || log.lock().unwrap().push(i));
+        }
+    }
+    assert_eq!(*log.lock().unwrap(), (0..50).collect::<Vec<_>>());
+  hidden: false
+- name: jobs genuinely run in parallel
+  tags:
+  - concurrency
+  - boundary
+  code: |
+    use std::sync::{Arc, Barrier};
+    // Both jobs block until the other arrives. A pool that serializes jobs would hang (and time out).
+    let pool = ThreadPool::new(2);
+    let barrier = Arc::new(Barrier::new(2));
+    let b1 = Arc::clone(&barrier);
+    let b2 = Arc::clone(&barrier);
+    let r1 = pool.submit(move || { b1.wait(); 1 });
+    let r2 = pool.submit(move || { b2.wait(); 2 });
+    assert_eq!(r1.recv().unwrap() + r2.recv().unwrap(), 3);
+  hidden: false
+- name: a panicking job does not kill its worker
+  tags:
+  - invalid
+  - concurrency
+  - state-reuse
+  hidden: true
+  code: |
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    let counter = Arc::new(AtomicUsize::new(0));
+    let rx_bad;
+    {
+        let pool = ThreadPool::new(1);
+        rx_bad = pool.submit(|| -> i32 { panic!("boom") });
+        for _ in 0..5 {
+            let c = Arc::clone(&counter);
+            pool.execute(move || { c.fetch_add(1, Ordering::SeqCst); });
+        }
+    }
+    assert_eq!(counter.load(Ordering::SeqCst), 5, "the single worker must survive the panic");
+    assert!(rx_bad.recv().is_err(), "panicked job never sends a result");
+- name: work is spread over at most size threads
+  tags:
+  - concurrency
+  - boundary
+  hidden: true
+  code: |
+    use std::collections::HashSet;
+    use std::sync::{Arc, Mutex};
+    use std::thread::ThreadId;
+    let ids: Arc<Mutex<HashSet<ThreadId>>> = Arc::new(Mutex::new(HashSet::new()));
+    {
+        let pool = ThreadPool::new(3);
+        for _ in 0..60 {
+            let ids = Arc::clone(&ids);
+            pool.execute(move || { ids.lock().unwrap().insert(std::thread::current().id()); });
+        }
+    }
+    let n = ids.lock().unwrap().len();
+    assert!(n >= 1 && n <= 3, "saw {} distinct worker threads", n);
+    assert!(!ids.lock().unwrap().contains(&std::thread::current().id()), "jobs must not run on the caller");
+- name: many jobs and an idle pool shut down cleanly
+  tags:
+  - scale
+  - empty
+  - concurrency
+  hidden: true
+  code: |
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+    {
+        let idle = ThreadPool::new(8); // never given work: drop must not hang
+    }
+    let total = Arc::new(AtomicU64::new(0));
+    {
+        let pool = ThreadPool::new(4);
+        for i in 0..10_000u64 {
+            let t = Arc::clone(&total);
+            pool.execute(move || { t.fetch_add(i, Ordering::Relaxed); });
+        }
+    }
+    assert_eq!(total.load(Ordering::SeqCst), 9_999u64 * 10_000 / 2);
+complexity:
+- op: execute / submit
+  time: O(1)
+  space: O(1)
+- op: drop (shutdown)
+  time: O(workers + queued jobs)
+  space: O(1)
+- op: pool overall
+  time: O(1)
+  space: O(queued jobs)
+extensions:
+- q: What do the Send and 'static bounds on a job guarantee, and why is Arc<Mutex<Receiver>> needed?
+  kind: design
+  key_points:
+  - 'Send: the closure and everything it captures may be moved to another thread; Rc or raw non-Send types are rejected at compile time'
+  - '''static: the job may outlive the caller''s stack frame, so it cannot borrow locals (use move closures, Arc clones, or std::thread::scope for borrowed data)'
+  - 'mpsc is multi-producer, SINGLE-consumer: Receiver is not Sync/Clone, so sharing it among workers needs Arc<Mutex<..>>; the Mutex is also what makes workers take turns waiting'
+- q: What are the costs and bottlenecks of this design?
+  kind: complexity
+  key_points:
+  - Enqueue and dequeue are O(1); dequeue contends on one mutex, so throughput does not scale for very tiny jobs
+  - 'Queue space grows with pending jobs: the unbounded channel gives no backpressure (sync_channel bounds it and blocks producers)'
+  - 'Alternatives: crossbeam channels (multi-consumer) or per-worker deques with work stealing like rayon'
+- q: How do you shut down safely and what are the failure modes?
+  kind: reasoning
+  key_points:
+  - Dropping the Sender closes the channel; recv() returns Err only after buffered jobs are drained, so no queued job is lost
+  - Join every worker in Drop; ignore join errors rather than panicking in a destructor
+  - A panic while holding the receiver lock poisons the mutex; here the lock is never held while running a job, and jobs are wrapped in catch_unwind
+- q: How would you return typed results and let callers wait for completion, like a future or JoinHandle?
+  kind: design
+  key_points:
+  - 'submit creates a one-shot channel per job and sends the result back on it: the Receiver<T> is the handle'
+  - 'If the job panics the Sender is dropped unsent, so recv() returns Err: map that to a JobPanicked error'
+  - 'T: Send is required because the value crosses threads'
+state_aloud:
+- Do not hold the receiver mutex while running a job, or the pool serializes.
+- Drop must close the channel first, then join; joining before closing deadlocks forever.
+- 'A panicking job must not take the worker down: catch_unwind, keep looping.'
+- size of 1 gives FIFO order; an idle pool must still shut down cleanly.
+- Tests join all work (drop or recv), so assertions never race with running jobs.
+walkthrough: |2
+
+  `new` creates one `mpsc` channel, wraps the `Receiver` in `Arc<Mutex<..>>`, and spawns `size` threads that loop on `recv()`; the guard from `lock()` is a temporary dropped at the end of the `let`, so only waiting (not running) holds the lock, and `catch_unwind` keeps a panicking job from killing its worker. `Drop` takes the `Sender` out of its `Option` so the channel closes, workers drain the queue and see `Err`, and then each handle is joined. `Send + 'static` on jobs is how Rust proves at compile time there are no data races, whereas Python's GIL hides them and its pool can leak running threads at exit.
+id: rs-thread-worker-pool
+language: rust
+bar_level: 3
+narration: []
+anki_queries: []

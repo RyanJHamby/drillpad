@@ -1,0 +1,223 @@
+id: circuit-breaker
+title: Circuit Breaker
+bar_level: 3
+target_minutes: 35
+patterns:
+- circuit-breaker
+- state-machine
+- resilience
+- injectable-clock
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement `CircuitBreaker(failure_threshold, recovery_timeout, success_threshold=1, clock=time.monotonic)`
+  and the exception `CircuitOpenError(Exception)` (provided in the starter).
+
+  States (`breaker.state` returns the string)
+  - `"closed"`: calls go through. A call that raises counts as a failure (the exception is
+    re-raised to the caller); a success resets the consecutive-failure count to 0. When the
+    consecutive failures reach `failure_threshold`, the breaker opens.
+  - `"open"`: `call` raises `CircuitOpenError` immediately without invoking the function. Once
+    `clock() - opened_at >= recovery_timeout` the breaker becomes `"half_open"` (the `state`
+    property must report this lazily from the clock).
+  - `"half_open"`: allow ONE probe call at a time; other calls arriving while a probe is in flight
+    raise `CircuitOpenError`. A failing probe re-opens the breaker (timer restarts at the current
+    clock). After `success_threshold` successful probes the breaker closes and the failure count
+    resets.
+
+  `call(fn, *args, **kwargs)` returns `fn`'s result.
+
+  Example
+  ```python
+  b = CircuitBreaker(2, 10, clock=clock)
+  b.call(failing); b.call(failing)   # both raise; now b.state == "open"
+  b.call(ok)                         # CircuitOpenError
+  # 10 seconds later: state == "half_open"; a successful probe closes it
+  ```
+starter: |
+  import time
+
+  class CircuitOpenError(Exception):
+      pass
+
+  class CircuitBreaker:
+      def __init__(self, failure_threshold, recovery_timeout, success_threshold=1, clock=time.monotonic):
+          pass
+
+      @property
+      def state(self):
+          pass
+
+      def call(self, fn, *args, **kwargs):
+          pass
+hints:
+- Model three states and an opened_at timestamp; compute half_open lazily from the clock.
+- Release the lock while running fn; take it again to record the outcome.
+- In half_open keep a flag so only one probe is in flight; a failed probe re-opens and restarts the timer.
+follow_ups:
+- How would you add jitter to the recovery timeout?
+- How do you expose metrics and state changes?
+tests:
+- name: opens after consecutive failures
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    t = [0.0]
+    b = CircuitBreaker(3, 10, clock=lambda: t[0])
+    def bad(): raise RuntimeError("boom")
+    assert b.call(lambda: "ok") == "ok" and b.state == "closed"
+    for _ in range(2):
+        try: b.call(bad)
+        except RuntimeError: pass
+    assert b.state == "closed"
+    assert b.call(lambda: 1) == 1          # success resets the streak
+    for _ in range(3):
+        try: b.call(bad)
+        except RuntimeError: pass
+    assert b.state == "open"
+    called = []
+    try:
+        b.call(lambda: called.append(1))
+        raise AssertionError("expected CircuitOpenError")
+    except CircuitOpenError:
+        pass
+    assert called == []
+- name: half open after timeout then closes
+  tags:
+  - time
+  - state-reuse
+  code: |
+    t = [0.0]
+    b = CircuitBreaker(1, 10, clock=lambda: t[0])
+    def bad(): raise ValueError()
+    try: b.call(bad)
+    except ValueError: pass
+    assert b.state == "open"
+    t[0] = 9.9
+    assert b.state == "open"
+    t[0] = 10.0
+    assert b.state == "half_open"
+    assert b.call(lambda: "x") == "x"
+    assert b.state == "closed"
+    assert b.call(lambda: "y") == "y"
+- name: failed probe reopens with fresh timer
+  tags:
+  - time
+  - ordering
+  code: |
+    t = [0.0]
+    b = CircuitBreaker(1, 10, clock=lambda: t[0])
+    def bad(): raise ValueError()
+    try: b.call(bad)
+    except ValueError: pass
+    t[0] = 10.0
+    assert b.state == "half_open"
+    try: b.call(bad)
+    except ValueError: pass
+    assert b.state == "open"
+    t[0] = 19.0
+    assert b.state == "open"
+    t[0] = 20.0
+    assert b.state == "half_open"
+- name: single probe in half open
+  hidden: true
+  tags:
+  - concurrency
+  - boundary
+  code: |
+    t = [0.0]
+    b = CircuitBreaker(1, 5, clock=lambda: t[0])
+    def bad(): raise ValueError()
+    try: b.call(bad)
+    except ValueError: pass
+    t[0] = 5.0
+    seen = []
+    def probe():
+        try:
+            b.call(lambda: 1)
+        except CircuitOpenError:
+            seen.append("rejected")
+        return "probe-done"
+    assert b.call(probe) == "probe-done"
+    assert seen == ["rejected"], "second call during a probe must be rejected"
+    assert b.state == "closed"
+- name: success threshold needs several probes
+  hidden: true
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    t = [0.0]
+    b = CircuitBreaker(1, 5, success_threshold=3, clock=lambda: t[0])
+    def bad(): raise ValueError()
+    try: b.call(bad)
+    except ValueError: pass
+    t[0] = 5.0
+    for _ in range(2):
+        assert b.call(lambda: 1) == 1
+        assert b.state == "half_open"
+    assert b.call(lambda: 1) == 1
+    assert b.state == "closed"
+- name: args and exceptions propagate
+  hidden: true
+  tags:
+  - invalid
+  - single
+  code: |
+    b = CircuitBreaker(5, 1, clock=lambda: 0.0)
+    assert b.call(lambda a, b=0: a + b, 2, b=3) == 5
+    try:
+        b.call(lambda: 1 / 0)
+    except ZeroDivisionError:
+        pass
+    else:
+        raise AssertionError("original exception must propagate")
+    assert b.state == "closed"
+complexity:
+- op: call
+  time: O(1)
+  space: O(1)
+- op: state
+  time: O(1)
+  space: O(1)
+extensions:
+- q: What does the breaker add per call, and how much state does it keep?
+  kind: complexity
+  key_points:
+  - 'A constant number of lock operations and counter updates: O(1) per call'
+  - 'State is O(1): state enum, counters, timestamp, probe flag'
+  - 'One breaker per downstream dependency: O(dependencies) overall'
+- q: 'Count consecutive failures vs a failure rate over a sliding window: trade-offs?'
+  kind: design
+  key_points:
+  - Consecutive count is simple but ignores traffic volume and flaps on sparse traffic
+  - Rate over a rolling window with a minimum request volume is more robust
+  - Slow calls (latency) should count as failures too
+- q: How do you make it thread-safe and what do you do about many instances?
+  kind: design
+  key_points:
+  - Lock only around state transitions, never while running the protected call
+  - Allow exactly one in-flight probe in half-open to avoid a stampede on the recovering service
+  - Each instance trips independently; share state only if you accept the added coupling, and pair with
+    retries plus jittered backoff
+- q: How does a circuit breaker interact with retries and timeouts?
+  kind: reasoning
+  key_points:
+  - Retries multiply load on a failing service; the breaker caps it by failing fast
+  - Timeouts bound each call so failures are detected promptly
+  - Return a fallback or cached value while open when possible
+narration: []
+state_aloud:
+- 'Boundary: half-open exactly at opened_at + recovery_timeout.'
+- Success resets the consecutive failure streak.
+- Only one probe at a time in half-open.
+- The original exception propagates and is not swallowed.
+walkthrough: A small state machine keeps closed/open/half_open, a consecutive failure count, the time
+  it opened and a probe flag. Open becomes half_open lazily once the clock passes the recovery timeout.
+  In half_open a single probe is admitted; failure re-opens with a fresh timer and enough successes close
+  the breaker. The lock is never held during the protected call, and every operation is O(1).
+anki_queries: []
+categories:
+- systems-impl

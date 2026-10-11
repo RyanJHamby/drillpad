@@ -1,0 +1,110 @@
+id: reverse-integer
+title: Reverse Integer
+bar_level: 2
+target_minutes: 20
+patterns:
+- bit-manipulation
+- math
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Reverse the decimal digits of a signed 32-bit integer `x` (range `[-2**31, 2**31 - 1]`). Keep the sign. If the reversed value falls outside the signed 32-bit range, return `0`. Trailing zeros of `x` vanish (120 becomes 21).
+
+  Example: `reverse(123)` returns `321`; `reverse(-120)` returns `-21`; `reverse(1534236469)` returns `0` (overflow).
+starter: |
+  def reverse(x):
+      pass
+hints:
+- Peel the last digit with a remainder and build the result by multiplying by ten and adding the digit.
+- 'Python''s % and // round toward negative infinity, so handle the sign separately: work with abs(x) and reapply the sign.'
+- Check the final result against [-2**31, 2**31 - 1]; in fixed-width languages check before each multiply instead.
+follow_ups:
+- Do it without ever exceeding 32-bit intermediate values.
+- Check whether an integer is a palindrome with the same idea.
+tests:
+- name: positive
+  tags:
+  - boundary
+  code: |
+    assert reverse(123) == 321
+- name: negative
+  tags:
+  - invalid
+  code: |
+    assert reverse(-123) == -321
+- name: trailing zeros vanish
+  tags:
+  - boundary
+  code: |
+    assert reverse(120) == 21
+    assert reverse(-120) == -21
+    assert reverse(1000) == 1
+- name: zero and single digit
+  tags:
+  - single
+  code: |
+    assert reverse(0) == 0
+    assert reverse(7) == 7
+    assert reverse(-9) == -9
+- name: overflow returns zero
+  tags:
+  - boundary
+  code: |
+    assert reverse(1534236469) == 0
+    assert reverse(2**31-1) == 0
+    assert reverse(-2**31) == 0
+- name: largest valid result
+  tags:
+  - boundary
+  code: |
+    assert reverse(1463847412) == 2147483641
+    assert reverse(-1463847412) == -2147483641
+    assert reverse(1463847413) == 0
+  hidden: true
+- name: palindrome
+  tags:
+  - duplicate
+  code: |
+    assert reverse(1221) == 1221
+    assert reverse(-1221) == -1221
+  hidden: true
+- name: many calls
+  tags:
+  - scale
+  code: |
+    for i in range(1, 200000, 7):
+        assert reverse(i) == int(str(i)[::-1])
+        assert reverse(-i) == -int(str(i)[::-1])
+  hidden: true
+complexity:
+- op: overall
+  time: O(log x)
+  space: O(1)
+extensions:
+- q: Why is the sign a trap in Python?
+  kind: reasoning
+  key_points:
+  - -123 % 10 is 7 and -123 // 10 is -13 in Python, not -3 and -12 as in C
+  - So digit extraction on negatives gives wrong digits
+  - Work on abs(x), reverse, then restore the sign
+- q: Complexity.
+  kind: complexity
+  key_points:
+  - 'One iteration per decimal digit: O(log10 |x|), at most 10 iterations'
+  - O(1) extra space
+  - No string conversion required
+- q: Detect overflow without wider integers (as in C or Java).
+  kind: design
+  key_points:
+  - Before result = result * 10 + d, check result > (2**31 - 1 - d) // 10
+  - For negatives use the symmetric bound with 2**31
+  - Return 0 immediately on overflow
+narration: []
+state_aloud:
+- 32-bit signed range and overflow returning 0.
+- Sign handling for negatives.
+- Trailing zeros vanish.
+walkthrough: |
+  Work with the absolute value so Python's flooring division does not mis-handle negatives. Peel digits off with divmod by ten, building the reversed number. Reapply the sign and return zero if the result is outside the signed 32-bit range.

@@ -1,0 +1,128 @@
+id: binary-tree-maximum-path-sum
+title: Binary Tree Maximum Path Sum
+bar_level: 3
+target_minutes: 38
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Binary Tree Max Path Sum (LC 124)"
+statement: |
+  A path in a binary tree is a sequence of connected nodes where each node appears at most once; it need not pass through the root or end at a leaf, but must contain at least one node. Return the largest possible sum of node values over all paths. Values can be negative. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `[-10,9,20,None,None,15,7]` returns `42` (path 15 -> 20 -> 7).
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def max_path_sum(root):
+      pass
+hints:
+- At each node the best path that bends there is left_gain + node + right_gain, where a negative gain
+  should be treated as 0.
+- 'But a path going up to the parent can only extend one side: return node + max(left_gain, right_gain,
+  0).'
+- Track the best bent path in a running variable, initialised to negative infinity (all values may be
+  negative).
+follow_ups:
+- Return the path nodes, not just the sum.
+- Restrict paths to start at the root.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert max_path_sum(build_tree([1,2,3])) == 6
+- name: path skips the root
+  tags:
+  - boundary
+  code: |
+    assert max_path_sum(build_tree([-10,9,20,None,None,15,7])) == 42
+    assert max_path_sum(build_tree([-20,5,-30,10,20])) == 35
+- name: single negative node
+  tags:
+  - single
+  code: |
+    assert max_path_sum(build_tree([-3])) == -3
+- name: all negative
+  tags:
+  - invalid
+  code: |
+    assert max_path_sum(build_tree([-2,-1])) == -1
+    assert max_path_sum(build_tree([-5,-3,-4])) == -3
+- name: zeros and equal values
+  tags:
+  - duplicate
+  code: |
+    assert max_path_sum(build_tree([0,0,0])) == 0
+    assert max_path_sum(build_tree([2,2,2])) == 6
+- name: negative root bridging positive subtrees
+  tags:
+  - ordering
+  code: |
+    assert max_path_sum(build_tree([-1,8,9])) == 16
+    assert max_path_sum(build_tree([1,-2,3])) == 4
+- name: big balanced tree
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 2**16 - 1
+    assert max_path_sum(build_tree([1]*n)) == 31
+    assert max_path_sum(build_tree([-1]*n)) == -1
+complexity:
+- op: overall
+  time: O(n)
+  space: O(h)
+extensions:
+- q: Why return one side only to the parent?
+  kind: reasoning
+  key_points:
+  - A path cannot branch twice, so extending upward uses a single child chain
+  - The bent path (both sides) is only valid at its top node
+  - Hence the split between the recorded value and the returned value
+- q: Complexity?
+  kind: complexity
+  key_points:
+  - One visit per node so O(n) time
+  - Space is the recursion depth, O(h)
+  - Skewed trees reach O(n) space
+- q: Reconstruct the path itself?
+  kind: design
+  key_points:
+  - Store the best top node and each node preferred direction
+  - Walk down both sides from that top node
+  - Extra O(h) memory for the path
+narration: []
+state_aloud:
+- 'All values negative: answer is the largest single node.'
+- Path need not include the root or a leaf.
+- Clamp negative child gains to 0.
+- Initialise best to -infinity, not 0.
+walkthrough: |
+  A DFS helper returns the best downward path sum starting at a node: `node.val + max(0, left_gain, right_gain)`. Before returning, it updates the global best with the path that bends at this node: `node.val + max(0, left_gain) + max(0, right_gain)`. Dropping negative gains lets a path ignore harmful subtrees. The answer is the global best; the traversal is linear.

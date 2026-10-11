@@ -1,0 +1,241 @@
+id: top-p-top-k-sampling
+title: Top-p / Top-k Sampling
+bar_level: 2
+target_minutes: 25
+patterns:
+- sampling
+- top-k
+- top-p
+- nucleus
+- softmax
+- heapq
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Implement next-token sampling from model logits with temperature, top-k and top-p (nucleus) filtering.
+
+  `candidates(logits, temperature=1.0, top_k=0, top_p=1.0) -> list[(index, prob)]` returns the final
+  distribution that is sampled from, sorted by probability descending (equal logits: lower index first):
+  - `ValueError` if `logits` is empty, `temperature < 0`, `top_k < 0`, or `top_p` not in `(0, 1]`.
+  - `temperature == 0` is greedy: `[(argmax, 1.0)]`, ties go to the lowest index.
+  - Otherwise probabilities are `softmax(logit / temperature)`.
+  - `top_k > 0`: keep only the `top_k` highest-probability tokens (ignored when `top_k >= len(logits)`),
+    then renormalise.
+  - `top_p < 1`: on the (renormalised) distribution sorted descending, keep the smallest prefix whose
+    cumulative probability is `>= top_p`; always keep at least one token; renormalise.
+  - Order: temperature, then top-k, then top-p.
+
+  `sample(logits, rng, temperature=1.0, top_k=0, top_p=1.0) -> int`: draw `u = rng.random()` exactly once
+  (`rng` is a `random.Random`), walk the candidates in order accumulating probability and return the
+  first index whose cumulative probability is `> u`; fall back to the last candidate if rounding leaves
+  `u` above the total.
+
+  With a large vocabulary and `top_k` set, do not sort or exponentiate the whole vocabulary on every call.
+  Floats are compared with a tolerance in the tests.
+starter: |
+  def candidates(logits, temperature=1.0, top_k=0, top_p=1.0):
+      pass
+
+
+  def sample(logits, rng, temperature=1.0, top_k=0, top_p=1.0):
+      pass
+hints:
+- 'Softmax then filter works but is wasteful: softmax of the kept logits equals the renormalised filtered
+  distribution, so select first and exponentiate only the survivors.'
+- heapq.nlargest(k, range(n), key=...) is O(n log k) and keeps earlier indices first on ties.
+- 'top-p: accumulate probabilities in descending order and stop as soon as cum >= top_p.'
+follow_ups:
+- Min-p and repetition penalties.
+- Batch sampling with one rng stream per sequence for reproducibility.
+- Speculative decoding acceptance as a modified sampling rule.
+tests:
+- name: plain softmax distribution sorted by probability
+  code: |
+    import math
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    def dist(ps):
+        return [math.log(p) for p in ps]
+    c = candidates(dist([0.1, 0.5, 0.4]))
+    assert [i for i, _ in c] == [1, 2, 0]
+    assert all(close(p, q) for (_, p), q in zip(c, [0.5, 0.4, 0.1]))
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: top_k keeps the k most likely tokens and renormalises
+  code: |
+    import math
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    def dist(ps):
+        return [math.log(p) for p in ps]
+    c = candidates(dist([0.1, 0.5, 0.3, 0.1]), top_k=2)
+    assert [i for i, _ in c] == [1, 2]
+    assert close(c[0][1], 0.5 / 0.8) and close(c[1][1], 0.3 / 0.8)
+    assert len(candidates(dist([0.5, 0.5]), top_k=10)) == 2, "k larger than vocab keeps everything"
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: top_p keeps the smallest prefix reaching the mass
+  code: |
+    import math
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    def dist(ps):
+        return [math.log(p) for p in ps]
+    c = candidates(dist([0.5, 0.25, 0.15, 0.1]), top_p=0.7)     # 0.5, 0.75 >= 0.7 -> keep 2
+    assert [i for i, _ in c] == [0, 1]
+    assert close(c[0][1], 0.5 / 0.75) and close(c[1][1], 0.25 / 0.75)
+    assert [i for i, _ in candidates(dist([0.5, 0.25, 0.25]), top_p=0.01)] == [0], "always keep at least one"
+    assert len(candidates(dist([0.5, 0.25, 0.25]), top_p=1.0)) == 3
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: temperature sharpens and flattens; 0 is greedy
+  code: |
+    import math
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    def dist(ps):
+        return [math.log(p) for p in ps]
+    base = candidates([2.0, 1.0, 0.0])
+    cold = candidates([2.0, 1.0, 0.0], temperature=0.5)
+    hot = candidates([2.0, 1.0, 0.0], temperature=5.0)
+    assert cold[0][1] > base[0][1] > hot[0][1]
+    assert candidates([1.0, 3.0, 3.0], temperature=0) == [(1, 1.0)], "greedy ties go to the lowest index"
+  hidden: false
+  tags:
+  - boundary
+  - zero-capacity
+- name: top_k applies before top_p
+  code: |
+    import math
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    def dist(ps):
+        return [math.log(p) for p in ps]
+    c = candidates(dist([0.4, 0.3, 0.2, 0.1]), top_k=3, top_p=0.8)
+    # after top_k: 0.4/0.9, 0.3/0.9, 0.2/0.9 = .444 .333 .222 ; cumulative .444 .778 1.0 -> keep 3 (0.778 < 0.8)
+    assert [i for i, _ in c] == [0, 1, 2]
+    c2 = candidates(dist([0.4, 0.3, 0.2, 0.1]), top_k=3, top_p=0.75)
+    assert [i for i, _ in c2] == [0, 1]
+  hidden: true
+  tags:
+  - ordering
+- name: sample draws u = rng.random() against the cumulative distribution
+  code: |
+    import math
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    def dist(ps):
+        return [math.log(p) for p in ps]
+    import random
+    logits = dist([0.5, 0.3, 0.2])
+    for seed in range(20):
+        u = random.Random(seed).random()
+        want = 0 if u < 0.5 else (1 if u < 0.8 else 2)
+        assert sample(logits, random.Random(seed)) == want
+    rng = random.Random(0)
+    counts = [0, 0, 0]
+    for _ in range(3000):
+        counts[sample(logits, rng)] += 1
+    assert abs(counts[0] / 3000 - 0.5) < 0.05
+    assert sample(logits, random.Random(1), top_k=1) == 0
+  hidden: true
+  tags:
+  - ordering
+  - time
+- name: invalid arguments and single token
+  code: |
+    import math
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    def dist(ps):
+        return [math.log(p) for p in ps]
+    import random
+    for kw in [dict(temperature=-1), dict(top_k=-1), dict(top_p=0), dict(top_p=1.5)]:
+        try:
+            candidates([1.0, 2.0], **kw)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(kw)
+    try:
+        candidates([])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+    c = candidates([3.0])
+    assert c == [(0, 1.0)] and sample([3.0], random.Random(0)) == 0
+  hidden: true
+  tags:
+  - invalid
+  - empty
+  - single
+- name: 300 samples from a 100k-token vocabulary with top_k=40
+  code: |
+    import math
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    def dist(ps):
+        return [math.log(p) for p in ps]
+    import random
+    rng = random.Random(5)
+    logits = [rng.gauss(0, 3) for _ in range(100000)]
+    top = sorted(range(100000), key=lambda i: -logits[i])[:40]
+    allowed = set(top)
+    for _ in range(300):
+        assert sample(logits, rng, temperature=0.8, top_k=40, top_p=0.95) in allowed
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: candidates
+  time: O(V log k)
+  space: O(k)
+- op: sample
+  time: O(V log k)
+  space: O(k)
+extensions:
+- q: 'Level 2: add a repetition/frequency penalty: subtract `alpha * count[token]` from the logit of tokens
+    already generated. Where does it sit in the pipeline?'
+  kind: code
+  key_points:
+  - It modifies logits before temperature and filtering, so it changes which tokens survive top-k/top-p
+  - Counts come from the generated (and optionally prompt) token history, kept in a dict
+  - Apply it sparsely (only touched tokens) so it does not cost O(V) per step
+- q: How do you make sampling reproducible per request when many requests share a batch?
+  kind: design
+  key_points:
+  - One random.Random(seed) per request, never a global stream, so batch composition does not change results
+  - Consume exactly one draw per token (as here) so replays line up
+  - Log the seed and parameters with the request; note GPU nondeterminism can still change logits
+- q: Compare top-k and top-p. When does each fail?
+  kind: reasoning
+  key_points:
+  - 'Top-k keeps a fixed count: too many tokens when the model is confident, too few when the distribution
+    is flat'
+  - Top-p adapts to the distribution but can keep a huge tail when it is flat; combine both with a cap
+  - Low temperature already concentrates mass, so filters matter more at high temperature
+- q: Cost per sampled token with a vocabulary of V and what dominates at V = 100k.
+  kind: complexity
+  key_points:
+  - O(V log k) with a heap for top-k selection, O(V log V) for a full sort when only top_p is used
+  - The softmax over the survivors is O(k); over the whole vocabulary it would be O(V) exponentials
+  - Space O(k) for the candidate list
+narration: []
+state_aloud:
+- 'Order of operations: temperature, top-k, top-p; say it before coding.'
+- Temperature 0 means greedy; avoid dividing by zero.
+- top_p keeps at least one token (the cumulative check happens after adding).
+- Ties in logits resolve to the lower index so results are deterministic.
+- One rng.random() draw per sample.
+walkthrough: |
+  candidates picks the surviving indices first (heapq.nlargest when top_k is set, otherwise a stable descending sort), softmaxes only those scaled logits, applies the nucleus cut on the descending cumulative sum and renormalises. Selecting before exponentiating is valid because softmax restricted to a subset equals the renormalised subset of the full softmax. sample consumes a single rng.random() and walks the cumulative distribution. Standard top-k/top-p formulation; no source note applies.
+categories:
+- ai-infra

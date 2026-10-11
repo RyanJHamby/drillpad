@@ -1,0 +1,102 @@
+id: swim-in-rising-water
+title: Swim in Rising Water
+bar_level: 3
+target_minutes: 38
+patterns:
+- shortest-path
+- binary-search
+- union-find
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Swim in Rising Water (LC 778)"
+statement: |
+  An `n x n` grid holds distinct elevations (a permutation of `0..n*n-1`; tests may use any non-negative values). At time `t` the water level everywhere is `t`, and you can step to an adjacent cell (up, down, left, right) only if both cells have elevation at most `t`. You start at the top-left and want to reach the bottom-right. Swimming itself takes no time. Return the least time `t` at which that is possible.
+
+  Example: `swim_in_water([[0,2],[1,3]])` returns `3`.
+starter: |
+  def swim_in_water(grid):
+      pass
+hints:
+- The answer is the minimum over all paths of the maximum elevation along the path (a bottleneck path).
+- Dijkstra works if the cost of reaching a cell is max(cost so far, cell elevation); always expand the lowest-cost frontier cell.
+- 'Alternative: binary search on t and BFS to test reachability, or union-find adding cells in elevation order.'
+follow_ups:
+- Return the path as well.
+- Solve it with union-find sorted by elevation.
+tests:
+- name: two by two
+  tags:
+  - time
+  code: |
+    assert swim_in_water([[0,2],[1,3]])==3
+- name: spiral example
+  tags:
+  - ordering
+  code: |
+    g=[[0,1,2,3,4],[24,23,22,21,5],[12,13,14,15,16],[11,17,18,19,20],[10,9,8,7,6]]
+    assert swim_in_water(g)==16
+- name: single cell
+  tags:
+  - single
+  code: |
+    assert swim_in_water([[0]])==0
+    assert swim_in_water([[5]])==5
+- name: route around a tall cell
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    g=[[0,9,9],[1,9,9],[2,3,4]]
+    assert swim_in_water(g)==4
+- name: start is the highest cell
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    assert swim_in_water([[8,1],[2,3]])==8
+- name: repeated elevations
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    assert swim_in_water([[1,1],[1,1]])==1
+- name: large grid
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=300
+    g=[[i*n+j for j in range(n)] for i in range(n)]
+    assert swim_in_water(g)==n*n-1
+complexity:
+- op: overall
+  time: O(n^2 log n)
+  space: O(n^2)
+extensions:
+- q: What is the cost of each of the three approaches?
+  kind: complexity
+  key_points:
+  - 'Dijkstra with a heap: O(n^2 log n)'
+  - 'Binary search on t with BFS: O(n^2 log(max))'
+  - 'Union-find over sorted cells: O(n^2 log n) for the sort'
+- q: Why is max (not sum) the right relaxation?
+  kind: reasoning
+  key_points:
+  - Cost of a path is its highest cell, not the sum
+  - new_cost = max(cost[u], grid[v]) is monotone so Dijkstra's greedy is valid
+  - Same idea as minimax or bottleneck shortest paths
+- q: How would this model a real system?
+  kind: design
+  key_points:
+  - Time-varying thresholds like capacity or flood levels
+  - Union-find with sorted events answers many queries offline
+  - Useful for finding the first moment a connection becomes possible
+narration: []
+state_aloud:
+- Start cell elevation also counts.
+- 1x1 grid answer is its own value.
+- Moves are four-directional.
+walkthrough: |
+  Run a Dijkstra-style search where the key of a cell is the largest elevation seen on the best path to it. Start with the top-left cell at its own elevation. Pop the cell with the lowest key; if it is the bottom-right cell return its key. Otherwise push each unvisited neighbour with key max(current key, neighbour elevation). The first time the target is popped its key is the optimum.

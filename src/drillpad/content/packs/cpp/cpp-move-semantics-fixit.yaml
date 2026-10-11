@@ -1,0 +1,334 @@
+id: cpp-move-semantics-fixit
+title: 'Fix the Copies: Move Semantics Workout'
+language: cpp
+bar_level: 2
+target_minutes: 25
+patterns:
+- move-semantics
+- nrvo
+- sink-parameters
+- copy-elision
+- std-move-pitfalls
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  The starter contains eight small functions and classes that are correct but wasteful: they copy
+  `Heavy` objects when they could move, elide, or not touch them at all. `Heavy` is an instrumented type that
+  counts constructions, copies, moves and destructions; the tests assert a copy/move budget for each function
+  and that behaviour is unchanged. (C++20; keep `Heavy` and the function names as they are.)
+
+  Budgets:
+  - `make_heavy(v)`: 0 copies, 0 moves (one construction)
+  - `make_batch(n)`: 0 copies, 0 moves, exactly `n` constructions
+  - `append_all(dst, src)` (`src` is passed by value, callers `std::move` into it): 0 copies, at most `dst.size() + src.size()` moves
+  - `Holder(a, b)`: from temporaries 0 copies; from an lvalue exactly one copy for that argument
+  - `max_of(a, b)`: 0 copies; the result must refer to one of the arguments (ties pick `a`); you may change the return type
+  - `take_sorted(v)`: 0 copies, result sorted ascending by `v`
+  - `Registry::add(h)`: `add(Heavy(1))` 0 copies; `add(lvalue)` exactly one copy and the lvalue is left intact
+  - `choose(first, x, y)`: 0 copies, at most 1 move
+
+  You are free to change parameter and return types as needed (the tests call them in the ways shown above). Several
+  traps here are classic: `return std::move(local)`, `std::move` of a `const&`, and `return cond ? a : b`.
+
+  Example:
+  ```cpp
+  Heavy::reset();
+  Heavy h = make_heavy(5);   // ctors == 1, copies() == 0, moves() == 0
+  ```
+starter: |
+  // Everything below is CORRECT but wasteful. Reduce copies/moves to the budgets in the statement
+  // without changing behaviour. Keep these exact signatures usable by the tests (parameter passing
+  // style and return types may change where the statement says so).
+
+  // Budget: 0 copies, 0 moves.
+  Heavy make_heavy(int v) {
+      Heavy h(v);
+      h.v += 0;
+      return std::move(h);
+  }
+
+  // Budget: 0 copies, 0 moves; n constructions.
+  std::vector<Heavy> make_batch(int n) {
+      std::vector<Heavy> out;
+      for (int i = 0; i < n; i++) {
+          Heavy h(i);
+          out.push_back(h);
+      }
+      return out;
+  }
+
+  // Budget: 0 copies; at most dst.size() + src.size() moves.
+  void append_all(std::vector<Heavy>& dst, std::vector<Heavy> src) {
+      for (auto h : src) dst.push_back(h);
+  }
+
+  // Budget: constructing from temporaries costs 0 copies; from lvalues exactly one copy per argument.
+  class Holder {
+      Heavy a_, b_;
+  public:
+      Holder(const Heavy& a, const Heavy& b) : a_(a), b_(b) {}
+      const Heavy& first() const { return a_; }
+      const Heavy& second() const { return b_; }
+  };
+
+  // Budget: 0 copies and the result must refer to one of the arguments (no new object).
+  Heavy max_of(const Heavy& a, const Heavy& b) { return a.v >= b.v ? a : b; }
+
+  // Budget: 0 copies. Returns the elements sorted ascending by v.
+  std::vector<Heavy> take_sorted(std::vector<Heavy> v) {
+      std::vector<Heavy> w = v;
+      std::sort(w.begin(), w.end(), [](const Heavy& x, const Heavy& y) { return x.v < y.v; });
+      return w;
+  }
+
+  // Budget: add(temporary) costs 0 copies; add(lvalue) exactly 1 copy and leaves the argument intact.
+  class Registry {
+      std::vector<Heavy> items_;
+  public:
+      void add(const Heavy& h) { items_.push_back(std::move(h)); }
+      std::size_t size() const { return items_.size(); }
+      const Heavy& at(std::size_t i) const { return items_.at(i); }
+  };
+
+  // Budget: 0 copies, at most 1 move. Returns x's object if `first`, else y's.
+  Heavy choose(bool first, int x, int y) {
+      Heavy a(x), b(y);
+      return first ? a : b;
+  }
+prelude: |
+  struct Heavy {
+      static inline int ctors = 0, copy_ctors = 0, move_ctors = 0, copy_assigns = 0, move_assigns = 0, dtors = 0;
+      static void reset() { ctors = copy_ctors = move_ctors = copy_assigns = move_assigns = dtors = 0; }
+      static int copies() { return copy_ctors + copy_assigns; }
+      static int moves() { return move_ctors + move_assigns; }
+      static int live() { return ctors + copy_ctors + move_ctors - dtors; }
+      int v;
+      explicit Heavy(int x) : v(x) { ++ctors; }
+      Heavy(const Heavy& o) : v(o.v) { ++copy_ctors; }
+      Heavy(Heavy&& o) noexcept : v(o.v) { o.v = -1; ++move_ctors; }
+      Heavy& operator=(const Heavy& o) { v = o.v; ++copy_assigns; return *this; }
+      Heavy& operator=(Heavy&& o) noexcept { v = o.v; o.v = -1; ++move_assigns; return *this; }
+      ~Heavy() { ++dtors; }
+  };
+hints:
+- Returning a local by name lets the compiler construct it directly in the caller (NRVO). `return std::move(local)`
+  disables that and costs a move.
+- 'Sink parameters: take by value and std::move into the member. A temporary argument is built in place,
+  an lvalue is copied exactly once. Also reserve() before a loop and use emplace_back to construct in
+  place.'
+- 'std::move(x) is just a cast to T&&; on a const T& it yields const T&&, which only binds to the copy
+  constructor. And `c ? a : b` is not a plain name, so it is not implicitly moved: use if/return.'
+follow_ups:
+- Why does `return std::move(local)` hurt, and what does -Wpessimizing-move / -Wredundant-move say?
+- When is passing by const& better than by value-and-move for a sink parameter?
+- What is guaranteed copy elision in C++17 versus NRVO, which is optional?
+- What does a moved-from std::string or std::vector guarantee, and why should you not read from it?
+tests:
+- name: return a local without std::move
+  tags:
+  - single
+  - boundary
+  code: |
+    Heavy::reset();
+    Heavy h = make_heavy(5);
+    CHECK_EQ(h.v, 5);
+    CHECK_EQ(Heavy::ctors, 1);
+    CHECK_EQ(Heavy::copies(), 0);
+    CHECK_EQ(Heavy::moves(), 0);
+- name: batch built in place
+  tags:
+  - scale
+  - ordering
+  code: |
+    Heavy::reset();
+    auto b = make_batch(100);
+    CHECK_EQ(b.size(), 100u);
+    for (int i = 0; i < 100; i++) CHECK_EQ(b[i].v, i);
+    CHECK_EQ(Heavy::ctors, 100);
+    CHECK_EQ(Heavy::copies(), 0);
+    CHECK_EQ(Heavy::moves(), 0);
+- name: append moves from the source
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    std::vector<Heavy> dst;
+    dst.reserve(2);
+    dst.emplace_back(1); dst.emplace_back(2);
+    std::vector<Heavy> src;
+    for (int i = 10; i < 15; i++) src.emplace_back(i);
+    Heavy::reset();
+    append_all(dst, std::move(src));
+    CHECK_EQ(dst.size(), 7u);
+    CHECK_EQ(dst[0].v, 1);
+    CHECK_EQ(dst[2].v, 10);
+    CHECK_EQ(dst[6].v, 14);
+    CHECK_EQ(Heavy::copies(), 0);
+    CHECK(Heavy::moves() <= 7);
+- name: sink constructor takes temporaries for free
+  tags:
+  - single
+  - state-reuse
+  code: |
+    Heavy::reset();
+    Holder h(Heavy(1), Heavy(2));
+    CHECK_EQ(h.first().v, 1);
+    CHECK_EQ(h.second().v, 2);
+    CHECK_EQ(Heavy::copies(), 0);
+    CHECK(Heavy::moves() <= 2);
+- name: sink constructor copies lvalues exactly once
+  tags:
+  - duplicate
+  - boundary
+  code: |
+    Heavy a(3), b(4);
+    Heavy::reset();
+    Holder h(a, std::move(b));
+    CHECK_EQ(Heavy::copy_ctors, 1);
+    CHECK_EQ(a.v, 3);
+    CHECK_EQ(h.first().v, 3);
+    CHECK_EQ(h.second().v, 4);
+    CHECK(Heavy::moves() <= 3);
+- name: max_of returns a reference
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    Heavy a(1), b(9);
+    Heavy::reset();
+    const Heavy& r = max_of(a, b);
+    CHECK(&r == &b);
+    const Heavy& r2 = max_of(b, a);
+    CHECK(&r2 == &b);
+    CHECK_EQ(Heavy::copies(), 0);
+    Heavy c(9);
+    const Heavy& r3 = max_of(c, b);
+    CHECK(&r3 == &c);   // tie: first argument wins
+- name: sorting a by-value parameter needs no copy
+  tags:
+  - scale
+  - ordering
+  code: |
+    std::vector<Heavy> v;
+    for (int x : {5, 3, 9, 1, 7, 2, 8}) v.emplace_back(x);
+    Heavy::reset();
+    auto s = take_sorted(std::move(v));
+    CHECK_EQ(s.size(), 7u);
+    for (std::size_t i = 1; i < s.size(); i++) CHECK(s[i - 1].v <= s[i].v);
+    CHECK_EQ(s[0].v, 1);
+    CHECK_EQ(s[6].v, 9);
+    CHECK_EQ(Heavy::copies(), 0);
+- name: std::move on a const reference copies
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    Registry r;
+    Heavy::reset();
+    r.add(Heavy(1));
+    CHECK_EQ(Heavy::copies(), 0);
+    Heavy a(2);
+    r.add(a);
+    CHECK_EQ(Heavy::copy_ctors, 1);
+    CHECK_EQ(a.v, 2);               // lvalue argument must be left untouched
+    CHECK_EQ(r.size(), 2u);
+    CHECK_EQ(r.at(0).v, 1);
+    CHECK_EQ(r.at(1).v, 2);
+- name: conditional expression defeats implicit move
+  tags:
+  - invalid
+  - boundary
+  code: |
+    Heavy::reset();
+    Heavy x = choose(true, 10, 20);
+    CHECK_EQ(x.v, 10);
+    CHECK_EQ(Heavy::copies(), 0);
+    CHECK(Heavy::moves() <= 1);
+    Heavy y = choose(false, 10, 20);
+    CHECK_EQ(y.v, 20);
+    CHECK_EQ(Heavy::copies(), 0);
+- name: a large batch stays copy free
+  hidden: true
+  tags:
+  - scale
+  code: |
+    Heavy::reset();
+    auto big = make_batch(50000);
+    std::vector<Heavy> dst;
+    append_all(dst, std::move(big));
+    CHECK_EQ(dst.size(), 50000u);
+    CHECK_EQ(Heavy::copies(), 0);
+    CHECK(Heavy::moves() <= 50000);
+    auto s = take_sorted(std::move(dst));
+    CHECK_EQ(s[49999].v, 49999);
+    CHECK_EQ(Heavy::copies(), 0);
+- name: everything is destroyed exactly once
+  hidden: true
+  tags:
+  - state-reuse
+  - empty
+  code: |
+    Heavy::reset();
+    {
+        Registry r;
+        for (int i = 0; i < 10; i++) r.add(Heavy(i));
+        Holder h(Heavy(1), Heavy(2));
+        auto b = make_batch(8);
+        std::vector<Heavy> d;
+        append_all(d, make_batch(4));
+        auto s = take_sorted(std::move(d));
+        Heavy c = choose(true, 1, 2);
+        const Heavy& m = max_of(c, s[0]);
+        CHECK(m.v >= 0);
+        CHECK_EQ(Heavy::copies(), 0);
+    }
+    CHECK_EQ(Heavy::live(), 0);
+complexity:
+- op: make_heavy / make_batch
+  time: O(n)
+  space: O(n)
+- op: append_all
+  time: O(n)
+  space: O(n)
+- op: take_sorted
+  time: O(n log n)
+  space: O(1)
+extensions:
+- q: What is the cost of each version in terms of copies, and how does it scale?
+  kind: complexity
+  key_points:
+  - Copying a container of n heavy elements is O(n) deep copies, moving it is O(1) pointer swaps
+  - reserve + emplace_back turns O(n) relocations into zero and keeps push amortization out of the hot
+    path
+  - For heavy types like vectors of strings, a needless copy is an allocation per element
+- q: Why must move constructors be noexcept for containers?
+  kind: design
+  key_points:
+  - 'std::vector reallocation uses move_if_noexcept: a throwing move forces element copies to keep the
+    strong guarantee'
+  - Mark moves noexcept (and verify with static_assert(is_nothrow_move_constructible_v<T>))
+  - Otherwise even your carefully written move constructor is never used on growth
+- q: By-value sink parameter vs overload set of const T& and T&&?
+  kind: design
+  key_points:
+  - By value costs one extra move compared with the perfect overload pair, but halves the code
+  - For hot paths with many parameters the overload set (or a forwarding template) avoids the extra move
+  - By value also works with the strong exception guarantee because the copy happens at the call site
+- q: What do moved-from objects promise?
+  kind: reasoning
+  key_points:
+  - 'Valid but unspecified state: you may destroy or assign to them, not rely on their value'
+  - Standard library types promise this; your own types should at least stay destructible and assignable
+  - Using std::move on a const object or a trivially copyable type does nothing useful
+narration: []
+state_aloud:
+- '`return std::move(local)` is a pessimization: it blocks NRVO.'
+- std::move does not move anything; it only enables moving. Moving from a const object silently copies.
+- 'Sink parameters: by value then move, or an rvalue/lvalue overload pair.'
+- 'Moved-from state is valid but unspecified: do not read the value of a moved-from object.'
+walkthrough: |
+  Copies disappear when you let the compiler elide them (return named locals, never `std::move` them), construct in place (`reserve` + `emplace_back`), take sink parameters by value and `std::move` them into place, and return references when no new object is needed. `std::move` on a `const&` and `return c ? a : b` both silently fall back to copying. In Python every assignment is a reference copy; in C++ value semantics make each of those a real, measurable copy unless you ask for the move.
+anki_queries: []
+categories:
+- systems-impl

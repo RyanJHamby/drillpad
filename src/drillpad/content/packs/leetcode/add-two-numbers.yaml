@@ -1,0 +1,112 @@
+id: add-two-numbers
+title: Add Two Numbers
+bar_level: 2
+target_minutes: 20
+patterns:
+- linked-list
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Two non-empty linked lists hold non-negative integers with the digits stored in reverse order (the head is the ones digit). Add the two numbers and return the sum as a list in the same reversed format. Neither number has leading zeros except the number 0 itself. `ListNode`, `build_list` and `to_list` are provided.
+
+  Example: `[2,4,3]` (342) plus `[5,6,4]` (465) gives `[7,0,8]` (807).
+prelude: |
+  class ListNode:
+      def __init__(self, val=0, next=None):
+          self.val = val
+          self.next = next
+
+  def build_list(vals):
+      head = None
+      for v in reversed(vals):
+          head = ListNode(v, head)
+      return head
+
+  def to_list(head):
+      out = []
+      while head:
+          out.append(head.val)
+          head = head.next
+      return out
+starter: |
+  def add_two_numbers(l1, l2):
+      pass
+hints:
+- 'Reversed digits means the head is already the least significant digit: add like on paper.'
+- Carry forward a single carry value; the loop should also run while a carry remains.
+- Treat a missing digit from the shorter list as 0.
+follow_ups:
+- What if the digits were stored most-significant first?
+- Why not convert to ints and add?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert to_list(add_two_numbers(build_list([2,4,3]), build_list([5,6,4]))) == [7,0,8]
+- name: zeros
+  tags:
+  - single
+  code: |
+    assert to_list(add_two_numbers(build_list([0]), build_list([0]))) == [0]
+    assert to_list(add_two_numbers(build_list([0]), build_list([4,1]))) == [4,1]
+- name: final carry adds a node
+  tags:
+  - boundary
+  code: |
+    assert to_list(add_two_numbers(build_list([9,9,9,9]), build_list([1]))) == [0,0,0,0,1]
+    assert to_list(add_two_numbers(build_list([5]), build_list([5]))) == [0,1]
+- name: different lengths
+  tags:
+  - ordering
+  code: |
+    assert to_list(add_two_numbers(build_list([1,8]), build_list([0]))) == [1,8]
+    assert to_list(add_two_numbers(build_list([2]), build_list([8,9,9]))) == [0,0,0,1]
+- name: equal numbers
+  tags:
+  - duplicate
+  code: |
+    assert to_list(add_two_numbers(build_list([3,3,3]), build_list([3,3,3]))) == [6,6,6]
+- name: very long numbers
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 100000
+    r = add_two_numbers(build_list([9]*n), build_list([1]))
+    assert to_list(r) == [0]*n + [1]
+    r = add_two_numbers(build_list([4]*n), build_list([5]*n))
+    assert to_list(r) == [9]*n
+complexity:
+- op: overall
+  time: O(max(n, m))
+  space: O(max(n, m))
+extensions:
+- q: Why not convert both lists to integers?
+  kind: reasoning
+  key_points:
+  - Lists can be far longer than a machine word
+  - Python ints are unbounded but conversion is costly and not an option in fixed-width languages
+  - Digit-wise addition streams in one pass
+- q: Digits stored most-significant first?
+  kind: design
+  key_points:
+  - Reverse both lists, add, reverse the result
+  - Or push digits on two stacks and add while popping
+  - Avoid modifying inputs if the problem forbids it
+- q: Complexity of the digit-wise add?
+  kind: complexity
+  key_points:
+  - One step per digit of the longer number
+  - Output has at most max(n, m) + 1 nodes
+  - Extra space is only the output plus O(1) state
+narration: []
+state_aloud:
+- One list longer than the other.
+- A carry that outlives both lists.
+- Both numbers are 0.
+- Digit sums up to 19 so carry is only 0 or 1.
+walkthrough: |
+  Walk both lists together with a dummy head for the output and a `carry` variable. At each step sum the two digits (0 if a list ended) plus the carry, emit `sum % 10`, and keep `sum // 10` as the new carry. The loop continues while either list has nodes or a carry remains, which handles the extra leading digit. One pass, linear in the longer length.

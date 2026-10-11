@@ -1,0 +1,286 @@
+id: cpp-matrix-multiply-blocked
+title: Cache-friendly Matrix Multiply
+language: cpp
+bar_level: 2
+target_minutes: 30
+patterns:
+- cache-locality
+- loop-interchange
+- tiling
+- row-major
+- memory-hierarchy
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Matrices are flat row-major arrays of `double`: element `(i, j)` of an `r x c` matrix is `M[i * c + j]`. The textbook
+  `matmul_naive(A, B, C, m, k, n)` (C = A * B, with `A` being `m x k`, `B` being `k x n` and `C` being `m x n`) is provided
+  in the prelude: its inner loop walks down a column of `B`, striding `n * 8` bytes per step, which is hostile to caches.
+
+  Implement two functions with the same contract (`C` is fully overwritten, never accumulated into):
+  - `matmul_ikj(A, B, C, m, k, n)`: reorder the loops to i-k-j so the inner loop is unit-stride over a row of `B` and a row of `C`
+  - `matmul_blocked(A, B, C, m, k, n, block = 64)`: tile all three dimensions in `block x block` tiles (the last tile of each
+    dimension may be partial). Throws `std::invalid_argument` if `block == 0`.
+
+  Edge cases: zero-sized dimensions (when `k == 0` the result is all zeros; when `m == 0` or `n == 0` nothing may be touched),
+  shapes that are not multiples of the block size, and `block` larger than the matrix. No libraries (no BLAS, no `<execution>`).
+
+  Tests compare with `matmul_naive` exactly (inputs are small integers) and also time your function against `matmul_naive` on
+  an 8 x 4096 by 4096 x 2048 product with a generous margin: the faster version must take under 60% of the naive time.
+
+  Example:
+  ```cpp
+  matmul_ikj(A, B, C, 2, 3, 2);   // C = A (2x3) * B (3x2)
+  ```
+starter: |
+  // matmul_naive(A, B, C, m, k, n) is provided: it computes C (m x n) = A (m x k) * B (k x n), row-major,
+  // overwriting C. Write two faster versions with identical results.
+
+  // i-k-j loop order: the inner loop runs along rows of B and C (unit stride).
+  void matmul_ikj(const double* A, const double* B, double* C, std::size_t m, std::size_t k, std::size_t n) {
+      (void)A; (void)B; (void)C; (void)m; (void)k; (void)n;
+  }
+
+  // Tiled version: process block x block tiles so the working set stays in cache.
+  // Throws std::invalid_argument if block == 0.
+  void matmul_blocked(const double* A, const double* B, double* C, std::size_t m, std::size_t k, std::size_t n,
+                      std::size_t block = 64) {
+      (void)A; (void)B; (void)C; (void)m; (void)k; (void)n; (void)block;
+  }
+prelude: |
+  // Provided baseline: the textbook i-j-k loop. B is read down a column, stride n doubles.
+  void matmul_naive(const double* A, const double* B, double* C, std::size_t m, std::size_t k, std::size_t n) {
+      for (std::size_t i = 0; i < m; i++)
+          for (std::size_t j = 0; j < n; j++) {
+              double s = 0;
+              for (std::size_t p = 0; p < k; p++) s += A[i * k + p] * B[p * n + j];
+              C[i * n + j] = s;
+          }
+  }
+  // Small integer entries, so every sum is exactly representable and results do not depend on summation order.
+  static std::vector<double> make_matrix(std::size_t rows, std::size_t cols, unsigned seed) {
+      std::vector<double> v(rows * cols);
+      unsigned x = seed * 2654435761u + 12345u;
+      for (double& d : v) { x = x * 1664525u + 1013904223u; d = static_cast<double>(static_cast<int>((x >> 16) % 7) - 3); }
+      return v;
+  }
+  template <class F>
+  static double best_seconds(int reps, F f) {
+      double best = 1e30;
+      for (int r = 0; r < reps; r++) {
+          auto t0 = std::chrono::steady_clock::now();
+          f();
+          best = std::min(best, std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+      }
+      return best;
+  }
+hints:
+- 'The i-j-k loop reads B[p*n + j] with p in the inner loop: that is a column walk, one cache line per
+  element. Swap the two inner loops to i-k-j: hold a = A[i*k+p] and sweep j along row p of B and row i
+  of C.'
+- Accumulating into C means zero it first (std::fill) and use +=. With i-k-j the inner loop is also trivially
+  auto-vectorizable.
+- 'Blocking: three outer loops over tile origins (ii, pp, jj) with min(origin + block, dim) as the tile
+  end, and the i-k-j kernel inside the tile so the tile of B and C stays hot in cache.'
+follow_ups:
+- Why does loop order change speed when the arithmetic is identical?
+- How do you pick a block size from the L1/L2 cache sizes (three tiles of block^2 doubles should fit)?
+- What would a register-blocked micro-kernel plus SIMD (AVX2/NEON FMA) add, and why do real BLAS libraries
+  pack tiles?
+- Why is exact equality safe here but not for general floating-point data, and what changes with FMA or
+  reassociation?
+tests:
+- name: ikj small hand-checked product
+  tags:
+  - single
+  - boundary
+  code: |
+    // [1 2 3; 4 5 6] * [7 8; 9 10; 11 12] = [58 64; 139 154]
+    double A[] = {1, 2, 3, 4, 5, 6};
+    double B[] = {7, 8, 9, 10, 11, 12};
+    double C[4] = {-1, -1, -1, -1};
+    matmul_ikj(A, B, C, 2, 3, 2);
+    std::vector<double> got(C, C + 4);
+    std::vector<double> want = {58, 64, 139, 154};
+    CHECK(got == want);
+- name: blocked small hand-checked product
+  tags:
+  - single
+  - boundary
+  code: |
+    double A[] = {1, 2, 3, 4, 5, 6};
+    double B[] = {7, 8, 9, 10, 11, 12};
+    double C[4] = {-1, -1, -1, -1};
+    matmul_blocked(A, B, C, 2, 3, 2, 2);
+    std::vector<double> got(C, C + 4);
+    std::vector<double> want = {58, 64, 139, 154};
+    CHECK(got == want);
+- name: odd shapes match the naive result
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    for (auto [m, k, n] : {std::array<std::size_t, 3>{37, 53, 29}, {1, 1, 1}, {1, 17, 1}, {5, 1, 9}, {64, 64, 64}, {65, 63, 66}}) {
+        auto A = make_matrix(m, k, 1), B = make_matrix(k, n, 2);
+        std::vector<double> ref(m * n), c1(m * n, -9.0), c2(m * n, -9.0);
+        matmul_naive(A.data(), B.data(), ref.data(), m, k, n);
+        matmul_ikj(A.data(), B.data(), c1.data(), m, k, n);
+        matmul_blocked(A.data(), B.data(), c2.data(), m, k, n, 8);
+        CHECK(c1 == ref);
+        CHECK(c2 == ref);
+    }
+- name: every block size gives the same answer
+  tags:
+  - boundary
+  - ordering
+  code: |
+    const std::size_t m = 20, k = 23, n = 21;
+    auto A = make_matrix(m, k, 3), B = make_matrix(k, n, 4);
+    std::vector<double> ref(m * n);
+    matmul_naive(A.data(), B.data(), ref.data(), m, k, n);
+    for (std::size_t bs : {std::size_t{1}, std::size_t{3}, std::size_t{7}, std::size_t{20}, std::size_t{64}, std::size_t{1000}}) {
+        std::vector<double> c(m * n, 5.0);
+        matmul_blocked(A.data(), B.data(), c.data(), m, k, n, bs);
+        CHECK(c == ref);
+    }
+    std::vector<double> d(m * n, 5.0);
+    matmul_blocked(A.data(), B.data(), d.data(), m, k, n);    // default block
+    CHECK(d == ref);
+- name: C is overwritten, not accumulated
+  tags:
+  - state-reuse
+  - duplicate
+  code: |
+    auto A = make_matrix(6, 6, 5), B = make_matrix(6, 6, 6);
+    std::vector<double> ref(36), c(36, 1000.0);
+    matmul_naive(A.data(), B.data(), ref.data(), 6, 6, 6);
+    matmul_ikj(A.data(), B.data(), c.data(), 6, 6, 6);
+    CHECK(c == ref);
+    matmul_ikj(A.data(), B.data(), c.data(), 6, 6, 6);        // a second call must give the same answer
+    CHECK(c == ref);
+    std::vector<double> d(36, -1000.0);
+    matmul_blocked(A.data(), B.data(), d.data(), 6, 6, 6, 4);
+    matmul_blocked(A.data(), B.data(), d.data(), 6, 6, 6, 4);
+    CHECK(d == ref);
+- name: empty dimensions
+  tags:
+  - empty
+  - zero-capacity
+  code: |
+    std::vector<double> A(6, 1.0), B(6, 1.0), C(4, 7.0);
+    matmul_ikj(A.data(), B.data(), C.data(), 2, 0, 2);       // inner dimension 0: product is all zeros
+    std::vector<double> zeros(4, 0.0);
+    CHECK(C == zeros);
+    std::vector<double> D(4, 7.0);
+    matmul_blocked(A.data(), B.data(), D.data(), 2, 0, 2, 4);
+    CHECK(D == zeros);
+    std::vector<double> E(4, 7.0);
+    matmul_ikj(A.data(), B.data(), E.data(), 0, 3, 2);       // no rows: nothing to write, must not touch memory
+    matmul_blocked(A.data(), B.data(), E.data(), 2, 3, 0, 4);
+    std::vector<double> sevens(4, 7.0);
+    CHECK(E == sevens);
+- name: block of zero is rejected
+  tags:
+  - invalid
+  - zero-capacity
+  code: |
+    double A[] = {1}, B[] = {2}, C[] = {0};
+    CHECK_THROWS(matmul_blocked(A, B, C, 1, 1, 1, 0));
+    matmul_blocked(A, B, C, 1, 1, 1, 1);
+    CHECK_EQ(C[0], 2.0);
+- name: ikj beats the naive loop on a wide matrix
+  tags:
+  - scale
+  code: |
+    // B is 4096 x 2048 doubles (64 MB): the naive loop walks it down columns with a 16 KB stride.
+    const std::size_t m = 8, k = 4096, n = 2048;
+    auto A = make_matrix(m, k, 7), B = make_matrix(k, n, 8);
+    std::vector<double> ref(m * n), c(m * n, -1.0);
+    double t_naive = best_seconds(1, [&] { matmul_naive(A.data(), B.data(), ref.data(), m, k, n); });
+    double t_ikj = best_seconds(3, [&] { matmul_ikj(A.data(), B.data(), c.data(), m, k, n); });
+    CHECK(c == ref);
+    std::printf("naive %.3fs  ikj %.3fs\n", t_naive, t_ikj);
+    CHECK(t_ikj < 0.6 * t_naive);
+- name: blocked beats the naive loop on a wide matrix
+  hidden: true
+  tags:
+  - scale
+  code: |
+    const std::size_t m = 8, k = 4096, n = 2048;
+    auto A = make_matrix(m, k, 9), B = make_matrix(k, n, 10);
+    std::vector<double> ref(m * n), c(m * n, -1.0);
+    double t_naive = best_seconds(1, [&] { matmul_naive(A.data(), B.data(), ref.data(), m, k, n); });
+    double t_blk = best_seconds(3, [&] { matmul_blocked(A.data(), B.data(), c.data(), m, k, n, 64); });
+    CHECK(c == ref);
+    std::printf("naive %.3fs  blocked %.3fs\n", t_naive, t_blk);
+    CHECK(t_blk < 0.6 * t_naive);
+- name: larger square product is still exact
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    const std::size_t n = 200;
+    auto A = make_matrix(n, n, 11), B = make_matrix(n, n, 12);
+    std::vector<double> ref(n * n), c1(n * n), c2(n * n);
+    matmul_naive(A.data(), B.data(), ref.data(), n, n, n);
+    matmul_ikj(A.data(), B.data(), c1.data(), n, n, n);
+    matmul_blocked(A.data(), B.data(), c2.data(), n, n, n, 48);
+    CHECK(c1 == ref);
+    CHECK(c2 == ref);
+complexity:
+- op: matmul (all versions)
+  time: O(n^3)
+  space: O(1)
+- op: memory traffic (naive column walk)
+  time: O(n^3)
+  space: O(1)
+- op: memory traffic (blocked)
+  time: O(n^3)
+  space: O(1)
+extensions:
+- q: Same flops, so what actually differs?
+  kind: complexity
+  key_points:
+  - 'All versions do m*k*n multiply-adds: O(n^3) for square matrices'
+  - 'The naive order touches a new cache line on almost every B access once rows exceed the cache: ~n^3
+    misses, versus ~n^3 / (line / 8) with unit stride'
+  - Blocking reduces memory traffic to O(n^3 / block) by reusing each loaded tile block times
+- q: How would you pick the block size and handle the layout/ABI in a real kernel?
+  kind: design
+  key_points:
+  - 'Choose block so 3 * block^2 * 8 bytes fits in L1 (or L2 for the outer level): about 32 to 64 for
+    L1, larger for L2'
+  - Align tiles to cache-line/SIMD width (alignas(64), aligned allocation) and pack tiles contiguously
+    to avoid TLB misses and conflict misses from power-of-two strides
+  - Mark pointers __restrict so the compiler may vectorize without assuming C aliases A or B
+- q: How do you parallelize it safely?
+  kind: design
+  key_points:
+  - 'Split the i dimension into row-blocks, one per thread: each thread writes a disjoint set of rows
+    of C, so there are no races and no locks'
+  - Avoid false sharing at row-block boundaries by aligning block starts to cache lines
+  - 'Do not split the k dimension without a reduction: threads would race on the same C elements'
+- q: Why can floating-point results differ between loop orders on real data?
+  kind: reasoning
+  key_points:
+  - 'Floating-point addition is not associative: i-j-k and i-k-j (and tiled orders) sum the terms in different
+    orders'
+  - Tests here use small integers so every partial sum is exact; real code compares with a tolerance
+  - Compilers only reassociate with -ffast-math, which is why vectorized reductions are often disallowed
+    by default
+narration: []
+state_aloud:
+- 'Say the access pattern: in i-j-k the inner loop strides through B by n doubles, one cache line per
+  access.'
+- 'Row-major layout: unit stride means the innermost index must be the column index.'
+- 'Edge cases: partial tiles at the edges, block larger than the matrix, zero inner dimension, C must
+  be zeroed first.'
+- 'Floating point: results equal only because the test data are small integers; otherwise compare with
+  a tolerance.'
+walkthrough: |
+  The arithmetic is identical across versions; what changes is memory access order. i-k-j makes the inner loop sweep contiguous rows of `B` and `C` (unit stride, vectorizable), and tiling keeps a block of each operand resident in cache while it is reused, with `min(origin + block, dim)` handling partial edge tiles. NumPy gives you `A @ B` backed by a tuned BLAS; writing it yourself in C++ shows why layout and loop order, not the O(n^3) count, decide performance.
+anki_queries: []
+categories:
+- trading
+- ai-infra

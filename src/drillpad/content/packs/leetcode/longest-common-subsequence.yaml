@@ -1,0 +1,98 @@
+id: longest-common-subsequence
+title: Longest Common Subsequence
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Longest Common Subsequence (LC 1143)"
+statement: |
+  Return the length of the longest subsequence common to strings `a` and `b`. A subsequence keeps relative order but may skip characters (it need not be contiguous).
+
+  Example: `lcs("abcde", "ace")` returns `3`.
+starter: |
+  def lcs(a, b):
+      pass
+hints:
+- Define dp[i][j] as the LCS length of the first i chars of a and first j chars of b.
+- If a[i-1] == b[j-1], dp[i][j] = dp[i-1][j-1] + 1.
+- Otherwise take the better of dropping a character from either string.
+follow_ups:
+- Reduce the space to O(min(m, n)).
+- Reconstruct the actual subsequence.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert lcs('abcde','ace')==3
+- name: one empty
+  tags:
+  - empty
+  code: |
+    assert lcs('','abc')==0
+    assert lcs('abc','')==0
+- name: identical
+  tags:
+  - duplicate
+  code: |
+    assert lcs('abc','abc')==3
+    assert lcs('aaaa','aa')==2
+- name: no overlap
+  tags:
+  - invalid
+  code: |
+    assert lcs('abc','def')==0
+- name: single chars
+  tags:
+  - single
+  code: |
+    assert lcs('a','a')==1
+    assert lcs('a','b')==0
+- name: interleaved
+  tags:
+  - boundary
+  code: |
+    assert lcs('AGGTAB','GXTXAYB')==4
+- name: 2000 x 2000
+  tags:
+  - scale
+  hidden: true
+  code: |
+    a='ab'*1000
+    b='ba'*1000
+    assert lcs(a,b)==1999
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(min(m, n))
+extensions:
+- q: Space reduction
+  kind: complexity
+  key_points:
+  - Row i depends only on row i-1 and the current row
+  - Keep two rows (or one row plus a diagonal temp)
+  - 'Orient so the shorter string is the row: O(min(m,n)) space'
+- q: Reconstruct the subsequence
+  kind: design
+  key_points:
+  - Keep the full table or a direction matrix
+  - 'Backtrack from (m, n): matches go diagonal, else follow the larger neighbor'
+  - Reverse the collected characters
+- q: Relation to edit distance and diff
+  kind: reasoning
+  key_points:
+  - Edit distance with only insert/delete equals m+n-2*LCS
+  - diff tools use LCS-like alignment
+  - Hunt-Szymanski or Myers speeds up when few differences
+narration: []
+state_aloud:
+- Empty strings.
+- Subsequence versus substring.
+- Duplicate characters in either string.
+- Memory for large strings.
+walkthrough: |
+  Fill a table where each cell is the LCS length of two prefixes. A matching pair of characters extends the diagonal prefix result by one; otherwise the cell takes the larger of the cell above and the cell to the left. The bottom-right cell holds the answer, and keeping only two rows reduces space.

@@ -1,0 +1,102 @@
+id: single-number
+title: Single Number
+bar_level: 1
+target_minutes: 12
+patterns:
+- bit-manipulation
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Every element of `nums` appears exactly twice except one element, which appears once. Return the single element. Aim for linear time and constant extra space. Values are Python ints (they may be negative or zero).
+
+  Example: `single_number([4,1,2,1,2])` returns `4`.
+starter: |
+  def single_number(nums):
+      pass
+hints:
+- A hash map of counts works in O(n) space; can you cancel pairs instead?
+- x ^ x == 0 and x ^ 0 == x, and XOR is commutative and associative.
+- XOR all the numbers together; the pairs cancel and the lone value remains.
+follow_ups:
+- Every other element appears three times (Single Number II).
+- Two elements appear once (Single Number III).
+tests:
+- name: classic
+  tags:
+  - boundary
+  code: |
+    assert single_number([2,2,1]) == 1
+    assert single_number([4,1,2,1,2]) == 4
+- name: single element
+  tags:
+  - single
+  code: |
+    assert single_number([9]) == 9
+- name: negative and zero values
+  tags:
+  - invalid
+  code: |
+    assert single_number([-1,-1,-5]) == -5
+    assert single_number([0,3,3]) == 0
+- name: order does not matter
+  tags:
+  - ordering
+  code: |
+    assert single_number([1,2,3,2,1]) == 3
+    assert single_number([7,5,5,7,8,9,9]) == 8
+- name: large values
+  tags:
+  - boundary
+  code: |
+    assert single_number([2**31-1, 5, 2**31-1]) == 5
+    assert single_number([-2**31, 1, 1]) == -2**31
+  hidden: true
+- name: many duplicates
+  tags:
+  - duplicate
+  code: |
+    assert single_number([6]*2 + [3]*2 + [1]*2 + [4]) == 4
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 1000000
+    a = list(range(1, n + 1)) * 2 + [n + 12345]
+    import random
+    random.Random(4).shuffle(a)
+    assert single_number(a) == n + 12345
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why does XOR work?
+  kind: reasoning
+  key_points:
+  - XOR is commutative and associative so order is irrelevant
+  - a ^ a = 0 cancels each pair
+  - a ^ 0 = a, leaving the unique element
+- q: Alternatives and their costs.
+  kind: complexity
+  key_points:
+  - 'Hash set toggling or counter: O(n) time, O(n) space'
+  - 'Sorting and pairing: O(n log n) time'
+  - 'XOR: O(n) time and O(1) space'
+- q: Extend to every element appearing three times except one.
+  kind: design
+  key_points:
+  - Count each bit position modulo 3 across all numbers
+  - Bits with count % 3 == 1 belong to the unique number
+  - Python needs explicit 32-bit sign handling at the end; or use the ones/twos state machine
+narration: []
+state_aloud:
+- Exactly one unique element is guaranteed.
+- Negative numbers work with XOR.
+- Single-element input.
+walkthrough: |
+  XOR every element into an accumulator. Equal numbers cancel because x ^ x is 0, and XOR with 0 changes nothing, so only the element that has no partner survives. One pass and one integer of state.

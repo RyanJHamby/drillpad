@@ -1,0 +1,114 @@
+id: linked-list-cycle
+title: Linked List Cycle
+bar_level: 1
+target_minutes: 12
+patterns:
+- linked-list
+- two-pointers
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Linked List Cycle (LC 141)"
+statement: |
+  Return `True` if the singly linked list starting at `head` contains a cycle (some node's `next` leads back to an earlier node), otherwise `False`. Try to use O(1) extra memory. The starter's `build_cycle(vals, pos)` builds a list whose tail points at index `pos` (`-1` means no cycle).
+
+  Example: `has_cycle(build_cycle([3,2,0,-4], 1))` is `True`.
+prelude: |
+  class ListNode:
+      def __init__(self, val=0, next=None):
+          self.val = val
+          self.next = next
+
+  def build_cycle(vals, pos):
+      """Build a list from vals whose tail links to the node at index pos (pos=-1 for no cycle)."""
+      nodes = [ListNode(v) for v in vals]
+      for a, b in zip(nodes, nodes[1:]):
+          a.next = b
+      if nodes and pos >= 0:
+          nodes[-1].next = nodes[pos]
+      return nodes[0] if nodes else None
+starter: |
+  def has_cycle(head):
+      pass
+hints:
+- A set of visited nodes works but uses O(n) memory.
+- Two pointers at different speeds on a cycle must eventually meet.
+- Move slow by 1 and fast by 2; stop when fast or fast.next is None (no cycle).
+follow_ups:
+- Find the node where the cycle begins.
+- Compute the cycle length.
+tests:
+- name: cycle in the middle
+  tags:
+  - ordering
+  code: |
+    assert has_cycle(build_cycle([3,2,0,-4], 1)) is True
+- name: no cycle
+  tags:
+  - ordering
+  code: |
+    assert has_cycle(build_cycle([1,2,3], -1)) is False
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert has_cycle(None) is False
+    assert has_cycle(build_cycle([1,2], 0)) is True
+- name: single node
+  tags:
+  - single
+  code: |
+    assert has_cycle(build_cycle([1], 0)) is True
+    assert has_cycle(build_cycle([1], -1)) is False
+- name: tail points to head
+  tags:
+  - boundary
+  code: |
+    assert has_cycle(build_cycle([1,2,3,4], 0)) is True
+    assert has_cycle(build_cycle([1,2], 1)) is True
+- name: equal values do not fake a cycle
+  tags:
+  - duplicate
+  code: |
+    assert has_cycle(build_cycle([1,1,1,1], -1)) is False
+    assert has_cycle(build_cycle([1,1,1,1], 2)) is True
+- name: long list
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 500000
+    assert has_cycle(build_cycle(list(range(n)), n // 2)) is True
+    assert has_cycle(build_cycle(list(range(n)), -1)) is False
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why must fast and slow meet if there is a cycle?
+  kind: reasoning
+  key_points:
+  - Once both are inside the cycle the gap shrinks by 1 each step
+  - The gap cannot skip over 0 because it changes by exactly 1
+  - So they meet within one lap of the cycle
+- q: Compare with the hash-set approach.
+  kind: complexity
+  key_points:
+  - Set is O(n) time and O(n) space
+  - Floyd is O(n) time and O(1) space
+  - Identity (not value) must be hashed
+- q: Find where the cycle starts?
+  kind: design
+  key_points:
+  - After meeting, reset one pointer to head
+  - Advance both one step at a time
+  - They meet at the cycle entry node
+narration: []
+state_aloud:
+- Empty list or one node.
+- Tail pointing at itself.
+- 'Equal values are not a cycle: compare nodes, not values.'
+- Guard fast.next before fast.next.next.
+walkthrough: |
+  Start slow and fast at the head. Each iteration advances slow by one node and fast by two. If fast (or its next) becomes `None` the list ends, so there is no cycle. If the pointers ever refer to the same node, the faster one has lapped the slower inside a cycle. Memory use is constant.

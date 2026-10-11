@@ -1,0 +1,161 @@
+id: leaky-bucket
+title: Leaky bucket meter
+bar_level: 3
+target_minutes: 15
+patterns: [rate-limiting, leaky-bucket, traffic-shaping]
+firm_tags: [ai-infra, distsys]
+anki_queries: []
+statement: |
+  Implement `LeakyBucketMeter(capacity, leak_rate)` with `allow(cost=1.0) -> bool`.
+  It tracks a "water level" that starts at 0 and drains at `leak_rate` units per second
+  (never below 0). A request is accepted if `level + cost <= capacity`, which raises the level
+  by `cost`; otherwise it is rejected and the level is unchanged. Lazy drain on each call, a
+  lock around state, and `time.monotonic()` for time (not imported by name).
+starter: |
+  class LeakyBucketMeter:
+      def __init__(self, capacity: float, leak_rate: float):
+          pass
+hints:
+  - Drain first (level = max(0, level - elapsed * leak_rate)), then test and add.
+  - Contrast with token bucket: this tracks backlog, not spendable capacity.
+follow_ups:
+  - When would you pick leaky bucket over token bucket?
+  - How do you make the queueing variant fair across clients?
+  - What happens under sustained overload?
+  - Can you combine both bucket types (token bucket at the edge, leaky bucket internally)?
+tests:
+  - name: fills then rejects
+    tags: [boundary, empty]
+    code: |
+      import time
+      clock = [50.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = LeakyBucketMeter(capacity=3, leak_rate=1)
+          assert [b.allow() for _ in range(4)] == [True, True, True, False]
+      finally:
+          time.monotonic = real
+  - name: leaks at constant rate
+    tags: [time, ordering]
+    code: |
+      import time
+      clock = [50.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = LeakyBucketMeter(capacity=3, leak_rate=1)
+          for _ in range(3): b.allow()
+          clock[0] = 51.0
+          assert b.allow() is True and b.allow() is False
+          clock[0] = 54.0
+          assert [b.allow() for _ in range(4)] == [True, True, True, False]
+      finally:
+          time.monotonic = real
+  - name: cost and oversize
+    tags: [invalid, boundary]
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = LeakyBucketMeter(capacity=5, leak_rate=1)
+          assert b.allow(cost=6) is False
+          assert b.allow(cost=3) is True
+          assert b.allow(cost=3) is False
+          assert b.allow(cost=2) is True
+      finally:
+          time.monotonic = real
+  - name: level never goes negative after long idle
+    tags: [time, state-reuse, boundary]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = LeakyBucketMeter(capacity=2, leak_rate=10)
+          b.allow()
+          clock[0] = 1000.0
+          assert [b.allow() for _ in range(3)] == [True, True, False]
+      finally:
+          time.monotonic = real
+  - name: concurrent allows never exceed capacity
+    tags: [concurrency, scale]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          import threading
+          b = LeakyBucketMeter(capacity=100, leak_rate=0)
+          ok = []
+          def worker():
+              ok.append(sum(b.allow() for _ in range(50)))
+          ts = [threading.Thread(target=worker, daemon=True) for _ in range(8)]
+          for t in ts: t.start()
+          for t in ts: t.join(10)
+          assert not any(t.is_alive() for t in ts)
+          assert sum(ok) == 100, f"expected exactly 100 accepted, got {sum(ok)}"
+      finally:
+          time.monotonic = real
+  - name: capacity zero accepts nothing
+    tags: [zero-capacity, boundary]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = LeakyBucketMeter(capacity=0, leak_rate=5)
+          assert b.allow() is False
+          clock[0] = 100.0
+          assert b.allow() is False
+      finally:
+          time.monotonic = real
+complexity:
+- op: allow
+  time: O(1)
+  space: O(1)
+- op: queueing variant
+  time: O(1)
+  space: O(Q)
+extensions:
+- q: When would you pick a leaky bucket over a token bucket?
+  kind: reasoning
+  key_points:
+  - Downstream cannot tolerate bursts at all (legacy system, physical rate limit)
+  - Leaky bucket tracks backlog and smooths output; token bucket tracks spendable burst capacity
+  - Token bucket's burst tolerance would overwhelm a fragile downstream
+- q: How do you make the queueing variant fair across clients?
+  kind: design
+  key_points:
+  - Per-client sub-queues drained round-robin instead of one global FIFO
+  - Queue variant needs a leak-cadence driver (timer or consumer loop), unlike the lazy meter
+  - Cap wait time or drop to bound latency
+- q: What happens under sustained overload?
+  kind: reasoning
+  key_points:
+  - Meter version rejects steadily at capacity
+  - Queue version's latency grows unboundedly unless wait time is capped or items dropped
+  - 'Overflow policy matters: reject-new versus drop-oldest'
+  - Late legitimate arrivals can be starved; may need priority-aware admission
+- q: What is the time and space cost of the meter versus the queueing variant?
+  kind: complexity
+  key_points:
+  - 'Meter: O(1) time and O(1) space (a level and a timestamp)'
+  - 'Queueing variant: O(1) time per op but O(Q) space for queue depth Q'
+  - Lazy drain on each call, no background thread for the meter
+- q: Can you combine both bucket types?
+  kind: design
+  key_points:
+  - Token bucket at the edge for admission
+  - Leaky bucket internally to shape accepted traffic before a fragile downstream
+  - Use monotonic clock; guard state with a lock
+narration:
+- This is leaky bucket, not token bucket — the difference is it smooths to a constant output rate instead of allowing a burst up to capacity.
+- I'll track a 'water level' that drains at a fixed leak rate; requests that would overflow the capacity get rejected.
+- There's also a queueing variant that holds requests and releases them on a timer instead of instant accept/reject — I'll mention that but implement the meter version since it's simpler and answers the same question.
+- 'Let me trace a burst: even though several requests arrive at once, only leak_rate''s worth actually gets accepted per second.'
+- 'Edge case: what do we do on overflow — reject new or drop oldest? I''ll go with reject-new by default.'
+state_aloud:
+- 'Overflow policy: reject-new (shown above) vs. drop-oldest — matters a lot if freshness of requests matters (e.g., stock quotes vs. payment retries).'
+- Queue version needs a dedicated leak-cadence driver (timer or consumer loop) — that's an actual scheduled task, unlike token bucket's lazy refill, since the *output* side genuinely needs to be paced, not just checked.
+- 'Starvation under sustained overload: if arrival rate permanently exceeds leak rate, the queue is always full and legitimate late arrivals get rejected indefinitely — may need priority-aware admission (see section 5).'
+- Capacity=0 edge case degenerates to "no burst tolerated at all," which is a valid config (hard real-time downstream) but worth calling out explicitly.
+walkthrough: |
+  Where a token bucket tracks available capacity and lets a client spend it all at once, a leaky bucket tracks accumulated backlog and drains it at a fixed leak rate, so output never exceeds that rate. The meter version keeps a water level that drains lazily on each call (never below 0); a request is accepted only if `level + cost <= capacity` and otherwise rejected, leaving the level unchanged. This is O(1) time and space. A queueing variant instead holds requests and releases them on a timer. Overflow policy (reject-new versus drop-oldest) should be stated, and capacity 0 means no burst is tolerated.
+categories: [systems-impl]

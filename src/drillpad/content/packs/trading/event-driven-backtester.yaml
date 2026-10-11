@@ -1,0 +1,226 @@
+id: event-driven-backtester
+title: Event-driven Backtester Core
+bar_level: 3
+target_minutes: 40
+patterns:
+- event-loop
+- simulation
+- no-lookahead
+- portfolio-accounting
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Build the core loop of an event-driven backtester.
+
+  `run_backtest(ticks, strategy, cash, fee_per_share=0) -> dict`
+
+  - `ticks`: list of `(ts, symbol, price)` (ints; price in cents) sorted by `ts` non-decreasing (`ValueError` if not sorted).
+    Process them strictly in input order: this is the event stream.
+  - `strategy` is any object with `on_tick(ts, symbol, price, portfolio) -> list[(symbol, side, qty)] | None`.
+    `portfolio` exposes `.cash` (int cents) and `.positions` (dict symbol -> signed int shares); strategies must treat it as
+    read-only. Orders use `side` in `"buy"`/`"sell"` and positive int `qty` (`ValueError` otherwise).
+  - **No look-ahead:** orders returned on a tick are NOT filled on that tick. They fill at the price of the NEXT tick of the
+    SAME symbol, before the strategy sees that tick. Orders still pending when the data ends are dropped.
+    Multiple pending orders for a symbol fill in the order they were submitted.
+  - Fills: a buy costs `qty * price + qty * fee_per_share`; if that exceeds current cash the order is REJECTED (recorded,
+    not filled, later orders still tried). A sell credits `qty * price - qty * fee_per_share`; shorting is allowed (positions may go
+    negative, no margin check). `fee_per_share >= 0` else `ValueError`.
+  - After handling each tick (fills, then the strategy callback), append `(ts, equity)` to the curve where
+    `equity = cash + sum(position * last_price)` over symbols, using the last seen price for each symbol.
+
+  Return `{"cash": int, "positions": {symbol: qty} (zero positions omitted), "fills": [(ts, symbol, side, qty, price), ...],
+  "rejected": [(ts, symbol, side, qty), ...], "equity_curve": [(ts, equity), ...]}`. The `ts` in `fills`/`rejected` is the tick on which
+  the order executed or was rejected.
+starter: |
+  def run_backtest(ticks, strategy, cash, fee_per_share=0):
+      pass
+hints:
+- 'Keep three pieces of state: a Portfolio (cash, positions), the last price per symbol, and pending orders
+  per symbol. The loop is: execute pending orders for this symbol at this tick price, then call the strategy,
+  then queue what it returns.'
+- 'Executing before calling the strategy is what removes look-ahead: an order created on tick t can only
+  fill at the next tick of that symbol.'
+- Equity after each tick is cash plus the sum of positions marked at the last seen price. Reject a buy
+  whose cost exceeds cash instead of letting cash go negative.
+follow_ups:
+- How would you model slippage and partial fills?
+- How do you make the engine reusable for live trading (same strategy code)?
+- How would you add multiple strategies and portfolio-level risk checks?
+tests:
+- name: orders fill on the next tick of the symbol
+  code: |
+    class Buy1:
+        def __init__(self): self.done = False
+        def on_tick(self, ts, sym, px, pf):
+            if not self.done:
+                self.done = True
+                return [(sym, "buy", 10)]
+    ticks = [(1, "X", 100), (2, "X", 110), (3, "X", 120)]
+    r = run_backtest(ticks, Buy1(), 10000)
+    assert r["fills"] == [(2, "X", "buy", 10, 110)], r["fills"]
+    assert r["cash"] == 10000 - 1100 and r["positions"] == {"X": 10}
+    assert r["equity_curve"] == [(1, 10000), (2, 10000 - 1100 + 1100), (3, 10000 - 1100 + 1200)]
+  hidden: false
+  tags:
+  - ordering
+  - time
+- name: no ticks and no orders
+  code: |
+    class Idle:
+        def on_tick(self, ts, sym, px, pf): return None
+    r = run_backtest([], Idle(), 500)
+    assert r == {"cash": 500, "positions": {}, "fills": [], "rejected": [], "equity_curve": []}
+    r = run_backtest([(1, "X", 10)], Idle(), 500)
+    assert r["equity_curve"] == [(1, 500)] and r["fills"] == []
+  hidden: false
+  tags:
+  - empty
+  - single
+- name: orders are per symbol and pending orders are dropped at the end
+  code: |
+    class S:
+        def on_tick(self, ts, sym, px, pf):
+            if ts == 1:
+                return [("B", "buy", 1)]
+            if ts == 4:
+                return [("A", "buy", 5)]
+    ticks = [(1, "A", 10), (2, "A", 11), (3, "B", 50), (4, "A", 12)]
+    r = run_backtest(ticks, S(), 1000)
+    assert r["fills"] == [(3, "B", "buy", 1, 50)]
+    assert r["positions"] == {"B": 1} and r["cash"] == 950
+  hidden: false
+  tags:
+  - ordering
+  - state-reuse
+- name: insufficient cash is rejected, later orders still tried
+  code: |
+    class S:
+        def on_tick(self, ts, sym, px, pf):
+            if ts == 1:
+                return [(sym, "buy", 100), (sym, "buy", 2)]
+    r = run_backtest([(1, "X", 10), (2, "X", 10)], S(), 100)
+    assert r["rejected"] == [(2, "X", "buy", 100)]
+    assert r["fills"] == [(2, "X", "buy", 2, 10)] and r["cash"] == 80
+  hidden: false
+  tags:
+  - boundary
+  - invalid
+- name: fees and shorting
+  code: |
+    class S:
+        def on_tick(self, ts, sym, px, pf):
+            if ts == 1:
+                return [(sym, "sell", 10)]
+            if ts == 2:
+                return [(sym, "buy", 10)]
+    r = run_backtest([(1, "X", 100), (2, "X", 90), (3, "X", 80)], S(), 0, fee_per_share=1)
+    assert r["fills"] == [(2, "X", "sell", 10, 90), (3, "X", "buy", 10, 80)]
+    assert r["cash"] == (10 * 90 - 10) - (10 * 80 + 10) and r["positions"] == {}
+    assert r["equity_curve"][1] == (2, 10 * 90 - 10 - 10 * 90)
+  hidden: false
+  tags:
+  - boundary
+  - duplicate
+- name: portfolio visible to strategy and input validation
+  code: |
+    seen = []
+    class S:
+        def on_tick(self, ts, sym, px, pf):
+            seen.append((pf.cash, dict(pf.positions)))
+            if ts == 1:
+                return [(sym, "buy", 1)]
+    run_backtest([(1, "X", 5), (2, "X", 6)], S(), 100)
+    assert seen == [(100, {}), (94, {"X": 1})]
+    class Bad:
+        def on_tick(self, ts, sym, px, pf): return [(sym, "hold", 1)]
+    for fn in (lambda: run_backtest([(1, "X", 5)], Bad(), 10),
+               lambda: run_backtest([(2, "X", 5), (1, "X", 5)], S(), 10),
+               lambda: run_backtest([(1, "X", 5)], S(), 10, fee_per_share=-1)):
+        try:
+            fn()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+  hidden: true
+  tags:
+  - invalid
+  - state-reuse
+- name: multi-symbol equity uses last known prices
+  code: |
+    class S:
+        def on_tick(self, ts, sym, px, pf):
+            if ts == 1 and sym == "A":
+                return [("A", "buy", 2), ("B", "buy", 1)]
+    ticks = [(1, "A", 10), (2, "B", 20), (3, "A", 15), (4, "B", 30)]
+    r = run_backtest(ticks, S(), 1000)
+    assert r["fills"] == [(2, "B", "buy", 1, 20), (3, "A", "buy", 2, 15)]
+    assert r["equity_curve"][-1] == (4, 1000 - 20 - 30 + 30 + 2 * 15)
+    assert r["equity_curve"][1] == (2, 1000)
+  hidden: true
+  tags:
+  - ordering
+  - time
+- name: 'scale: 200k ticks with a trading strategy'
+  code: |
+    class Mom:
+        def __init__(self): self.last = {}
+        def on_tick(self, ts, sym, px, pf):
+            p = self.last.get(sym)
+            self.last[sym] = px
+            if p is None:
+                return None
+            if px > p and pf.positions.get(sym, 0) <= 0:
+                return [(sym, "buy", 1)]
+            if px < p and pf.positions.get(sym, 0) > 0:
+                return [(sym, "sell", 1)]
+    ticks = [(i, f"S{i % 10}", 10000 + (i * 7919) % 500) for i in range(200000)]
+    r = run_backtest(ticks, Mom(), 10**9)
+    assert len(r["equity_curve"]) == 200000 and len(r["fills"]) > 10000
+    assert not r["rejected"]
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: run_backtest
+  time: O(T + F)
+  space: O(T + S)
+extensions:
+- q: 'Level 2: add limit orders that fill only when the next tick crosses the limit, expiring after N
+    ticks.'
+  key_points:
+  - Pending order carries a limit price and an expiry counter
+  - Fill condition is evaluated on each subsequent tick of the symbol
+  - Expired or unfilled orders are recorded as cancelled, never silently dropped
+  kind: code
+- q: 'Level 3: add a latency model so orders become active after a fixed delay in time, not ticks.'
+  key_points:
+  - Pending orders store an activation timestamp = ts + latency
+  - An order fills on the first tick with ts >= activation, at that tick price
+  - Ordering among equal activation times stays deterministic (submission order)
+  kind: code
+- q: Complexity of the run and what to watch for as data grows.
+  key_points:
+  - Each tick does O(1) work plus the pending fills for its symbol
+  - Naive equity recomputation over all symbols per tick is O(S); track a running mark-to-market value
+    for O(1)
+  - Memory is dominated by the equity curve and fills; stream them to disk for very large runs
+  kind: complexity
+- q: 'Design: backtest correctness pitfalls.'
+  key_points:
+  - Look-ahead and survivorship bias invalidate results; the engine must enforce the information barrier
+    (next-tick fills)
+  - Same strategy interface in live and simulation so research code is the production code
+  - Deterministic replay from timestamps, no wall clock, so results are reproducible bit for bit
+  kind: design
+narration: []
+state_aloud:
+- Orders fill at the NEXT tick of the same symbol, before the strategy sees it; trailing orders are dropped.
+- Buys that exceed cash are rejected and recorded; shorting allowed.
+- Integer cents; ticks sorted; equity marked at last seen price.
+walkthrough: |
+  Standard event-driven backtester structure (event queue, strategy callback, portfolio, execution handler) reduced to a deterministic core. Source: standard formulation.
+categories:
+- trading

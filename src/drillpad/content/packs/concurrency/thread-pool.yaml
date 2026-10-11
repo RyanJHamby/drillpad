@@ -1,0 +1,163 @@
+id: thread-pool
+title: Fixed-size thread pool with clean shutdown
+bar_level: 3
+target_minutes: 25
+patterns: [worker-pool, blocking-queue, poison-pill, graceful-shutdown]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:12 - *"'
+statement: |
+  Implement `ThreadPool(num_workers)`: starts `num_workers` worker threads that run submitted
+  tasks. API: `submit(fn, *args, **kwargs)` and `shutdown(wait=True)`.
+  Requirements: every task runs exactly once; workers block (no busy-polling) while idle;
+  an exception in a task must not kill its worker; `shutdown` drains all queued work, stops the
+  workers, and (with wait=True) joins them. Say out loud that under CPython's GIL threads only
+  help I/O-bound work. Make workers daemon threads.
+starter: |
+  class ThreadPool:
+      def __init__(self, num_workers):
+          pass
+hints:
+  - queue.Queue gives you a thread-safe blocking get.
+  - One poison pill (None) per worker is a simple shutdown signal; drain the queue first.
+  - Use try/except/finally around the task so task_done always runs.
+follow_ups:
+  - How do you shut down cleanly without dropping queued work?
+  - How would you bound the queue so a slow consumer cannot cause unbounded memory growth?
+  - Why move (not copy) the task out of the queue in the C++ version?
+  - Why release the lock before running the task?
+tests:
+  - name: all tasks run exactly once
+    tags: [concurrency, scale, duplicate]
+    code: |
+      import threading
+      def body():
+          lock = threading.Lock(); counts = {}
+          def work(i):
+              with lock: counts[i] = counts.get(i, 0) + 1
+          p = ThreadPool(4)
+          for i in range(200): p.submit(work, i)
+          p.shutdown()
+          assert counts == {i: 1 for i in range(200)}, len(counts)
+      err = []
+      def runner():
+          try: body()
+          except BaseException as e: err.append(e)
+      t = threading.Thread(target=runner, daemon=True); t.start(); t.join(10)
+      assert not t.is_alive(), "timed out (deadlock or busy hang)"
+      if err: raise err[0]
+  - name: tasks run concurrently
+    tags: [concurrency]
+    code: |
+      import threading
+      barrier = threading.Barrier(4, timeout=3)
+      ok = []
+      def work():
+          barrier.wait()  # only passes if all 4 workers are inside tasks at once
+          ok.append(1)
+      p = ThreadPool(4)
+      for _ in range(4): p.submit(work)
+      t = threading.Thread(target=p.shutdown, daemon=True); t.start(); t.join(8)
+      assert not t.is_alive(), "shutdown hung"
+      assert len(ok) == 4
+  - name: args kwargs and survives task exceptions
+    tags: [invalid, concurrency, single]
+    code: |
+      import threading
+      out = []; done = threading.Event()
+      def boom(): raise RuntimeError("task failure")
+      def add(a, b=0): out.append(a + b); done.set()
+      p = ThreadPool(1)
+      p.submit(boom); p.submit(boom)
+      p.submit(add, 2, b=3)
+      assert done.wait(3), "worker died after task exception"
+      t = threading.Thread(target=p.shutdown, daemon=True); t.start(); t.join(5)
+      assert not t.is_alive() and out == [5]
+  - name: shutdown drains queued work
+    tags: [ordering, state-reuse]
+    hidden: true
+    code: |
+      import threading, time
+      results = []
+      def slow(i): time.sleep(0.002); results.append(i)
+      p = ThreadPool(1)
+      for i in range(30): p.submit(slow, i)
+      t = threading.Thread(target=p.shutdown, daemon=True); t.start(); t.join(10)
+      assert not t.is_alive(), "shutdown hung"
+      assert results == list(range(30))
+  - name: workers exit after shutdown
+    tags: [concurrency, state-reuse]
+    hidden: true
+    code: |
+      import threading
+      before = threading.active_count()
+      p = ThreadPool(3)
+      p.submit(lambda: None)
+      t = threading.Thread(target=p.shutdown, daemon=True); t.start(); t.join(5)
+      assert not t.is_alive()
+      assert threading.active_count() <= before, "worker threads still alive after shutdown(wait=True)"
+  - name: shutdown with no tasks
+    tags: [empty, single, concurrency]
+    hidden: true
+    code: |
+      import threading
+      p = ThreadPool(1)
+      t = threading.Thread(target=p.shutdown, daemon=True); t.start(); t.join(5)
+      assert not t.is_alive(), "shutdown of an idle pool hung"
+      q = ThreadPool(3)
+      t = threading.Thread(target=q.shutdown, daemon=True); t.start(); t.join(5)
+      assert not t.is_alive(), "shutdown of an idle pool hung"
+complexity:
+- op: submit
+  time: O(1)
+  space: O(q)
+- op: shutdown
+  time: O(n + w)
+  space: O(w)
+extensions:
+- q: What is the GIL caveat for a Python thread pool?
+  kind: reasoning
+  key_points:
+  - Threads give I/O overlap, not CPU parallelism
+  - CPU-bound work needs multiprocessing or GIL-releasing C extensions
+  - State it unprompted
+- q: How do you shut down cleanly without dropping queued work?
+  kind: design
+  key_points:
+  - Drain first (queue.join) then one poison pill per worker
+  - Or a stopping flag in the wait predicate (C++)
+  - Join workers when wait=True
+  - Define the contract for submit after shutdown (reject versus drop)
+- q: How would you bound the queue so a slow consumer cannot cause unbounded memory growth?
+  kind: design
+  key_points:
+  - Use a bounded blocking queue
+  - submit blocks (backpressure) or rejects when full
+  - Pick the policy per use case
+- q: Why release the lock before running the task, and why move not copy the task (C++)?
+  kind: reasoning
+  key_points:
+  - Holding the lock during task execution serializes all workers
+  - Moving avoids copying std::function captures
+  - Wrap the task in try/except/finally so task_done always runs and workers survive exceptions
+- q: What does submit cost and what is the space?
+  kind: complexity
+  key_points:
+  - submit is O(1) (queue push)
+  - Queue space O(q) for q pending tasks, worker threads O(w)
+  - Zero or one worker degenerates to a single-threaded runner but stays correct
+narration:
+- I'll use a shared task queue protected by a mutex, plus a condition variable so workers block instead of spin.
+- Python's `queue.Queue` already gives me thread-safe blocking `get`, so I'll use that; C++ needs the mutex/cv pattern explicitly.
+- For shutdown I'll drain the queue, then send a stop signal, then join every worker.
+- 'One caveat I want to flag: Python threads won''t parallelize CPU-bound work because of the GIL — this pool only helps with I/O-bound tasks in Python.'
+- In C++ I'll release the lock before running the task itself so workers don't serialize on each other.
+state_aloud:
+- Shutdown while tasks are still queued — must drain (finish queued work) unless the spec explicitly wants cancel-in-flight.
+- A task throws/raises — must not kill the worker thread; catch and log, keep the loop alive.
+- Submitting after shutdown has begun — decide and state the contract (reject vs. silently accept-and-drop).
+- Zero workers or a pool size of 1 — degenerates to a single-threaded queue-runner; should still be correct.
+- 'Python: CPU-bound tasks won''t parallelize under the GIL even with N threads — say this before the interviewer has to ask.'
+walkthrough: |
+  Workers share a task queue guarded by a mutex and condition variable (or a blocking `queue.Queue`) so they block while idle instead of spinning. Each submitted task must run exactly once, and `submit` is an O(1) amortized queue push. Shutdown drains the queued work, then sends a stop signal, then joins every worker. A task that raises must not kill its worker, so the loop catches and logs the error. The lock is released before the task runs so workers do not serialize on each other. In Python this only helps I/O-bound work because of the GIL.
+categories: [systems-impl]

@@ -1,0 +1,97 @@
+id: generate-parentheses
+title: Generate Parentheses
+bar_level: 2
+target_minutes: 22
+patterns:
+- backtracking
+- stack
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Given an integer `n >= 1`, return every string made of `n` pairs of parentheses that is well-formed (every `(` is closed by a matching `)` in the right order). The order of the returned list does not matter.
+
+  Example: `generate_parenthesis(3)` returns `["((()))","(()())","(())()","()(())","()()()"]` in any order.
+starter: |
+  def generate_parenthesis(n):
+      pass
+hints:
+- Brute-forcing all 2^(2n) strings and filtering is wasteful.
+- Build the string character by character, tracking how many opens and closes are used.
+- You may add `(` while opens < n, and `)` while closes < opens; this keeps every prefix valid.
+follow_ups:
+- How many results are there for a given n?
+- Generate them iteratively without recursion.
+tests:
+- name: n equals 3
+  tags:
+  - ordering
+  code: |
+    assert sorted(generate_parenthesis(3))==sorted(['((()))','(()())','(())()','()(())','()()()'])
+- name: n equals 1
+  tags:
+  - single
+  code: |
+    assert generate_parenthesis(1)==['()']
+- name: n equals 2
+  tags:
+  - boundary
+  code: |
+    assert sorted(generate_parenthesis(2))==['(())','()()']
+- name: no duplicates and all valid
+  tags:
+  - duplicate
+  code: |
+    r=generate_parenthesis(5)
+    assert len(r)==len(set(r))==42
+    for s in r:
+        d=0
+        for ch in s:
+            d+=1 if ch=='(' else -1
+            assert d>=0
+        assert d==0 and len(s)==10
+- name: catalan counts
+  tags:
+  - state-reuse
+  code: |
+    assert len(generate_parenthesis(8))==1430
+    assert len(generate_parenthesis(4))==14
+- name: n equals 12 needs pruning
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=generate_parenthesis(12)
+    assert len(r)==208012
+    assert len(set(r))==208012
+complexity:
+- op: overall
+  time: O(4^n / sqrt(n))
+  space: O(n)
+extensions:
+- q: Why is output size Catalan?
+  kind: complexity
+  key_points:
+  - The count is C_n = (1/(n+1)) * binom(2n, n)
+  - Asymptotically about 4^n / (n^1.5)
+  - Any algorithm costs at least the output size, times n to build each string
+- q: Iterative or DP formulation.
+  kind: design
+  key_points:
+  - Every valid string is ( A ) B with A, B valid of smaller sizes
+  - Memoise by n and combine
+  - Same output, no recursion depth issue
+- q: Why do the two pruning rules suffice?
+  kind: reasoning
+  key_points:
+  - Opens never exceed n
+  - Closes never exceed opens so every prefix balance is non-negative
+  - Ending with n opens and n closes gives balance zero
+narration: []
+state_aloud:
+- n >= 1 assumed; say what n = 0 returns (a single empty string).
+- Every prefix must have balance >= 0.
+- Output size is exponential, so state that cost.
+walkthrough: |
+  Backtrack on a growing string with counters `open` and `close`. Append `(` if fewer than n opens are used; append `)` only if `close < open`, which keeps the prefix valid. When both counters reach n the string is complete and is added to the result. Invalid prefixes are never explored.

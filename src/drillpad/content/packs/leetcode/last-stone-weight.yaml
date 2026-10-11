@@ -1,0 +1,100 @@
+id: last-stone-weight
+title: Last Stone Weight
+bar_level: 1
+target_minutes: 15
+patterns:
+- heap-top-k
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Last Stone Weight (LC 1046)"
+statement: |
+  You have a list of positive integer stone weights. Each round, take the two heaviest stones. If they weigh the same, both are destroyed; otherwise the lighter is destroyed and the heavier is replaced by a stone of weight equal to the difference. Repeat until at most one stone remains. Return the weight of the remaining stone, or `0` if none remain.
+
+  Example: `[2,7,4,1,8,1]` returns `1`.
+starter: |
+  def last_stone_weight(stones):
+      pass
+hints:
+- Each round needs the two largest values, then inserts one value back.
+- Re-sorting each round is wasteful; use a priority queue.
+- Python has a min-heap, so store negated weights.
+follow_ups:
+- Can you do it in O(n) with weights bounded by a small constant?
+- Return the sequence of collisions.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert last_stone_weight([2,7,4,1,8,1]) == 1
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert last_stone_weight([]) == 0
+    assert last_stone_weight([3]) == 3
+- name: single stone
+  tags:
+  - single
+  code: |
+    assert last_stone_weight([1]) == 1
+- name: equal pair cancels
+  tags:
+  - duplicate
+  code: |
+    assert last_stone_weight([2,2]) == 0
+    assert last_stone_weight([5,5,5]) == 5
+- name: chain of differences
+  tags:
+  - boundary
+  code: |
+    assert last_stone_weight([10,4,3]) == 3
+    assert last_stone_weight([9,3,2,10]) == 0
+- name: input list is not modified
+  tags:
+  - state-reuse
+  code: |
+    a = [2,7,4,1,8,1]
+    last_stone_weight(a)
+    assert a == [2,7,4,1,8,1]
+    assert last_stone_weight(a) == 1
+- name: many stones
+  hidden: true
+  tags:
+  - scale
+  code: |
+    assert last_stone_weight([7] * 100001) == 7
+    assert last_stone_weight([7] * 100000) == 0
+complexity:
+- op: overall
+  time: O(n log n)
+  space: O(n)
+extensions:
+- q: Cost of re-sorting every round?
+  kind: complexity
+  key_points:
+  - Each round sorts O(n log n)
+  - Up to n rounds gives O(n^2 log n)
+  - Heap makes each round O(log n) for O(n log n) total
+- q: Bounded weights?
+  kind: design
+  key_points:
+  - Bucket by weight when the maximum weight W is small
+  - Process buckets from the top
+  - O(n + W) time with counting instead of a heap
+- q: Why negate for heapq?
+  kind: reasoning
+  key_points:
+  - heapq is a min-heap
+  - Negated values order largest first
+  - Remember to negate back when reading
+narration: []
+state_aloud:
+- Empty list returns 0.
+- Single stone returns itself.
+- Equal stones cancel.
+- Do not mutate the caller's list.
+walkthrough: |
+  Build a max-heap by negating the weights. While at least two stones remain, pop the two heaviest; if they differ, push back their difference. At the end return the remaining stone's weight, or 0 when the heap is empty. Each of up to n rounds costs O(log n).

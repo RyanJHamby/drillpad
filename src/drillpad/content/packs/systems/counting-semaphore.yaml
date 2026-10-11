@@ -1,0 +1,195 @@
+id: counting-semaphore
+title: Counting Semaphore
+bar_level: 4
+target_minutes: 42
+patterns:
+- semaphore
+- condition-variable
+- blocking
+firm_tags:
+- ai-infra
+- distsys
+statement: |
+  Implement `Semaphore(value=1)` from `threading.Condition` (do not use `threading.Semaphore`).
+
+  API
+  - `Semaphore(value)`: `value < 0` raises `ValueError`.
+  - `acquire(timeout=None)` -> `bool`: take one permit, blocking while none are available.
+    `timeout=None` waits forever, `timeout=0` never blocks (try-acquire), otherwise wait at most
+    `timeout` seconds in total. Returns `True` if a permit was taken, `False` on timeout.
+  - `release()`: add one permit and wake a waiter. Releasing may exceed the initial value (this is
+    an unbounded semaphore).
+  - `available` property: current number of permits.
+
+  Example
+  ```python
+  s = Semaphore(2)
+  s.acquire() -> True; s.acquire() -> True
+  s.acquire(timeout=0) -> False
+  s.release(); s.acquire(timeout=0) -> True
+  ```
+starter: |
+  import threading
+
+  class Semaphore:
+      def __init__(self, value=1):
+          pass
+
+      def acquire(self, timeout=None):
+          pass
+
+      def release(self):
+          pass
+
+      @property
+      def available(self):
+          pass
+hints:
+- Guard an integer counter with a Condition; acquire waits while it is 0.
+- Convert timeout into an absolute deadline once, then wait(remaining) in a loop.
+- release increments and notifies one waiter.
+follow_ups:
+- Why must acquire loop instead of using if?
+- How does timeout=0 differ from a blocking acquire?
+tests:
+- name: permits and try-acquire
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    s = Semaphore(2)
+    assert s.acquire() is True and s.acquire() is True
+    assert s.available == 0
+    assert s.acquire(timeout=0) is False
+    s.release()
+    assert s.available == 1
+    assert s.acquire(timeout=0) is True
+- name: timeout returns false
+  tags:
+  - time
+  - boundary
+  code: |
+    import time
+    s = Semaphore(0)
+    t0 = time.monotonic()
+    assert s.acquire(timeout=0.1) is False
+    assert 0.05 <= time.monotonic() - t0 < 3
+    assert s.available == 0
+- name: release wakes blocked acquirer
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading
+    s = Semaphore(0)
+    res = []
+    done = threading.Event()
+    def worker():
+        res.append(s.acquire(timeout=5))
+        done.set()
+    t = threading.Thread(target=worker, daemon=True); t.start()
+    s.release()
+    assert done.wait(5), "blocked acquirer never woke"
+    assert res == [True]
+    t.join(5)
+- name: invalid initial value
+  tags:
+  - invalid
+  - single
+  code: |
+    try:
+        Semaphore(-1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError")
+    s = Semaphore()
+    assert s.acquire(timeout=0) is True and s.acquire(timeout=0) is False
+- name: limits concurrency
+  hidden: true
+  tags:
+  - concurrency
+  - scale
+  code: |
+    import threading, time
+    s = Semaphore(3)
+    state = {"cur": 0, "max": 0, "done": 0}
+    guard = threading.Lock()
+    errors = []
+    def worker():
+        for _ in range(5):
+            if s.acquire(timeout=8) is not True:
+                errors.append("timeout"); return
+            with guard:
+                state["cur"] += 1; state["max"] = max(state["max"], state["cur"])
+            time.sleep(0.002)
+            with guard:
+                state["cur"] -= 1; state["done"] += 1
+            s.release()
+    ts = [threading.Thread(target=worker, daemon=True) for _ in range(8)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=9)
+    assert not any(t.is_alive() for t in ts)
+    assert not errors
+    assert state["done"] == 40 and 1 <= state["max"] <= 3, state
+    assert s.available == 3
+- name: timed waiter woken by late release
+  hidden: true
+  tags:
+  - concurrency
+  - time
+  code: |
+    import threading
+    s = Semaphore(0)
+    out = []
+    t = threading.Thread(target=lambda: out.append(s.acquire(timeout=10)), daemon=True)
+    t.start()
+    import time; time.sleep(0.1)
+    s.release()
+    t.join(timeout=5)
+    assert out == [True] and s.available == 0
+complexity:
+- op: acquire
+  time: O(1)
+  space: O(1)
+- op: release
+  time: O(1)
+  space: O(1)
+extensions:
+- q: What do acquire and release cost, and how many threads can wait?
+  kind: complexity
+  key_points:
+  - Both are O(1) under the mutex; waiting threads are held by the condition variable
+  - Space is O(1) for the counter plus the OS queue of waiters
+  - notify() wakes a single waiter so release is O(1), not O(waiters)
+- q: How would you make wake-up order FIFO-fair?
+  kind: design
+  key_points:
+  - Condition.notify wakes an arbitrary waiter; barging threads can steal a permit
+  - Keep a queue of per-waiter Events or tickets and grant permits in order
+  - Fairness lowers throughput because of extra context switches
+- q: Build a bounded semaphore and a rate limiter or connection limiter on top of it.
+  kind: design
+  key_points:
+  - BoundedSemaphore raises if release would exceed the initial value
+  - A pool of N resources is a semaphore of N plus a free list guarded by a lock
+  - Always release in finally / context-manager so permits are not leaked
+- q: What are the failure modes of semaphore-based designs?
+  kind: reasoning
+  key_points:
+  - Leaked permits when an exception skips release
+  - Deadlock from circular acquire order across multiple semaphores
+  - Lost wakeups if you use an if instead of a while loop around wait
+narration: []
+state_aloud:
+- 'Spurious wakeups: always recheck the predicate in a while loop.'
+- 'Timeout is total, not per wait: use a deadline.'
+- release can exceed initial value; mention bounded variant.
+- Negative initial value is invalid.
+walkthrough: A counter protected by a Condition represents the permits. acquire loops while the counter
+  is zero, waiting on the condition with the time left until an absolute deadline and returning False
+  once it passes, otherwise decrementing and returning True. release increments and notifies one waiter.
+  All operations are O(1).
+anki_queries: []
+categories:
+- systems-impl

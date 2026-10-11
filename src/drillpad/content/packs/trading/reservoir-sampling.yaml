@@ -1,0 +1,170 @@
+id: reservoir-sampling
+title: Reservoir Sampling
+bar_level: 2
+target_minutes: 20
+patterns:
+- reservoir-sampling
+- streaming
+- randomized
+- probability
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `reservoir_sample(stream, k, rng=None) -> list` (Algorithm R): return `k` items chosen uniformly at random,
+  without replacement, from an iterable `stream` of unknown length, in a SINGLE pass using O(k) memory.
+
+  - `stream` is any iterable (possibly a generator): never call `len()` on it or materialize it into a list.
+  - `rng` is a `random.Random` (default: a fresh `random.Random()`). Use it for ALL randomness and use the standard
+    procedure: the first `k` items fill the reservoir; for the item at 0-based index `i >= k`, draw
+    `j = rng.randrange(i + 1)` and, if `j < k`, replace `reservoir[j]` with the item.
+  - If the stream has fewer than `k` items, return all of them in stream order. `k == 0` returns `[]`.
+  - `ValueError` if `k` is negative or not an int.
+
+  Tests check structural properties (size, subset, no invented items) and, using seeded generators, that each position is
+  chosen with probability about `k / n`.
+starter: |
+  import random
+
+
+  def reservoir_sample(stream, k, rng=None):
+      pass
+hints:
+- Fill the reservoir with the first k items; you cannot know n in advance so decide per item.
+- 'Item i (0-based, i >= k) should survive with probability k/(i+1): draw j = rng.randrange(i+1) and replace
+  slot j if j < k.'
+- 'Prove uniformity by induction: after item i every item seen so far is in the reservoir with probability
+  k/(i+1).'
+follow_ups:
+- How do you do weighted reservoir sampling?
+- How would you sample from a distributed stream and merge reservoirs?
+- Why not just random.sample(list(stream), k)?
+tests:
+- name: short stream returns everything in order
+  code: |
+    import random
+    assert reservoir_sample(iter([1, 2, 3]), 5, random.Random(1)) == [1, 2, 3]
+    assert reservoir_sample(iter([1, 2, 3]), 3, random.Random(1)) == [1, 2, 3]
+    assert reservoir_sample(iter([]), 3, random.Random(1)) == []
+  hidden: false
+  tags:
+  - empty
+  - boundary
+- name: k zero and k one
+  code: |
+    import random
+    assert reservoir_sample(iter(range(10)), 0, random.Random(1)) == []
+    out = reservoir_sample(iter(range(10)), 1, random.Random(2))
+    assert len(out) == 1 and 0 <= out[0] < 10
+  hidden: false
+  tags:
+  - zero-capacity
+  - single
+- name: size, subset and no duplicates
+  code: |
+    import random
+    out = reservoir_sample((x * 3 for x in range(1000)), 25, random.Random(5))
+    assert len(out) == 25 and len(set(out)) == 25
+    assert all(x % 3 == 0 and 0 <= x < 3000 for x in out)
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: consumes the stream only once as a generator
+  code: |
+    import random
+    calls = []
+    def gen():
+        for i in range(500):
+            calls.append(i)
+            yield i
+    out = reservoir_sample(gen(), 10, random.Random(3))
+    assert len(out) == 10 and calls == list(range(500))
+  hidden: false
+  tags:
+  - state-reuse
+  - single
+- name: uniform inclusion probability
+  code: |
+    import random
+    n, k, trials = 6, 2, 12000
+    counts = [0] * n
+    for s in range(trials):
+        for x in reservoir_sample(iter(range(n)), k, random.Random(s)):
+            counts[x] += 1
+    exp = trials * k / n
+    for c in counts:
+        assert abs(c - exp) < 0.06 * exp, counts
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+- name: late items are not under-sampled
+  code: |
+    import random
+    trials, n, k = 4000, 50, 5
+    last_hits = first_hits = 0
+    for s in range(trials):
+        r = reservoir_sample(iter(range(n)), k, random.Random(1000 + s))
+        last_hits += (n - 1) in r
+        first_hits += 0 in r
+    exp = trials * k / n
+    assert abs(last_hits - exp) < 0.2 * exp and abs(first_hits - exp) < 0.2 * exp
+  hidden: true
+  tags:
+  - ordering
+- name: rejects bad k
+  code: |
+    import random
+    for bad in (-1, 1.5, None):
+        try:
+            reservoir_sample(iter([1]), bad, random.Random(1))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+  hidden: true
+  tags:
+  - invalid
+- name: 'scale: 1M item generator'
+  code: |
+    import random
+    out = reservoir_sample((i for i in range(1000000)), 100, random.Random(9))
+    assert len(out) == 100 and len(set(out)) == 100
+    assert sum(1 for x in out if x >= 500000) > 25
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: reservoir_sample
+  time: O(n)
+  space: O(k)
+extensions:
+- q: 'Level 2: weighted reservoir sampling (A-Res or Efraimidis-Spirakis keys).'
+  key_points:
+  - Give each item key u^(1/w) with u uniform in (0,1) and keep the k largest keys with a min-heap
+  - Heap of size k gives O(n log k) time
+  - Weights must be positive; zero weight items are never chosen
+  kind: code
+- q: Time and space of the standard algorithm, and the cost of skipping ahead.
+  key_points:
+  - One pass, O(1) work per item, O(k) space
+  - Algorithm L skips ahead geometrically and does only O(k log(n/k)) random draws
+  - Materializing the stream would cost O(n) space and defeats the purpose
+  kind: complexity
+- q: 'Design: sampling trades or log lines in production.'
+  key_points:
+  - Inject the RNG with a seed so samples are reproducible in tests and incident replay
+  - Merging per-shard reservoirs needs weighting by the number of items each shard saw
+  - 'Sampling is lossy: record the sampling rate with every sample so downstream estimates can be scaled'
+  kind: design
+narration: []
+state_aloud:
+- Single pass over an unknown-length stream; O(k) memory.
+- Fewer than k items returns them all in order; k == 0 returns [].
+- All randomness through the injected random.Random using randrange(i+1).
+walkthrough: |
+  Standard Algorithm R (Vitter). Inductive argument: item i enters with probability k/(i+1) and each current resident survives with probability 1 - 1/(i+1), keeping every inclusion probability at k/(i+1). Source: standard formulation.
+categories:
+- trading

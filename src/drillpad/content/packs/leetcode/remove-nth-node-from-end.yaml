@@ -1,0 +1,113 @@
+id: remove-nth-node-from-end
+title: Remove Nth Node From End
+bar_level: 2
+target_minutes: 20
+patterns:
+- linked-list
+- two-pointers
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Remove Nth From End (LC 19)"
+statement: |
+  Given the head of a singly linked list and an integer `n` (1 <= n <= length), delete the n-th node counting from the end and return the head of the resulting list. Try to do it in a single pass. `ListNode`, `build_list` and `to_list` are provided.
+
+  Example: `remove_nth(build_list([1,2,3,4,5]), 2)` yields `[1,2,3,5]`.
+prelude: |
+  class ListNode:
+      def __init__(self, val=0, next=None):
+          self.val = val
+          self.next = next
+
+  def build_list(vals):
+      head = None
+      for v in reversed(vals):
+          head = ListNode(v, head)
+      return head
+
+  def to_list(head):
+      out = []
+      while head:
+          out.append(head.val)
+          head = head.next
+      return out
+starter: |
+  def remove_nth(head, n):
+      pass
+hints:
+- The node to delete is `length - n` steps from the head, but you do not know the length yet.
+- Keep two pointers n nodes apart; when the front one hits the end, the back one is in position.
+- Stop the back pointer one node early (use a dummy head) so you can unlink the target.
+follow_ups:
+- What if n may exceed the length?
+- Do it recursively and compare the stack usage.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert to_list(remove_nth(build_list([1,2,3,4,5]), 2)) == [1,2,3,5]
+- name: remove the head
+  tags:
+  - boundary
+  code: |
+    assert to_list(remove_nth(build_list([1,2]), 2)) == [2]
+    assert to_list(remove_nth(build_list([4,5,6]), 3)) == [5,6]
+- name: remove the tail
+  tags:
+  - boundary
+  code: |
+    assert to_list(remove_nth(build_list([1,2,3]), 1)) == [1,2]
+- name: single node
+  tags:
+  - single
+  code: |
+    assert remove_nth(build_list([1]), 1) is None
+    assert to_list(remove_nth(build_list([1,2]), 1)) == [1]
+- name: equal values need positional delete
+  tags:
+  - duplicate
+  code: |
+    assert to_list(remove_nth(build_list([1,1,2,1,1]), 3)) == [1,1,1,1]
+    assert to_list(remove_nth(build_list([7,7,7]), 2)) == [7,7]
+- name: long list
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 300000
+    r = remove_nth(build_list(list(range(n))), 150000)
+    exp = list(range(n)); del exp[n - 150000]
+    assert to_list(r) == exp
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why does a dummy head help?
+  kind: reasoning
+  key_points:
+  - Deleting the head has no predecessor otherwise
+  - Dummy gives uniform unlink code
+  - Return dummy.next as the new head
+- q: One pass versus two passes?
+  kind: complexity
+  key_points:
+  - Both are O(n) time
+  - One pass does about n pointer steps total, two pass about 2n
+  - Space is O(1) either way
+- q: How would you delete the n-th from the end in a streaming list?
+  kind: design
+  key_points:
+  - Keep a circular buffer of the last n+1 nodes
+  - O(n) memory is unavoidable without a second pass
+  - Gap pointers need the stream to be re-readable
+narration: []
+state_aloud:
+- n equals the length (delete the head).
+- Single-node list becomes empty.
+- 'Duplicate values: delete by position, not value.'
+- Use a dummy head.
+walkthrough: |
+  Put a dummy node before the head. Advance a fast pointer n steps from the dummy, then move fast and slow together until fast reaches the last node. Slow is now just before the node to delete, so set `slow.next = slow.next.next`. The dummy removes the head special case; return `dummy.next`.

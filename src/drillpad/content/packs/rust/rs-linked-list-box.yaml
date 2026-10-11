@@ -1,0 +1,281 @@
+title: Singly Linked List with Box
+target_minutes: 25
+patterns:
+- linked-list
+- option-box
+- take-replace
+- iterator-with-lifetime
+- iterative-drop
+firm_tags: []
+categories:
+- leetcode
+statement: |2
+
+  Implement a singly linked stack-like list using `Option<Box<Node<T>>>` (no `Rc`, no `unsafe`).
+
+  ```rust
+  struct List<T> { /* head link and a length */ }
+
+  impl<T> List<T> {
+      fn new() -> Self;
+      fn push_front(&mut self, value: T);
+      fn pop_front(&mut self) -> Option<T>;
+      fn peek_front(&self) -> Option<&T>;
+      fn peek_front_mut(&mut self) -> Option<&mut T>;
+      fn reverse(&mut self);                    // in place: relink nodes, no new allocations, no cloning
+      fn len(&self) -> usize;
+      fn is_empty(&self) -> bool;
+      fn iter(&self) -> Iter<'_, T>;            // yields &T from front to back
+  }
+
+  struct Iter<'a, T> { /* ... */ }
+  impl<'a, T> Iterator for Iter<'a, T> { type Item = &'a T; /* ... */ }
+  ```
+
+  `Iter<'a, T>` must yield `&'a T`, not a reference tied to the `&mut self` of `next`, so that items can be
+  collected. Elements need no `Clone`.
+
+  Finally, implement `Drop for List<T>` **iteratively**. The compiler's default recursive drop of a long
+  `Box` chain overflows the stack; your drop must be able to free a list of one million nodes.
+
+  Example: pushing 1, 2, 3 gives front-to-back `[3, 2, 1]`; after `reverse()` it is `[1, 2, 3]`.
+starter: |2
+
+  struct Node<T> {
+      elem: T,
+      next: Option<Box<Node<T>>>,
+  }
+
+  struct List<T> {
+      head: Option<Box<Node<T>>>,
+      len: usize,
+  }
+
+  struct Iter<'a, T> {
+      next: Option<&'a Node<T>>,
+  }
+
+  impl<'a, T> Iterator for Iter<'a, T> {
+      type Item = &'a T;
+
+      fn next(&mut self) -> Option<Self::Item> {
+          todo!()
+      }
+  }
+
+  impl<T> List<T> {
+      fn new() -> Self {
+          todo!()
+      }
+
+      fn push_front(&mut self, value: T) {
+          todo!()
+      }
+
+      fn pop_front(&mut self) -> Option<T> {
+          todo!()
+      }
+
+      fn peek_front(&self) -> Option<&T> {
+          todo!()
+      }
+
+      fn peek_front_mut(&mut self) -> Option<&mut T> {
+          todo!()
+      }
+
+      fn reverse(&mut self) {
+          todo!()
+      }
+
+      fn len(&self) -> usize {
+          todo!()
+      }
+
+      fn is_empty(&self) -> bool {
+          todo!()
+      }
+
+      fn iter(&self) -> Iter<'_, T> {
+          todo!()
+      }
+  }
+
+  impl<T> Drop for List<T> {
+      fn drop(&mut self) {
+          // TODO: free the nodes iteratively
+      }
+  }
+hints:
+- You cannot move out of `self.head` through `&mut self`. `Option::take()` swaps in `None` and gives you ownership of the old value; `mem::replace` is the general form of the same trick.
+- '`push_front`: `let new = Box::new(Node { elem, next: self.head.take() }); self.head = Some(new);`. For peeks use `self.head.as_ref().map(|n| &n.elem)` and `as_mut()` for the mutable version. For `Iter::next`, `self.next.map(|n| { self.next = n.next.as_deref(); &n.elem })` is the idiom.'
+- 'reverse: keep `prev: Option<Box<Node>>` and `cur = self.head.take()`; in a loop take `cur`''s `next`, point it at `prev`, then advance. Drop: `let mut cur = self.head.take(); while let Some(mut node) = cur { cur = node.next.take(); }` so each node is freed with an empty `next`.'
+follow_ups:
+- Why does the default Drop for Option<Box<Node>> overflow the stack, and how does the loop avoid it?
+- What changes if you want a doubly linked list? Why is that much harder in safe Rust?
+- How would you add into_iter (owned) and iter_mut (mutable) iterators?
+- Why is as_deref() needed in Iter::next? What does it convert?
+tests:
+- name: push pop peek
+  tags:
+  - single
+  - ordering
+  code: |
+    let mut l: List<i32> = List::new();
+    assert!(l.is_empty());
+    assert_eq!(l.pop_front(), None);
+    l.push_front(1);
+    l.push_front(2);
+    l.push_front(3);
+    assert_eq!(l.len(), 3);
+    assert_eq!(l.peek_front(), Some(&3));
+    assert_eq!(l.pop_front(), Some(3));
+    assert_eq!(l.pop_front(), Some(2));
+    assert_eq!(l.len(), 1);
+    assert_eq!(l.pop_front(), Some(1));
+    assert_eq!(l.pop_front(), None);
+    assert!(l.is_empty() && l.len() == 0);
+  hidden: false
+- name: peek_front_mut
+  tags:
+  - single
+  - state-reuse
+  code: |
+    let mut l = List::new();
+    assert!(l.peek_front_mut().is_none());
+    l.push_front(String::from("a"));
+    l.push_front(String::from("b"));
+    l.peek_front_mut().unwrap().push('!');
+    assert_eq!(l.peek_front().unwrap(), "b!");
+    assert_eq!(l.pop_front().unwrap(), "b!");
+    assert_eq!(l.peek_front().unwrap(), "a");
+  hidden: false
+- name: iter yields front to back
+  tags:
+  - ordering
+  - empty
+  code: |
+    let mut l = List::new();
+    assert_eq!(l.iter().count(), 0);
+    for i in 1..=4 { l.push_front(i * 10); }
+    let v: Vec<&i32> = l.iter().collect(); // items must outlive each next() call
+    assert_eq!(v, vec![&40, &30, &20, &10]);
+    assert_eq!(l.iter().map(|x| *x).sum::<i32>(), 100);
+    assert_eq!(l.len(), 4); // iteration does not consume
+    let mut it = l.iter();
+    assert_eq!(it.next(), Some(&40));
+    assert_eq!(it.next(), Some(&30));
+  hidden: false
+- name: reverse
+  tags:
+  - ordering
+  - boundary
+  code: |
+    let mut l = List::new();
+    l.reverse(); // empty is fine
+    assert!(l.is_empty());
+    l.push_front(1);
+    l.reverse();
+    assert_eq!(l.iter().collect::<Vec<_>>(), vec![&1]);
+    for i in 2..=5 { l.push_front(i); }
+    assert_eq!(l.iter().copied().collect::<Vec<_>>(), vec![5, 4, 3, 2, 1]);
+    l.reverse();
+    assert_eq!(l.iter().copied().collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+    assert_eq!(l.len(), 5);
+    assert_eq!(l.pop_front(), Some(1));
+    l.reverse();
+    assert_eq!(l.iter().copied().collect::<Vec<_>>(), vec![5, 4, 3, 2]);
+  hidden: false
+- name: non-Clone elements are moved not copied
+  tags:
+  - duplicate
+  - state-reuse
+  hidden: true
+  code: |
+    use std::rc::Rc;
+    let token = Rc::new(());
+    let mut l = List::new();
+    for _ in 0..3 { l.push_front(Rc::clone(&token)); }
+    assert_eq!(Rc::strong_count(&token), 4);
+    l.reverse();
+    assert_eq!(Rc::strong_count(&token), 4); // reverse must not clone
+    let x = l.pop_front().unwrap();
+    assert_eq!(Rc::strong_count(&token), 4);
+    drop(x);
+    assert_eq!(Rc::strong_count(&token), 3);
+    drop(l);
+    assert_eq!(Rc::strong_count(&token), 1, "dropping the list must drop every node");
+- name: items outlive the iterator
+  tags:
+  - boundary
+  - single
+  hidden: true
+  code: |
+    let mut l = List::new();
+    l.push_front("c".to_string());
+    l.push_front("b".to_string());
+    l.push_front("a".to_string());
+    let firsts: Vec<&String>;
+    {
+        let it = l.iter();
+        firsts = it.take(2).collect();
+    }
+    assert_eq!(firsts[0], "a");
+    assert_eq!(firsts[1], "b");
+- name: million node list drops without stack overflow
+  tags:
+  - scale
+  hidden: true
+  code: |
+    let mut l = List::new();
+    for i in 0..1_000_000u32 { l.push_front(i); }
+    assert_eq!(l.len(), 1_000_000);
+    assert_eq!(l.peek_front(), Some(&999_999));
+    l.reverse();
+    assert_eq!(l.peek_front(), Some(&0));
+    drop(l); // recursive Drop would crash here
+complexity:
+- op: push_front / pop_front / peek
+  time: O(1)
+  space: O(1)
+- op: reverse
+  time: O(n)
+  space: O(1)
+- op: iter (full traversal)
+  time: O(n)
+  space: O(1)
+- op: drop
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why does the compiler's default drop of a long Box chain overflow the stack, and how does your Drop avoid it?
+  kind: reasoning
+  key_points:
+  - 'Dropping a Node drops its `next: Option<Box<Node>>`, which drops the next node, and so on: recursion depth equals list length'
+  - Each frame is small but a million of them exceed the 8MB main-thread stack
+  - The loop takes each node's `next` out first (leaving None) so the node being dropped has nothing left to recurse into
+- q: How do the time and space costs compare with Vec for these operations, and what does reverse cost?
+  kind: complexity
+  key_points:
+  - push_front/pop_front are O(1) here but O(n) on a Vec (shifting); push/pop at the back of a Vec is O(1) amortized
+  - 'reverse is O(n) time and O(1) extra space: it only rewires pointers with take()'
+  - 'Each node is a separate heap allocation: worse cache locality and per-node overhead versus a contiguous Vec'
+- q: How would this change to support a doubly linked list or sharing across owners?
+  kind: design
+  key_points:
+  - 'Safe doubly linked lists need shared ownership: Rc<RefCell<Node>> with Weak back pointers (runtime borrow checking) or an arena with usize indices'
+  - 'Box means single ownership, so each node has exactly one parent: that is what makes the safe version simple and fast'
+  - Across threads you would need Arc<Mutex<..>> and the node type must be Send
+state_aloud:
+- 'Empty list: pop_front and peek return None; reverse on empty or one element is a no-op.'
+- 'Moving out of self.head through &mut self requires take() or mem::replace: say that unprompted.'
+- Iterator items borrow from the list ('a), not from the iterator's own &mut self.
+- Iterative Drop is needed or a long list overflows the stack.
+walkthrough: |2
+
+  Each node owns the rest of the list through `Option<Box<Node<T>>>`, so you can never move out of `self.head` through `&mut self` directly; `take()` swaps in `None` and hands you ownership, which is the core idiom behind push, pop, reverse and drop. Peeks use `as_ref`/`as_mut`, and `Iter` stores an `Option<&'a Node<T>>` advanced with `as_deref()` so yielded items carry the list's lifetime. A Python linked list just reassigns references under a garbage collector; here ownership makes the borrow checker prove there are no aliases, and an explicit loop in `Drop` keeps freeing a million nodes from recursing.
+id: rs-linked-list-box
+language: rust
+bar_level: 2
+narration: []
+anki_queries: []

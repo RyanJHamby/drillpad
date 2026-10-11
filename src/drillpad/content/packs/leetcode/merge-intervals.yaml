@@ -1,0 +1,99 @@
+id: merge-intervals
+title: Merge Intervals
+bar_level: 2
+target_minutes: 20
+patterns:
+- intervals
+firm_tags:
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Merge Intervals (LC 56)"
+statement: |
+  Given a list of closed intervals `[start, end]`, merge all that overlap (intervals that share an endpoint overlap) and return the merged intervals sorted by start.
+
+  Example: `merge_intervals([[1,3],[2,6],[8,10],[15,18]])` returns `[[1,6],[8,10],[15,18]]`.
+starter: |
+  def merge_intervals(intervals):
+      pass
+hints:
+- Overlaps are easy to detect when intervals are ordered by start.
+- 'Sort by start, then sweep: extend the last merged interval if the next starts at or before its end.'
+- Take the max of ends, since an interval can be fully contained.
+follow_ups:
+- Insert one interval into an already sorted, merged list in O(n).
+- What if the input is a stream?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert merge_intervals([[1,3],[2,6],[8,10],[15,18]])==[[1,6],[8,10],[15,18]]
+- name: touching endpoints merge
+  tags:
+  - boundary
+  code: |
+    assert merge_intervals([[1,4],[4,5]])==[[1,5]]
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert merge_intervals([])==[]
+- name: single
+  tags:
+  - single
+  code: |
+    assert merge_intervals([[2,3]])==[[2,3]]
+- name: unsorted and contained
+  tags:
+  - duplicate
+  code: |
+    assert merge_intervals([[5,6],[1,10],[2,3],[1,10]])==[[1,10]]
+- name: does not mutate caller input
+  tags:
+  - state-reuse
+  code: |
+    a=[[3,4],[1,2]]
+    assert merge_intervals(a)==[[1,2],[3,4]]
+    assert a==[[3,4],[1,2]]
+- name: many intervals
+  tags:
+  - scale
+  hidden: true
+  code: |
+    a=[[i*2,i*2+1] for i in range(100000)]
+    assert len(merge_intervals(a))==100000
+    a=[[i,i+2] for i in range(100000)]
+    assert merge_intervals(a)==[[0,100001]]
+complexity:
+- op: overall
+  time: O(n log n)
+  space: O(n)
+extensions:
+- q: Streaming intervals
+  kind: design
+  key_points:
+  - Keep merged intervals in a sorted structure (balanced tree / sorted list)
+  - On insert find overlapping neighbors by binary search and coalesce
+  - Insertion O(log n + k)
+- q: Where does the cost come from?
+  kind: complexity
+  key_points:
+  - Sorting is O(n log n)
+  - The sweep is O(n)
+  - Output space O(n)
+- q: Insert Interval in O(n)
+  kind: code
+  key_points:
+  - Copy intervals ending before the new one
+  - Merge all overlaps into the new interval
+  - Copy the rest
+narration: []
+state_aloud:
+- Empty input.
+- Touching endpoints count as overlapping (state it).
+- 'Containment: take max of ends.'
+- Input is unsorted; don't assume it.
+walkthrough: |
+  Sort the intervals by start. Walk through them keeping a result list: if the current interval starts after the last merged interval's end it is appended as new, otherwise the last interval's end is extended to the larger of the two ends. Sorting dominates at O(n log n), and the sweep is linear.

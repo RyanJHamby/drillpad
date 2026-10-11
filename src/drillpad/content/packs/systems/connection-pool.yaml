@@ -1,0 +1,260 @@
+id: connection-pool
+title: Connection Pool
+bar_level: 3
+target_minutes: 35
+patterns:
+- resource-pool
+- condition-variable
+- blocking-queue
+- context-manager
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement `ConnectionPool(factory, max_size, validate=None, close=None)`.
+
+  - Connections are created lazily by `factory()`: nothing is created at construction, and no more
+    than `max_size` connections are ever alive (idle + checked out) at once.
+  - `acquire(timeout=None)` -> connection: reuse an idle connection if there is one (most recently
+    released first); else create one if fewer than `max_size` exist; else block until one is
+    released. If `timeout` seconds pass first raise `TimeoutError`. If `validate` is given and
+    returns false for an idle connection, discard it (call `close(conn)` if given), reduce the
+    live count and try the next one or create a new one.
+  - `release(conn)`: return a checked-out connection. Releasing an object that is not currently
+    checked out raises `ValueError`.
+  - `connection()`: context manager yielding a connection and always releasing it.
+  - `close_all()`: close all idle connections via `close`; afterwards `acquire` raises
+    `RuntimeError`. Connections released after `close_all` are closed immediately.
+  - `stats()` -> `{"created": total ever created, "idle": n, "in_use": n}`.
+
+  Example
+  ```python
+  pool = ConnectionPool(make_conn, max_size=2)
+  with pool.connection() as c: ...
+  ```
+starter: |
+  import threading
+  from contextlib import contextmanager
+
+  class ConnectionPool:
+      def __init__(self, factory, max_size, validate=None, close=None):
+          pass
+
+      def acquire(self, timeout=None):
+          pass
+
+      def release(self, conn):
+          pass
+
+      @contextmanager
+      def connection(self):
+          yield None
+
+      def close_all(self):
+          pass
+
+      def stats(self):
+          pass
+hints:
+- Track idle list, in-use set and a live count under one Condition.
+- Prefer idle (LIFO), else create if live < max_size, else wait with a deadline.
+- Roll back the live count if factory() raises, and always release via try/finally.
+follow_ups:
+- How would you make acquire async-friendly?
+- How do you shut down gracefully while connections are checked out?
+tests:
+- name: lazy creation and reuse
+  tags:
+  - state-reuse
+  - single
+  code: |
+    made = []
+    def factory():
+        o = object(); made.append(o); return o
+    pool = ConnectionPool(factory, 2)
+    assert made == []
+    a = pool.acquire()
+    assert a is made[0]
+    pool.release(a)
+    b = pool.acquire()
+    assert b is a and len(made) == 1
+    assert pool.stats() == {"created": 1, "idle": 0, "in_use": 1}
+- name: blocks at max size and times out
+  tags:
+  - boundary
+  - time
+  code: |
+    import time
+    pool = ConnectionPool(object, 1)
+    c = pool.acquire()
+    t0 = time.monotonic()
+    try:
+        pool.acquire(timeout=0.1)
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("expected TimeoutError")
+    assert time.monotonic() - t0 < 3
+    pool.release(c)
+    assert pool.acquire(timeout=0.1) is c
+- name: release wakes blocked acquirer
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading
+    pool = ConnectionPool(object, 1)
+    c = pool.acquire()
+    assert c is not None
+    got = []
+    done = threading.Event()
+    def w():
+        got.append(pool.acquire(timeout=5)); done.set()
+    t = threading.Thread(target=w, daemon=True); t.start()
+    pool.release(c)
+    assert done.wait(5)
+    assert got == [c]
+    t.join(5)
+- name: invalid release
+  tags:
+  - invalid
+  - duplicate
+  code: |
+    pool = ConnectionPool(object, 2)
+    c = pool.acquire()
+    for bad in (object(), None):
+        try:
+            pool.release(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+    pool.release(c)
+    try:
+        pool.release(c)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("double release must raise")
+- name: validate discards stale connections
+  hidden: true
+  tags:
+  - state-reuse
+  - boundary
+  code: |
+    closed = []
+    class C:
+        ok = True
+    pool = ConnectionPool(C, 2, validate=lambda c: c.ok, close=closed.append)
+    a = pool.acquire(); pool.release(a)
+    a.ok = False
+    b = pool.acquire()
+    assert b is not a and closed == [a]
+    assert pool.stats()["created"] == 2
+- name: context manager and close_all
+  hidden: true
+  tags:
+  - state-reuse
+  - empty
+  code: |
+    closed = []
+    pool = ConnectionPool(object, 2, close=closed.append)
+    with pool.connection() as c:
+        assert pool.stats()["in_use"] == 1
+    assert pool.stats() == {"created": 1, "idle": 1, "in_use": 0}
+    try:
+        with pool.connection() as c2:
+            raise KeyError()
+    except KeyError:
+        pass
+    assert pool.stats()["in_use"] == 0
+    pool.close_all()
+    assert closed == [c]
+    try:
+        pool.acquire()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("acquire after close_all must raise")
+- name: never exceeds max under contention
+  hidden: true
+  tags:
+  - concurrency
+  - scale
+  code: |
+    import threading, time
+    live = {"cur": 0, "max": 0, "made": 0}
+    guard = threading.Lock()
+    def factory():
+        with guard:
+            live["made"] += 1
+        return object()
+    pool = ConnectionPool(factory, 3)
+    state = {"cur": 0, "max": 0, "ops": 0}
+    errors = []
+    def worker():
+        try:
+            for _ in range(30):
+                with pool.connection():
+                    with guard:
+                        state["cur"] += 1; state["max"] = max(state["max"], state["cur"])
+                    time.sleep(0.0005)
+                    with guard:
+                        state["cur"] -= 1; state["ops"] += 1
+        except Exception as e:
+            errors.append(repr(e))
+    ts = [threading.Thread(target=worker, daemon=True) for _ in range(10)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=9)
+    assert not any(t.is_alive() for t in ts)
+    assert not errors, errors
+    assert state["ops"] == 300 and state["max"] <= 3 and live["made"] <= 3
+complexity:
+- op: acquire
+  time: O(1)
+  space: O(n)
+- op: release
+  time: O(1)
+  space: O(n)
+- op: close_all
+  time: O(n)
+  space: O(n)
+extensions:
+- q: What do acquire/release cost and how does the pool bound memory?
+  kind: complexity
+  key_points:
+  - 'Both O(1): list pop/append plus a dict update under the lock'
+  - Live connections are capped at max_size so space is O(max_size)
+  - Validation on checkout adds a cost per borrow (a network round trip if it pings)
+- q: How do you handle broken connections, idle timeouts and warm-up?
+  kind: design
+  key_points:
+  - Validate on borrow or in a background reaper; discard and replace stale connections
+  - min_idle keeps some connections warm; max idle time shrinks the pool after load
+  - Max lifetime recycles connections so load balancers and DNS changes take effect
+- q: 'Fairness and starvation: who gets a released connection?'
+  kind: design
+  key_points:
+  - Condition.notify wakes an arbitrary waiter; use a FIFO queue of waiters for strict fairness
+  - LIFO reuse of idle connections keeps hot ones hot and lets cold ones expire
+  - Per-tenant limits prevent one caller from taking the whole pool
+- q: What are the classic pool bugs?
+  kind: reasoning
+  key_points:
+  - 'Leaked connections when release is skipped on exceptions: use a context manager'
+  - Releasing a connection twice or one from another pool corrupts accounting
+  - Failed factory calls must roll back the live count or the pool shrinks permanently
+narration: []
+state_aloud:
+- Never exceed max_size even when factory is slow or fails.
+- Timeout raises TimeoutError, not None.
+- 'Double or foreign release is a bug: raise.'
+- Validate stale idle connections before handing them out.
+walkthrough: One Condition protects an idle list, a map of checked-out connections and a live count. acquire
+  first reuses a valid idle connection (discarding invalid ones), then creates a new one while the live
+  count is below max_size, and otherwise waits until a release or the deadline. release validates ownership,
+  pushes the connection back and notifies one waiter. close_all closes idle connections and releases later
+  returns close immediately.
+anki_queries: []
+categories:
+- systems-impl

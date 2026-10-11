@@ -1,0 +1,194 @@
+id: atm-cash-dispenser
+title: ATM Cash Dispenser
+bar_level: 2
+target_minutes: 25
+patterns:
+- bounded-coin-change
+- dp
+- memoization
+- greedy-fails
+firm_tags: []
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `ATM`, a cash dispenser with a limited stock of bills. All values are integer cents.
+
+  `ATM(inventory)` where `inventory` is `{denomination_cents: bill_count}` (e.g. `{5000: 2, 2000: 10, 1000: 4}`).
+
+  * `dispense(amount)` returns a dict `{denomination: count}` (only denominations with count > 0) whose total
+    is exactly `amount`, and removes those bills from the inventory. If the amount cannot be paid exactly with
+    the bills in stock, return `None` and leave the inventory unchanged. `amount` must be an int > 0, else
+    `ValueError`.
+  * Choose the combination with the FEWEST bills. Among combinations with the same number of bills, prefer the
+    one that uses more of the largest denomination, then more of the next largest, and so on
+    (lexicographically largest count vector in descending-denomination order).
+  * A greedy "largest bill first" strategy is NOT correct in general: with `{3000: 2, 2000: 2}` the amount 4000
+    must be paid as two 2000s.
+  * `refill(denomination, count)` adds `count` (> 0) bills of that denomination (it may be a new
+    denomination); invalid arguments raise `ValueError`.
+  * `inventory()` returns a copy `{denomination: count}` of the current stock including zero counts.
+  * `total_cash()` returns the total value of the stock in cents.
+starter: |
+  class ATM:
+      def __init__(self, inventory):
+          pass
+
+      def dispense(self, amount):
+          pass
+
+      def refill(self, denomination, count):
+          pass
+
+      def inventory(self):
+          pass
+
+      def total_cash(self):
+          pass
+hints:
+- Greedy fails for non-canonical denominations; use DP over (denomination index, remaining amount) minimising
+  the number of bills.
+- 'Divide every amount and denomination by their gcd first: an amount that is not a multiple of it is
+  impossible, and the DP table shrinks a lot.'
+- To get the tie-break for free, process denominations from largest to smallest and try larger counts
+  first, keeping a candidate only if it is strictly better in bill count.
+follow_ups:
+- When is greedy provably optimal (canonical coin systems) and how do you test that?
+- How do you add a per-withdrawal bill limit (the dispenser can only push 40 notes)?
+- How would you keep the ATM from running out of small bills (inventory-aware selection)?
+tests:
+- name: simple dispense updates inventory
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    a = ATM({5000: 2, 2000: 3, 1000: 5})
+    assert a.dispense(9000) == {5000: 1, 2000: 2}
+    assert a.inventory() == {5000: 1, 2000: 1, 1000: 5}
+    assert a.total_cash() == 5000 + 2000 + 5000
+    assert a.dispense(1000) == {1000: 1}
+- name: greedy is not enough
+  tags:
+  - ordering
+  - boundary
+  code: |
+    a = ATM({3000: 2, 2000: 2})
+    assert a.dispense(4000) == {2000: 2}
+    b = ATM({5000: 1, 4000: 2})
+    assert b.dispense(8000) == {4000: 2}, "greedy would take 5000 and strand 3000"
+    c = ATM({1000: 10, 4000: 1, 3000: 1})
+    assert c.dispense(6000) == {4000: 1, 1000: 2}
+    d = ATM({3000: 1, 1000: 10, 2500: 1})
+    assert d.dispense(5500) == {3000: 1, 2500: 1}
+- name: impossible amounts leave the stock untouched
+  tags:
+  - state-reuse
+  - empty
+  code: |
+    a = ATM({2000: 1, 1000: 1})
+    before = a.inventory()
+    assert a.dispense(500) is None
+    assert a.dispense(4000) is None
+    assert a.dispense(3500) is None
+    assert a.inventory() == before
+    assert a.dispense(3000) == {2000: 1, 1000: 1}
+    assert a.total_cash() == 0 and a.dispense(1000) is None
+- name: fewest bills then largest bills
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    a = ATM({1000: 10, 500: 10, 2000: 10})
+    assert a.dispense(3500) == {2000: 1, 1000: 1, 500: 1}
+    b = ATM({2000: 2, 1000: 1, 500: 4})
+    assert b.dispense(3000) == {2000: 1, 1000: 1}
+    c = ATM({3000: 1, 2000: 1, 1000: 2, 500: 0})
+    assert c.dispense(5000) == {3000: 1, 2000: 1}
+    d = ATM({400: 5, 300: 5, 200: 5})
+    assert d.dispense(1200) == {400: 3}
+    e = ATM({600: 1, 500: 5, 100: 5})
+    assert e.dispense(1100) == {600: 1, 500: 1}
+- name: validation and refill
+  tags:
+  - invalid
+  - zero-capacity
+  code: |
+    a = ATM({1000: 1})
+    for bad in (0, -1000, 1.5, "10", None):
+        try:
+            a.dispense(bad)
+            assert False
+        except ValueError:
+            pass
+    assert a.dispense(2000) is None
+    a.refill(1000, 1)
+    a.refill(500, 3)
+    assert a.dispense(2500) == {1000: 2, 500: 1}
+    assert a.inventory() == {1000: 0, 500: 2}
+    for args in ((1000, 0), (1000, -1), (0, 1), (-5, 1)):
+        try:
+            a.refill(*args)
+            assert False
+        except ValueError:
+            pass
+- name: empty machine
+  tags:
+  - empty
+  - zero-capacity
+  hidden: true
+  code: |
+    a = ATM({})
+    assert a.dispense(100) is None and a.total_cash() == 0 and a.inventory() == {}
+    b = ATM({1000: 0})
+    assert b.dispense(1000) is None
+- name: large amount with many bills
+  tags:
+  - scale
+  hidden: true
+  code: |
+    inv = {10000: 500, 5000: 500, 2000: 500, 1000: 500, 500: 500, 100: 500}
+    a = ATM(inv)
+    out = a.dispense(1234500)
+    assert sum(k * v for k, v in out.items()) == 1234500
+    assert out == {10000: 123, 2000: 2, 500: 1}
+    assert a.inventory()[10000] == 500 - 123
+complexity:
+- op: dispense
+  time: O(D * A * c)
+  space: O(D * A)
+extensions:
+- q: 'Level 2: cap the number of bills per withdrawal (max_bills).'
+  kind: code
+  key_points:
+  - Add the bill count as a DP dimension or reject a minimal solution above the cap
+  - 'Minimal bill count already minimises the cap violation: if the minimum exceeds the cap, return None'
+  - Keep the lexicographic tie-break
+- q: 'Level 3: balance inventory: among minimal-bill solutions prefer the one that leaves the most even
+    stock.'
+  kind: code
+  key_points:
+  - Define the tie-break score explicitly before coding
+  - Enumerate or DP over solutions with the same bill count
+  - Verify determinism so the same stock always gives the same payout
+- q: Design the ATM service for concurrency and failure.
+  kind: design
+  key_points:
+  - 'Dispense is a two-phase action: reserve bills, run the hardware, then commit or roll back on a jam'
+  - Debit the account (idempotent by transaction id) before or atomically with the reservation
+  - Persist inventory counts and reconcile with physical cassettes on refill
+- q: State the cost and explain why greedy is wrong but sometimes fine.
+  kind: complexity
+  key_points:
+  - DP is O(D * A/g * c) where A/g is the amount in gcd units and c the per-denomination count loop
+  - Greedy is O(D) but only optimal for canonical systems; with limited stock it can fail outright
+  - Dividing by the gcd of the denominations reduces A drastically (e.g. 100x for cents to dollars)
+narration: []
+state_aloud:
+- Integer cents; validate amount is a positive int.
+- Bounded inventory plus arbitrary denominations means greedy is wrong; I need DP.
+- 'Failure must not mutate inventory: compute the plan first, apply it only if it succeeds.'
+- State the tie-break rule explicitly (fewest bills, then larger denominations first) so the answer is
+  deterministic.
+- Reduce by the gcd to shrink the table.
+walkthrough: |
+  Compute g = gcd of the denominations in stock; if amount % g != 0 return None. Sort denominations descending and run a memoised search f(i, r) = (min bills, counts) over denominations i.. for remaining r units: for k from min(count, r // d) down to 0 try taking k bills of denomination i and recurse; keep a candidate only if it has strictly fewer bills, which, because larger k is tried first, gives the lexicographically largest vector among ties. The plan is applied to the inventory only on success. Standard formulation (bounded coin change, ATM dispenser screen); no source doc.

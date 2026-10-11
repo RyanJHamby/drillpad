@@ -1,0 +1,183 @@
+id: insert-delete-getrandom-o1
+title: Insert Delete GetRandom O(1)
+bar_level: 2
+target_minutes: 22
+patterns:
+- hash-map
+- array-swap-delete
+- randomized
+firm_tags: []
+statement: |
+  Implement `RandomizedSet(rng=None)` (LeetCode 380) with average O(1) operations. `rng` is a
+  `random.Random` instance (default: a new `random.Random()`); use only `self.rng` for randomness.
+
+  - `insert(val)` -> `True` if `val` was absent and is now added, else `False`.
+  - `remove(val)` -> `True` if present and now removed, else `False`.
+  - `get_random()` -> a uniformly random current element (each element equally likely). Calling
+    it on an empty set raises `IndexError`.
+  - `len(s)` returns the number of elements.
+
+  Example
+  ```python
+  s = RandomizedSet(random.Random(0)); s.insert(1) -> True; s.insert(1) -> False
+  s.insert(2); s.remove(1) -> True; s.get_random() -> 2
+  ```
+starter: |
+  import random
+
+  class RandomizedSet:
+      def __init__(self, rng=None):
+          pass
+
+      def insert(self, val):
+          pass
+
+      def remove(self, val):
+          pass
+
+      def get_random(self):
+          pass
+
+      def __len__(self):
+          pass
+hints:
+- Keep a list of values plus a dict value -> index.
+- To remove, overwrite the removed slot with the last element and pop the list.
+- Update the moved element's index; handle removing the last element itself.
+follow_ups:
+- What goes wrong if you update the dict before popping when val is the last element?
+- How would you sample k distinct elements?
+tests:
+- name: insert remove semantics
+  tags:
+  - duplicate
+  - invalid
+  code: |
+    import random
+    s = RandomizedSet(random.Random(0))
+    assert s.insert(1) is True and s.insert(1) is False
+    assert s.insert(2) is True
+    assert s.remove(1) is True and s.remove(1) is False and s.remove(99) is False
+    assert len(s) == 1 and s.get_random() == 2
+- name: empty and single
+  tags:
+  - empty
+  - single
+  code: |
+    import random
+    s = RandomizedSet(random.Random(1))
+    try:
+        s.get_random()
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("expected IndexError")
+    assert s.insert(0) is True
+    assert s.get_random() == 0
+    assert s.remove(0) is True and len(s) == 0
+    assert s.insert(0) is True and s.get_random() == 0
+- name: remove middle keeps others consistent
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    import random
+    s = RandomizedSet(random.Random(2))
+    for x in range(10):
+        s.insert(x)
+    for x in (0, 9, 4, 5):
+        assert s.remove(x) is True
+    seen = {s.get_random() for _ in range(500)}
+    assert seen == {1, 2, 3, 6, 7, 8}
+    assert s.insert(4) is True and s.remove(1) is True
+    assert {s.get_random() for _ in range(500)} == {2, 3, 4, 6, 7, 8}
+- name: uniform distribution
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    import random
+    s = RandomizedSet(random.Random(42))
+    for x in "abcd":
+        s.insert(x)
+    s.remove("b")
+    counts = {}
+    for _ in range(6000):
+        v = s.get_random(); counts[v] = counts.get(v, 0) + 1
+    assert set(counts) == {"a", "c", "d"}
+    assert all(1700 < c < 2300 for c in counts.values()), counts
+- name: uses injected rng
+  hidden: true
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    import random
+    a = RandomizedSet(random.Random(7)); b = RandomizedSet(random.Random(7))
+    for x in range(20):
+        a.insert(x); b.insert(x)
+    xs = [a.get_random() for _ in range(30)]
+    assert xs == [b.get_random() for _ in range(30)] and set(xs) <= set(range(20)) and len(set(xs)) > 5
+- name: large workload
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    import random
+    s = RandomizedSet(random.Random(3))
+    for i in range(100000):
+        s.insert(i)
+    for i in range(0, 100000, 2):
+        assert s.remove(i)
+    assert len(s) == 50000
+    assert all(s.get_random() % 2 == 1 for _ in range(1000))
+complexity:
+- op: insert
+  time: O(1) amortized
+  space: O(n)
+- op: remove
+  time: O(1) amortized
+  space: O(n)
+- op: get_random
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Why O(1) average for all three, and what is the space?
+  kind: complexity
+  key_points:
+  - Dict gives O(1) membership/position lookup; list append/pop-last and index are O(1)
+  - Remove swaps the last element into the removed slot so no shifting is needed
+  - 'Space is O(n): one list slot and one dict entry per element'
+- q: Support duplicates (multiset, LeetCode 381) with the same bounds.
+  kind: design
+  key_points:
+  - Map value -> set of indices into the list
+  - On remove, move the last element into a freed index and update both index sets
+  - get_random is proportional to multiplicity automatically
+- q: Weighted random selection and thread-safety.
+  kind: design
+  key_points:
+  - 'Weights: Fenwick tree / prefix sums with binary search gives O(log n) sampling'
+  - Alias method gives O(1) sampling but O(n) rebuild on change
+  - 'Thread-safety: single lock around the list+dict pair since they must change together'
+- q: Why can't you just use a dict or a set and random.choice?
+  kind: reasoning
+  key_points:
+  - 'random.choice needs indexable sequence: sets and dicts are O(n) to sample'
+  - A plain list makes remove O(n)
+  - The swap-with-last trick keeps the list dense
+narration: []
+state_aloud:
+- Removing the last element must not re-add it to the map.
+- Empty get_random raises.
+- Inject the Random instance for deterministic tests.
+- Average-case O(1) relies on hash map behaviour.
+walkthrough: A list stores the elements densely and a dict maps each value to its list index. insert appends
+  and records the index; remove pops the last element and, unless that was the removed value, writes it
+  into the vacated slot and updates its index; get_random indexes the list with rng.randrange. All operations
+  are O(1) average.
+anki_queries: []
+categories:
+- systems-impl

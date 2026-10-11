@@ -1,0 +1,99 @@
+id: min-cost-connect-all-points
+title: Min Cost to Connect All Points
+bar_level: 2
+target_minutes: 22
+patterns:
+- minimum-spanning-tree
+- heap-top-k
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Min Cost Connect Points (LC 1584)"
+statement: |
+  You are given a list of `points`, each `[x, y]`. Connecting two points costs their Manhattan distance, `|x1 - x2| + |y1 - y2|`. Return the minimum total cost of cables needed so that every point is connected to every other (directly or through other points). Exactly one simple path should exist between any two points in the optimal answer, so you are looking for a minimum spanning tree.
+
+  Example: `min_cost_connect_points([[0,0],[2,2],[3,10],[5,2],[7,0]])` returns `20`.
+starter: |
+  def min_cost_connect_points(points):
+      pass
+hints:
+- Think of each point as a node of a complete graph with Manhattan-distance edge weights; you need an MST.
+- 'Kruskal: sort all edges and union-find. Prim: grow a tree from point 0, always adding the cheapest edge leaving it.'
+- The graph is dense, so array-based Prim in O(n^2) avoids building O(n^2) edge objects.
+follow_ups:
+- Return the edges chosen, not just the cost.
+- What if some pairs are forbidden to connect?
+tests:
+- name: example
+  tags:
+  - boundary
+  code: |
+    assert min_cost_connect_points([[0,0],[2,2],[3,10],[5,2],[7,0]])==20
+- name: negative coordinates
+  tags:
+  - invalid
+  code: |
+    assert min_cost_connect_points([[3,12],[-2,5],[-4,1]])==18
+- name: single point
+  tags:
+  - single
+  code: |
+    assert min_cost_connect_points([[0,0]])==0
+- name: two points
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    assert min_cost_connect_points([[0,0],[1,1]])==2
+- name: coincident points
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    assert min_cost_connect_points([[1,1],[1,1],[1,1]])==0
+    assert min_cost_connect_points([[0,0],[1,1],[1,1]])==2
+- name: square
+  tags:
+  - ordering
+  hidden: true
+  code: |
+    assert min_cost_connect_points([[0,0],[1,1],[1,0],[-1,1]])==4
+- name: two thousand collinear points
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=2000
+    pts=[[(i*7919)%n,0] for i in range(n)]
+    assert min_cost_connect_points(pts)==n-1
+complexity:
+- op: overall
+  time: O(n^2)
+  space: O(n)
+extensions:
+- q: Compare Prim and Kruskal on this input.
+  kind: complexity
+  key_points:
+  - Complete graph has n^2/2 edges
+  - Kruskal is O(n^2 log n) because of the sort
+  - Dense Prim with a distance array is O(n^2) and O(n) space
+- q: Why does the greedy choice give the optimum?
+  kind: reasoning
+  key_points:
+  - 'Cut property: the cheapest edge crossing any cut belongs to some MST'
+  - Prim always adds the cheapest edge across (tree, rest)
+  - Kruskal adds the cheapest edge joining two components
+- q: How would you handle a million points?
+  kind: design
+  key_points:
+  - Do not materialise all pairs
+  - Use geometric structure, e.g. Delaunay or a nearest-neighbour graph, to get O(n log n) candidate edges
+  - Run Kruskal on the sparse candidate set
+narration: []
+state_aloud:
+- Single point costs 0.
+- Duplicate points connect for free.
+- Distance is Manhattan, not Euclidean.
+walkthrough: |
+  Run Prim's algorithm on the implicit complete graph. Keep for every point the cheapest known distance to the growing tree. Repeatedly pick the unvisited point with the smallest such distance, add it to the total, mark it visited, and relax every other unvisited point against it. After n picks all points are connected with minimum total weight.

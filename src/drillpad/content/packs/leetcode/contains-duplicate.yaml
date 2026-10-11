@@ -1,0 +1,95 @@
+id: contains-duplicate
+title: Contains Duplicate
+bar_level: 1
+target_minutes: 10
+patterns:
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Contains Duplicate (LC 217)"
+statement: |
+  Given a list of integers `nums`, return `True` if any value appears at least twice, and `False` if every element is distinct.
+
+  Example: `contains_duplicate([1, 2, 3, 1])` returns `True`; `contains_duplicate([1, 2, 3, 4])` returns `False`.
+starter: |
+  def contains_duplicate(nums):
+      pass
+hints:
+- Comparing every pair works but costs O(n^2).
+- What structure answers 'have I seen this value before?' in O(1)?
+- You can stop at the first repeat; alternatively compare len(set(nums)) with len(nums).
+follow_ups:
+- What if the array is huge and you only have O(1) extra space?
+- What if two equal values must be within k indices of each other?
+tests:
+- name: has duplicate
+  tags:
+  - duplicate
+  code: |
+    assert contains_duplicate([1,2,3,1]) is True
+- name: all distinct
+  tags:
+  - ordering
+  code: |
+    assert contains_duplicate([1,2,3,4]) is False
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert contains_duplicate([]) is False
+- name: single element
+  tags:
+  - single
+  code: |
+    assert contains_duplicate([7]) is False
+- name: duplicate only at the ends
+  tags:
+  - boundary
+  code: |
+    assert contains_duplicate([5,1,2,3,4,5]) is True
+- name: negatives and zeros
+  tags:
+  - invalid
+  code: |
+    assert contains_duplicate([0,-1,1,0]) is True
+    assert contains_duplicate([0,-1,1,-2]) is False
+- name: large distinct input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    assert contains_duplicate(list(range(n))) is False
+    assert contains_duplicate(list(range(n))+[n-1]) is True
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Compare the hash-set approach against sorting.
+  kind: complexity
+  key_points:
+  - 'Set: O(n) expected time, O(n) space'
+  - 'Sort then scan neighbours: O(n log n) time, O(1) extra if in place'
+  - Hash worst case degrades but is rare in practice
+- q: How would you do this over a stream that does not fit in memory?
+  kind: design
+  key_points:
+  - Bloom filter for a fast probable-duplicate check
+  - Confirm candidates against an exact store or external sort
+  - State the false-positive tradeoff explicitly
+- q: 'Variant: duplicates must be within k indices of each other.'
+  kind: reasoning
+  key_points:
+  - Maintain a sliding window set of the last k elements
+  - Evict the element leaving the window each step
+  - O(n) time, O(k) space
+narration: []
+state_aloud:
+- Empty list and single element are never duplicates.
+- Negative numbers and zero are ordinary values.
+- Early exit on the first repeat.
+walkthrough: |
+  Walk the list while keeping a set of values already seen. If the current value is in the set, a duplicate exists and we return True immediately; otherwise add it. Reaching the end means all values are distinct. Each step is one O(1) expected hash lookup and insert.

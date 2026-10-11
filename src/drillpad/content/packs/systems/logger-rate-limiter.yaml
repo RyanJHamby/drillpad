@@ -1,0 +1,126 @@
+id: logger-rate-limiter
+title: Logger Rate Limiter
+bar_level: 1
+target_minutes: 12
+patterns:
+- hash-map
+- timestamp
+- rate-limit
+firm_tags: []
+statement: |
+  Implement `Logger`, which decides whether a log message should be printed. A message may be
+  printed at most once every 10 seconds.
+
+  - `should_print(timestamp, message)` -> `bool`. `timestamp` is an integer number of seconds and
+    calls arrive with non-decreasing timestamps. Return `True` and record the message if it was
+    never printed, or if at least 10 seconds have passed since it was last *printed*
+    (`timestamp >= last_printed + 10`). Otherwise return `False` and record nothing: a suppressed
+    call does not push the window forward.
+  - Different messages are independent.
+
+  Example
+  ```python
+  l = Logger()
+  l.should_print(1, "foo")   # True
+  l.should_print(2, "bar")   # True
+  l.should_print(8, "foo")   # False
+  l.should_print(11, "foo")  # True  (11 >= 1 + 10)
+  l.should_print(12, "foo")  # False (window restarted at 11)
+  ```
+starter: |
+  class Logger:
+      def __init__(self):
+          pass
+
+      def should_print(self, timestamp, message):
+          pass
+hints:
+- A dict from message to the last printed timestamp is enough.
+- Only update the dict when you return True.
+- 'Boundary: exactly 10 seconds later is allowed.'
+follow_ups:
+- What if timestamps can arrive out of order?
+- How would you generalise to at most k prints per window?
+tests:
+- name: basic example
+  tags:
+  - time
+  - boundary
+  code: |
+    l = Logger()
+    assert l.should_print(1, "foo") is True
+    assert l.should_print(2, "bar") is True
+    assert l.should_print(3, "foo") is False
+    assert l.should_print(8, "bar") is False
+    assert l.should_print(10, "foo") is False
+    assert l.should_print(11, "foo") is True
+    assert l.should_print(100, "bar") is True
+- name: suppressed call does not extend window
+  tags:
+  - time
+  - duplicate
+  code: |
+    l = Logger()
+    assert l.should_print(0, "m") is True
+    assert l.should_print(5, "m") is False
+    assert l.should_print(9, "m") is False
+    assert l.should_print(10, "m") is True
+    assert l.should_print(19, "m") is False
+    assert l.should_print(20, "m") is True
+- name: messages independent and time zero
+  tags:
+  - single
+  - boundary
+  code: |
+    l = Logger()
+    assert l.should_print(0, "a") is True
+    assert l.should_print(0, "b") is True
+    assert l.should_print(0, "a") is False
+    assert l.should_print(10, "a") is True and l.should_print(10, "b") is True
+- name: many messages
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    l = Logger()
+    for i in range(20000):
+        assert l.should_print(i // 1000, "msg%d" % i) is True
+    assert l.should_print(25, "msg0") is True
+    assert l.should_print(26, "msg0") is False
+complexity:
+- op: should_print
+  time: O(1)
+  space: O(n)
+extensions:
+- q: What is the time and memory cost, and how does memory grow?
+  kind: complexity
+  key_points:
+  - 'should_print is one dict lookup and write: O(1)'
+  - Memory is O(distinct messages) and grows without bound as written
+  - Bound it by evicting entries older than 10 seconds
+- q: How would you bound memory for an unbounded stream of distinct messages?
+  kind: design
+  key_points:
+  - Keep a FIFO queue of (timestamp, message) and pop entries older than the window on each call
+  - Or use a bucketed/expiring structure so cleanup is amortized O(1)
+  - 'Trade-off: a Bloom/approximate structure could save memory but yields false suppressions'
+- q: Make it thread-safe and shared across servers.
+  kind: design
+  key_points:
+  - 'In-process: one lock around check-and-set (the read-modify-write must be atomic)'
+  - 'Across servers: Redis SET key NX EX 10 gives the same semantics atomically'
+  - 'Clock skew between hosts: let the store, not the callers, define the time'
+narration: []
+state_aloud:
+- Boundary at exactly +10 seconds is printable.
+- A suppressed message must not refresh its timestamp.
+- 'Assumption: timestamps are non-decreasing; ask if not.'
+- Memory grows with distinct messages; mention eviction.
+walkthrough: A dictionary maps each message to the timestamp it was last printed. A call prints and records
+  when the message is new or at least 10 seconds have passed since the last print, otherwise it returns
+  False without touching the record. Each call is O(1) and memory is O(distinct messages), which an eviction
+  queue can bound.
+anki_queries: []
+categories:
+- systems-impl

@@ -1,0 +1,187 @@
+id: twap-and-ema
+title: TWAP and EMA
+bar_level: 2
+target_minutes: 20
+patterns:
+- prefix-sums
+- binary-search
+- step-function
+- ema
+- streaming
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Two small streaming-analytics primitives.
+
+  **1. `Twap(updates)`** - time-weighted average price of a step function. `updates` is a list of `(ts, price)`
+  with strictly increasing int timestamps (else `ValueError`; an empty list is also a `ValueError`). Each price
+  holds from its timestamp until the next update; the last price holds forever.
+
+  `query(start, end) -> float` returns the average of the price over `[start, end]`, i.e. the integral of the step
+  function divided by `end - start`. If `start == end` return the price in effect at that instant.
+  `ValueError` if `end < start` or `start` is before the first update. Queries may be called many times, so each
+  must be O(log n) (precompute prefix integrals; do not rescan updates).
+
+  **2. `ema(values, span) -> list[float]`** - exponential moving average, `alpha = 2 / (span + 1)`, seeded with the
+  first value: `ema[0] = values[0]`, `ema[i] = alpha * values[i] + (1 - alpha) * ema[i-1]`. `[]` for an empty input.
+  `ValueError` if `span < 1`.
+
+  Float results are compared with a tolerance of 1e-9.
+starter: |
+  class Twap:
+      def __init__(self, updates):
+          pass
+
+      def query(self, start, end):
+          pass
+
+
+  def ema(values, span):
+      pass
+hints:
+- The integral of a step function up to time t is the prefix integral at the last update <= t plus price
+  * (t - that update time). Precompute prefix integrals once.
+- TWAP over [a, b] is (I(b) - I(a)) / (b - a); use bisect_right to locate the segment, and special-case
+  a == b.
+- 'EMA is one pass: seed with the first value then fold alpha*x + (1-alpha)*prev. Keep it a single float
+  of state, not a window.'
+follow_ups:
+- How does a time-weighted EMA differ when ticks are irregularly spaced?
+- How would you compute TWAP in a streaming way with no stored history?
+- Why would an execution algo prefer TWAP over VWAP?
+tests:
+- name: twap of a step function
+  code: |
+    t = Twap([(0, 100), (10, 110), (30, 90)])
+    assert abs(t.query(0, 10) - 100.0) < 1e-9
+    assert abs(t.query(0, 30) - (100 * 10 + 110 * 20) / 30) < 1e-9
+    assert abs(t.query(5, 20) - (100 * 5 + 110 * 10) / 15) < 1e-9
+    assert abs(t.query(10, 40) - (110 * 20 + 90 * 10) / 30) < 1e-9, "last price holds forever"
+  hidden: false
+  tags:
+  - time
+  - ordering
+- name: twap degenerate and single update
+  code: |
+    t = Twap([(5, 200)])
+    assert abs(t.query(5, 5) - 200.0) < 1e-9
+    assert abs(t.query(5, 100) - 200.0) < 1e-9
+    t2 = Twap([(0, 100), (10, 120)])
+    assert abs(t2.query(10, 10) - 120.0) < 1e-9, "instant at an update sees the new price"
+    assert abs(t2.query(9, 9) - 100.0) < 1e-9
+  hidden: false
+  tags:
+  - single
+  - boundary
+- name: twap invalid input
+  code: |
+    for bad in ([], [(1, 5), (1, 6)], [(2, 5), (1, 6)]):
+        try:
+            Twap(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+    t = Twap([(10, 100), (20, 110)])
+    for a, b in [(5, 15), (15, 12)]:
+        try:
+            t.query(a, b)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError((a, b))
+  hidden: false
+  tags:
+  - invalid
+  - empty
+- name: ema basic
+  code: |
+    out = ema([10, 20, 30], 3)   # alpha = 0.5
+    assert len(out) == 3
+    assert abs(out[0] - 10) < 1e-9 and abs(out[1] - 15) < 1e-9 and abs(out[2] - 22.5) < 1e-9
+    assert ema([], 5) == []
+    assert ema([7], 5) == [7.0]
+  hidden: false
+  tags:
+  - single
+  - empty
+- name: ema span 1 tracks input and constants stay constant
+  code: |
+    xs = [3, 9, 1, 4]
+    out = ema(xs, 1)
+    assert all(abs(a - b) < 1e-9 for a, b in zip(out, xs)), "alpha = 1"
+    out = ema([50] * 20, 10)
+    assert all(abs(a - 50) < 1e-9 for a in out)
+    try:
+        ema([1, 2], 0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("span 0")
+  hidden: true
+  tags:
+  - boundary
+  - invalid
+- name: 'scale: 200k updates, 100k queries'
+  code: |
+    n = 200000
+    ups = [(i * 3, 1000 + (i * 7) % 100) for i in range(n)]
+    t = Twap(ups)
+    tot = 0.0
+    for k in range(100000):
+        a = (k * 11) % (n * 3 - 100)
+        tot += t.query(a, a + 90)
+    assert 1000 <= tot / 100000 <= 1100
+    assert abs(t.query(0, 3) - 1000) < 1e-9
+    e = ema(list(range(n)), 50)
+    assert len(e) == n and e[-1] < n
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: Twap build
+  time: O(n)
+  space: O(n)
+- op: Twap.query
+  time: O(log n)
+  space: O(1)
+- op: ema
+  time: O(n)
+  space: O(1)
+extensions:
+- q: 'Level 2: add a streaming `update(ts, price)` / `twap_since(start)` that needs no stored history
+    for a fixed start.'
+  key_points:
+  - Keep running integral, last price and last ts; close the open segment on each update
+  - twap_since(now) adds the open segment price * (now - last_ts) without mutating state
+  - Reject non-increasing timestamps and queries before the first update
+  kind: code
+- q: Implement a time-decayed EMA where the decay depends on the gap between ticks.
+  key_points:
+  - alpha = 1 - exp(-dt / tau) so irregular gaps are handled correctly
+  - dt == 0 and the first tick are special cases (no decay / seed)
+  - 'Compare with the index-based EMA: they agree only for evenly spaced data'
+  kind: code
+- q: Complexity of queries and the effect of precomputation.
+  key_points:
+  - Naive per-query scan is O(n) per query and O(nq) total; prefix integrals make it O(log n) per query
+  - Build is a single O(n) pass and O(n) memory
+  - Integer integrals avoid cancellation; divide once at the end
+  kind: complexity
+- q: 'Design: where do TWAP and EMA signals live in a trading stack and what must be deterministic?'
+  key_points:
+  - Time comes from message timestamps so research, backtests and production agree
+  - Streaming state is small enough to checkpoint and restore after a restart
+  - Separate the numeric kernel from I/O so it can be unit-tested against golden vectors
+  kind: design
+narration: []
+state_aloud:
+- Price holds until the next update; last price holds forever; query before first update is invalid.
+- start == end returns the price in effect at that instant.
+- EMA seeds with the first value; span < 1 invalid. Float tolerance 1e-9.
+walkthrough: |
+  Standard formulation. TWAP is the integral of a piecewise-constant price divided by elapsed time; prefix integrals plus bisect answer each query in O(log n). EMA uses alpha = 2/(span+1) seeded with the first observation (the usual "adjust=False" convention). Source: standard formulation.
+categories:
+- trading

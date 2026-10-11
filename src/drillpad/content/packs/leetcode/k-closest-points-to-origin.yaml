@@ -1,0 +1,97 @@
+id: k-closest-points-to-origin
+title: K Closest Points to Origin
+bar_level: 2
+target_minutes: 20
+patterns:
+- heap-top-k
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:K Closest Points (LC 973)"
+statement: |
+  Given a list of 2D points `[x, y]` and an integer `k`, return the `k` points closest to the origin by Euclidean distance. The answer may be in any order. Assume the set of k closest points is unambiguous (no tie at the boundary).
+
+  Example: `k_closest([[3,3],[5,-1],[-2,4]], 2)` returns `[[3,3],[-2,4]]` in any order.
+starter: |
+  def k_closest(points, k):
+      pass
+hints:
+- Compare squared distances; there is no need for a square root.
+- Sorting everything works; can you avoid ordering the far points?
+- Keep a max-heap of size k keyed by distance, evicting the farthest when it grows past k.
+follow_ups:
+- Use quickselect for O(n) average.
+- 'Points arrive as a stream: what do you maintain?'
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert sorted(k_closest([[1,3],[-2,2]], 1)) == [[-2,2]]
+- name: two of three
+  tags:
+  - invalid
+  code: |
+    assert sorted(k_closest([[3,3],[5,-1],[-2,4]], 2)) == [[-2,4],[3,3]]
+- name: k equals n
+  tags:
+  - boundary
+  code: |
+    assert sorted(k_closest([[2,2],[1,1],[3,3]], 3)) == [[1,1],[2,2],[3,3]]
+- name: k is zero
+  tags:
+  - zero-capacity
+  code: |
+    assert k_closest([[1,1]], 0) == []
+    assert k_closest([], 0) == []
+- name: single point
+  tags:
+  - single
+  code: |
+    assert k_closest([[0,0]], 1) == [[0,0]]
+- name: repeated points
+  tags:
+  - duplicate
+  code: |
+    assert sorted(k_closest([[1,1],[1,1],[2,2]], 2)) == [[1,1],[1,1]]
+- name: large input
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 200000
+    pts = [[((i * 7919) % n) + 1, ((i * 7919) % n) + 1] for i in range(n)]
+    r = k_closest(pts, 10)
+    assert sorted(r) == [[j, j] for j in range(1, 11)]
+complexity:
+- op: overall
+  time: O(n log k)
+  space: O(k)
+extensions:
+- q: Compare heap, sort and quickselect.
+  kind: complexity
+  key_points:
+  - Sort is O(n log n), heap is O(n log k), quickselect is O(n) average
+  - Quickselect is O(n^2) worst case without random pivots
+  - Heap uses O(k) extra memory and works on streams
+- q: Stream of points?
+  kind: design
+  key_points:
+  - Keep the max-heap of size k and update on each arrival
+  - Each update is O(log k)
+  - Query the current answer by reading the heap
+- q: Why squared distance?
+  kind: reasoning
+  key_points:
+  - Square root is monotonic so ordering is unchanged
+  - It avoids floating point error
+  - Integers stay exact
+narration: []
+state_aloud:
+- k = 0 and k = n.
+- Negative coordinates.
+- Duplicate points.
+- Compare squared distances.
+walkthrough: |
+  Compute each point's squared distance. Maintain a max-heap of size k by distance (negate the distance in Python): push each point and pop the farthest once the heap holds more than k. The heap ends up with the k nearest points. Time is O(n log k) with O(k) memory.

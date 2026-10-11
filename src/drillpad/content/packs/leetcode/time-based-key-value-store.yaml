@@ -1,0 +1,196 @@
+id: time-based-key-value-store
+title: Time Based Key-Value Store
+bar_level: 2
+target_minutes: 22
+patterns:
+- binary-search
+- hash-map
+firm_tags:
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Time Based Key-Value (LC 981)"
+statement: |
+  Implement `TimeMap`, a key-value store that keeps every value a key has ever had, each with the timestamp at which it was set.
+  - `set(key, value, timestamp)` stores the value at that time. For one key, timestamps are given in strictly increasing order.
+  - `get(key, timestamp)` returns the value that was set with the largest timestamp not exceeding `timestamp`, or `""` if the key is unknown or all its timestamps are later.
+
+  Example: `set("k","a",1)`, `set("k","b",4)`; `get("k",3)` is `"a"`, `get("k",4)` is `"b"`, `get("k",0)` is `""`.
+starter: |
+  class TimeMap:
+      def __init__(self):
+          pass
+
+      def set(self, key, value, timestamp):
+          pass
+
+      def get(self, key, timestamp):
+          pass
+hints:
+- Store per key a list of (timestamp, value); appends keep it sorted by the increasing-timestamp guarantee.
+- get needs the last entry with timestamp <= t, which is a binary search.
+- Use bisect_right on the timestamps and step back one position.
+follow_ups:
+- What if timestamps can arrive out of order?
+- How would you expire old versions?
+stages:
+  - level: 0
+    kind: part
+    prompt: ""
+    minutes: 22
+    tests:
+      - name: basic versions
+        tags:
+        - ordering
+        code: |
+          m=TimeMap()
+          m.set('k','a',1)
+          m.set('k','b',4)
+          assert m.get('k',1)=='a'
+          assert m.get('k',3)=='a'
+          assert m.get('k',4)=='b'
+          assert m.get('k',9)=='b'
+      - name: unknown key
+        tags:
+        - empty
+        code: |
+          m=TimeMap()
+          assert m.get('zzz',5)==''
+      - name: query before first timestamp
+        tags:
+        - boundary
+        code: |
+          m=TimeMap()
+          m.set('k','a',5)
+          assert m.get('k',4)==''
+          assert m.get('k',5)=='a'
+      - name: single version
+        tags:
+        - single
+        code: |
+          m=TimeMap()
+          m.set('x','v',10)
+          assert m.get('x',10)=='v'
+          assert m.get('x',100)=='v'
+      - name: keys are independent
+        tags:
+        - duplicate
+        code: |
+          m=TimeMap()
+          m.set('a','1',1)
+          m.set('b','2',2)
+          m.set('a','3',3)
+          assert m.get('a',2)=='1'
+          assert m.get('b',2)=='2'
+          assert m.get('b',1)==''
+      - name: zero or negative timestamp lookup
+        tags:
+        - time
+        code: |
+          m=TimeMap()
+          m.set('k','v',1)
+          assert m.get('k',0)==''
+          assert m.get('k',-5)==''
+      - name: many versions of one key
+        tags:
+        - scale
+        hidden: true
+        code: |
+          m=TimeMap()
+          n=100000
+          for i in range(1,n+1):
+              m.set('k',str(i),i*2)
+          for i in range(1,n+1):
+              assert m.get('k',i*2)==str(i)
+              assert m.get('k',i*2+1)==str(i)
+          assert m.get('k',1)==''
+  - level: 1
+    kind: followup
+    prompt: |
+      Handle out-of-order timestamps. If timestamps can arrive in any order, what data structure
+      would you use instead of relying on the append-only guarantee?
+    minutes: 8
+    tests:
+      - name: out of order inserts with binary search tree
+        tags: [ordering, scale]
+        code: |
+          m = TimeMap()
+          m.set('k','v1',100)
+          m.set('k','v2',10)  # out of order
+          m.set('k','v3',50)
+          assert m.get('k',5) == ''
+          assert m.get('k',10) == 'v2'
+          assert m.get('k',50) == 'v3'
+          assert m.get('k',100) == 'v1'
+          assert m.get('k',150) == 'v1'
+      - name: dense out of order inserts
+        tags: [scale, ordering]
+        code: |
+          import random
+          m = TimeMap()
+          pairs = [(i, f'v{i}') for i in range(100)]
+          random.Random(42).shuffle(pairs)
+          for ts, val in pairs:
+              m.set('k', val, ts)
+          for i in range(100):
+              assert m.get('k', i) == f'v{i}'
+  - level: 2
+    kind: followup
+    prompt: |
+      Add TTL (time-to-live) semantics: entries expire after a specified duration.
+      When querying, ignore entries that have expired relative to the query timestamp.
+    minutes: 8
+    tests:
+      - name: versions expire after ttl
+        tags: [time]
+        code: |
+          m = TimeMap()
+          m.set_with_ttl('k', 'v1', 1, ttl=10)
+          m.set_with_ttl('k', 'v2', 15, ttl=5)
+          assert m.get('k', 5) == 'v1'
+          assert m.get('k', 11) == '', "v1 expired at ts 11"
+          assert m.get('k', 15) == 'v2'
+          assert m.get('k', 20) == '', "v2 expired at ts 20"
+      - name: versioning with expiry
+        tags: [time, ordering]
+        code: |
+          m = TimeMap()
+          m.set_with_ttl('k', 'a', 0, ttl=100)
+          m.set_with_ttl('k', 'b', 50, ttl=100)
+          assert m.get('k', 75) == 'b'
+          assert m.get('k', 100) == 'b'
+          assert m.get('k', 150) == ''
+complexity:
+- op: set
+  time: O(1) amortized
+  space: O(1)
+- op: get
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: Cost of set and get.
+  kind: complexity
+  key_points:
+  - set is an amortised O(1) append
+  - get is O(log n) binary search over that key's versions
+  - Total space O(total versions)
+- q: Out-of-order timestamps or deletions.
+  kind: design
+  key_points:
+  - Use bisect.insort for O(n) insert, or a balanced tree/skip list for O(log n)
+  - Tombstone entries for deletes
+  - Compaction to bound history
+- q: Make it a production versioned store.
+  kind: design
+  key_points:
+  - Persist an append-only log per key with an index
+  - TTL or retention to drop old versions
+  - Snapshot reads at a timestamp give consistent views across keys
+narration: []
+state_aloud:
+- Unknown key returns empty string.
+- Timestamp before the first version.
+- Timestamps strictly increase per key.
+walkthrough: |
+  Map each key to two parallel lists: timestamps and values. `set` appends to both, which stays sorted by the input guarantee. `get` runs `bisect_right` on the timestamp list to find how many versions are at or before the query; if the count is zero return `""`, else return the value just before that position.

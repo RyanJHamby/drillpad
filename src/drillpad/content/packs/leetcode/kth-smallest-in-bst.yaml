@@ -1,0 +1,132 @@
+id: kth-smallest-in-bst
+title: Kth Smallest Element in a BST
+bar_level: 2
+target_minutes: 20
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Kth Smallest in BST (LC 230)"
+statement: |
+  Given the root of a binary search tree and an integer `k` (1-indexed, 1 <= k <= number of nodes), return the k-th smallest value in the tree. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `kth_smallest(build_tree([3,1,4,None,2]), 1)` returns `1`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def kth_smallest(root, k):
+      pass
+hints:
+- An in-order traversal of a BST visits values in ascending order.
+- 'You do not need the whole traversal: stop at the k-th visited node.'
+- An explicit stack lets you stop early without visiting the rest of the tree.
+follow_ups:
+- 'The tree is modified often and k-th queries are frequent: how do you optimise?'
+- Find the k-th largest instead.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert kth_smallest(build_tree([3,1,4,None,2]), 1) == 1
+- name: middle element
+  tags:
+  - ordering
+  code: |
+    assert kth_smallest(build_tree([5,3,6,2,4,None,None,1]), 3) == 3
+- name: k equals size
+  tags:
+  - boundary
+  code: |
+    assert kth_smallest(build_tree([5,3,6,2,4,None,None,1]), 6) == 6
+    assert kth_smallest(build_tree([2,1,3]), 3) == 3
+- name: single node
+  tags:
+  - single
+  code: |
+    assert kth_smallest(build_tree([9]), 1) == 9
+- name: negative values
+  tags:
+  - invalid
+  code: |
+    assert kth_smallest(build_tree([0,-3,3,-4,-1]), 2) == -3
+    assert kth_smallest(build_tree([0,-3,3,-4,-1]), 5) == 3
+- name: right skewed
+  tags:
+  - boundary
+  code: |
+    assert kth_smallest(build_tree([1,None,2,None,3,None,4]), 4) == 4
+- name: big balanced BST
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 2**16 - 1
+
+    def bst(lo, hi):
+        if lo > hi:
+            return None
+        mid = (lo + hi) // 2
+        return TreeNode(mid, bst(lo, mid - 1), bst(mid + 1, hi))
+
+    r = bst(1, n)
+    assert kth_smallest(r, 1) == 1
+    assert kth_smallest(r, n) == n
+    assert kth_smallest(r, 40000) == 40000
+complexity:
+- op: overall
+  time: O(h + k)
+  space: O(h)
+extensions:
+- q: Frequent inserts/deletes and many k queries?
+  kind: design
+  key_points:
+  - Store subtree sizes in each node
+  - Descend using left size to find the k-th in O(h)
+  - Update sizes on insert and delete
+- q: Time of the early-stopping in-order?
+  kind: complexity
+  key_points:
+  - Go down to the leftmost node in O(h)
+  - Then k pops and pushes amortize to O(k)
+  - Total O(h + k), O(n) worst case
+- q: Why in-order specifically?
+  kind: reasoning
+  key_points:
+  - 'BST property: left < node < right'
+  - In-order therefore emits values in sorted order
+  - Pre-order and post-order do not
+narration: []
+state_aloud:
+- k is 1-indexed.
+- k equals the number of nodes (largest).
+- Stop as soon as the k-th is found.
+- Skewed trees make recursion deep.
+walkthrough: |
+  Do an iterative in-order traversal with a stack: push the left spine, pop a node, decrement `k`, and when `k` hits 0 return that node's value; otherwise move to its right child and continue. Because BST in-order is ascending, the k-th popped value is the answer, and we never visit more than needed.

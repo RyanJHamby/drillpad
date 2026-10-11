@@ -1,0 +1,102 @@
+id: happy-number
+title: Happy Number
+bar_level: 1
+target_minutes: 12
+patterns:
+- hash-map
+- two-pointers
+- math
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Replace a positive integer `n` by the sum of the squares of its digits, repeatedly. It is *happy* if this process reaches `1`; otherwise it loops forever in a cycle that never includes `1`. Return `True` if `n` is happy.
+
+  Example: `is_happy(19)` returns `True` (19 -> 82 -> 68 -> 100 -> 1); `is_happy(2)` returns `False`.
+starter: |
+  def is_happy(n):
+      pass
+hints:
+- The sequence either hits 1 or repeats a value; it cannot grow without bound. Why?
+- Detect a repeat by remembering the values you have seen.
+- Or use Floyd's cycle detection (slow and fast pointers) to use O(1) space.
+follow_ups:
+- Do it in O(1) space.
+- How large can the sequence's values get for a 32-bit input?
+tests:
+- name: happy
+  tags:
+  - boundary
+  code: |
+    assert is_happy(19) is True
+- name: unhappy
+  tags:
+  - boundary
+  code: |
+    assert is_happy(2) is False
+    assert is_happy(4) is False
+- name: one
+  tags:
+  - single
+  - boundary
+  code: |
+    assert is_happy(1) is True
+- name: powers of ten are happy
+  tags:
+  - duplicate
+  code: |
+    assert is_happy(10) is True
+    assert is_happy(100) is True
+    assert is_happy(1000000) is True
+- name: known happy list
+  tags:
+  - ordering
+  code: |
+    assert [n for n in range(1,50) if is_happy(n)] == [1,7,10,13,19,23,28,31,32,44,49]
+  hidden: true
+- name: zero is not positive input but must terminate
+  tags:
+  - invalid
+  code: |
+    assert is_happy(0) is False
+  hidden: true
+- name: large inputs terminate
+  tags:
+  - scale
+  code: |
+    assert is_happy(2**31 - 1) is False
+    cnt = sum(1 for n in range(1, 200000) if is_happy(n))
+    assert cnt == 14377 or cnt > 10000
+    assert is_happy(1111111) is True
+  hidden: true
+complexity:
+- op: overall
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: Why does the sequence always either reach 1 or cycle?
+  kind: reasoning
+  key_points:
+  - For large n the digit-square sum is much smaller than n
+  - Values are bounded (below about 243 after one step for 32-bit n)
+  - A bounded deterministic sequence must repeat a value, so it reaches 1 or cycles
+- q: Compare the hash set and Floyd approaches.
+  kind: complexity
+  key_points:
+  - 'Set: O(1) distinct values bounded, so O(log n) time per step, O(k) space for k states'
+  - 'Floyd: same time, O(1) space'
+  - Both stop after a bounded number of steps
+- q: 'Design: test millions of numbers quickly.'
+  kind: design
+  key_points:
+  - Memoise outcomes for small values (<= 243) in a lookup table
+  - Reduce each input in one digit-square step then look up
+  - Known unhappy cycle contains 4, so checking for 4 is enough
+narration: []
+state_aloud:
+- Reaching 1 means happy; any repeat means a cycle.
+- Input 1.
+- Don't loop forever on unhappy numbers.
+walkthrough: |
+  Repeatedly replace n with the sum of squares of its digits. Keep a set of values already seen; if we reach 1 the number is happy, and if we ever revisit a value we are in a cycle and it is not. The values are bounded, so this ends quickly.

@@ -1,0 +1,146 @@
+id: cache-aside
+title: Cache-aside with single-flight stampede protection
+bar_level: 3
+target_minutes: 25
+patterns: [cache-aside, single-flight, request-coalescing, stampede]
+firm_tags: [ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:59 - *"'
+statement: |
+  Implement `CacheAsideCache(store)` where `store.read(key)` is slow. `get(key)` returns the
+  cached value on a hit; on a miss it loads from the store, populates the cache, and returns it.
+  `invalidate(key)` drops a cached key. If many threads miss the same cold key concurrently,
+  only ONE of them may call `store.read` (single-flight); the others wait for its result.
+  Different keys must not block each other while loading (do not hold your lock during
+  `store.read`).
+starter: |
+  class CacheAsideCache:
+      def __init__(self, store):
+          pass
+hints:
+  - Under a lock, either find the value, or find an in-flight Event for the key, or register your own Event and become the loader.
+  - Release the lock before calling store.read, then re-take it to publish the value and set the Event.
+follow_ups:
+  - What is the difference between this and write-through?
+  - How do you prevent a stampede without a per-key lock (probabilistic early expiration)?
+  - What if the store read is slow and waiters time out?
+  - What should happen if store.read raises (clear in-flight, wake waiters)?
+tests:
+  - name: miss then hit and invalidate
+    tags: [empty, state-reuse, invalid]
+    code: |
+      class Store:
+          def __init__(self): self.reads = []
+          def read(self, k): self.reads.append(k); return k.upper()
+      s = Store(); c = CacheAsideCache(s)
+      assert c.get("a") == "A" and c.get("a") == "A"
+      assert s.reads == ["a"]
+      c.invalidate("a")
+      assert c.get("a") == "A"
+      assert s.reads == ["a", "a"]
+      c.invalidate("never-cached")
+  - name: distinct keys load independently
+    tags: [scale, duplicate]
+    code: |
+      class Store:
+          def __init__(self): self.reads = []
+          def read(self, k): self.reads.append(k); return k * 2
+      s = Store(); c = CacheAsideCache(s)
+      assert [c.get(i) for i in range(5)] == [0, 2, 4, 6, 8]
+      assert sorted(s.reads) == [0, 1, 2, 3, 4]
+  - name: concurrent misses coalesce into one store read
+    tags: [concurrency, duplicate, scale]
+    code: |
+      import threading, time
+      gate = threading.Event(); calls = []; lock = threading.Lock()
+      class Store:
+          def read(self, k):
+              with lock: calls.append(k)
+              gate.wait(3)
+              return "v"
+      c = CacheAsideCache(Store())
+      results = []
+      def worker(): results.append(c.get("hot"))
+      ts = [threading.Thread(target=worker, daemon=True) for _ in range(8)]
+      for t in ts: t.start()
+      time.sleep(0.15)
+      gate.set()
+      for t in ts: t.join(5)
+      assert not any(t.is_alive() for t in ts), "waiters never woke"
+      assert results == ["v"] * 8
+      assert calls == ["hot"], f"expected exactly one store read, got {len(calls)}"
+  - name: slow load of one key does not block another key
+    tags: [concurrency]
+    hidden: true
+    code: |
+      import threading, time
+      gate = threading.Event()
+      class Store:
+          def read(self, k):
+              if k == "slow": gate.wait(3)
+              return k
+      c = CacheAsideCache(Store())
+      t = threading.Thread(target=lambda: c.get("slow"), daemon=True); t.start()
+      time.sleep(0.1)
+      out = []
+      u = threading.Thread(target=lambda: out.append(c.get("fast")), daemon=True); u.start(); u.join(2)
+      assert out == ["fast"], "loading one key blocked a different key"
+      gate.set(); t.join(5)
+complexity:
+- op: get (hit)
+  time: O(1)
+  space: O(n)
+- op: get (miss, excluding store read)
+  time: O(1)
+  space: O(n)
+- op: in-flight tracking
+  time: O(1)
+  space: O(k)
+extensions:
+- q: What is the difference between cache-aside and write-through?
+  kind: reasoning
+  key_points:
+  - 'Cache-aside: the application populates the cache on miss and invalidates on write'
+  - 'Write-through: the cache owns store access and writes both on set'
+  - Cache-aside needs no special cache implementation, so more common
+- q: How do you prevent a stampede without a per-key lock?
+  kind: design
+  key_points:
+  - 'Probabilistic early expiration: refresh slightly before TTL, randomized per key'
+  - Jitter TTLs so mass-inserted keys do not expire together
+  - Stale-while-revalidate to avoid latency spikes
+  - Distributed version needs a lock with TTL (e.g. SETNX) or pub/sub
+- q: What if the store read is slow and the waiters time out, or store.read raises?
+  kind: design
+  key_points:
+  - Add a timeout on event.wait and fall back to a direct read (trading duplicate work for latency)
+  - On exception clear the in-flight entry and wake waiters (try/finally); propagate or set_exception
+  - Otherwise waiters hang forever
+  - Do not cache failures; consider caching legitimate not-found results
+- q: What is the space cost of single-flight, and what does a miss cost?
+  kind: complexity
+  key_points:
+  - In-flight space is O(k) for k currently-missing keys, not per waiter
+  - Hit O(1); miss O(1) cache cost plus one store read per key
+  - Do not hold the lock during store.read, or distinct keys serialize
+- q: What staleness windows exist?
+  kind: reasoning
+  key_points:
+  - A waiter can return a value another thread just invalidated
+  - Acceptable bounded staleness; name it
+  - Eviction mid-load can cause a harmless re-miss
+narration:
+- This is cache-aside — the app owns the miss path, not the cache itself.
+- On a hit I return straight from the map; on a miss I read from the store and populate.
+- The real risk here is a stampede — many threads missing the same cold key at once — so I'll coalesce concurrent loads with an inflight-events map.
+- Only the first thread actually hits the store; the rest wait on its event and reuse the result.
+- I'll note write handling is usually invalidate-on-write, not shown here, and can extend if you want it.
+state_aloud:
+- 'Cache miss stampede: N concurrent requests for the same cold key all miss and all hit the store simultaneously — the `inflight` dict above collapses them into one store read, say this is the standard fix (a.k.a. request coalescing / single-flight).'
+- 'Store read fails: don''t leave a half-populated `inflight` entry — must clear it and wake waiters even on exception (needs try/finally in production code).'
+- Write path isn't shown here on purpose — cache-aside is usually paired with invalidate-on-write, not populate-on-write; state that distinction if asked how writes work.
+- 'Stale read: a thread waiting on `event` could return a value another thread just invalidated — acceptable staleness window, worth naming explicitly.'
+- Thundering herd across *different* keys expiring at once (e.g., a batch TTL) is a related but distinct problem from single-key stampede.
+walkthrough: |
+  The application owns the miss path: on a hit it returns straight from the map, and on a miss it reads the store and populates the cache itself. The interesting behavior is concurrent misses on the same cold key. An `inflight` map of events collapses them into a single store read, so only the first thread loads and the rest wait on its event and reuse the result (single-flight). A failed store read must clear the inflight entry and wake waiters. Writes are normally handled by invalidate-on-write, and waiters may see a briefly stale value.
+categories: [systems-impl]

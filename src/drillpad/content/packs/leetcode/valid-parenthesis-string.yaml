@@ -1,0 +1,119 @@
+id: valid-parenthesis-string
+title: Valid Parenthesis String
+bar_level: 2
+target_minutes: 25
+patterns:
+- greedy
+- stack
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Valid Parenthesis String (LC 678)"
+statement: |
+  A string contains only `(`, `)` and `*`. Each `*` may be treated as `(`, `)` or an empty string. Return `True` if some choice of treatments produces a valid balanced parenthesis sequence.
+
+  Example: `check_valid_string("(*)")` returns `True`; `check_valid_string("(*))")` returns `True`; `check_valid_string("*(")` returns `False`.
+starter: |
+  def check_valid_string(s):
+      pass
+hints:
+- Trying all 3^k assignments of the stars is far too slow; with a counter of open parentheses, what values could the counter take?
+- 'Track a range [lo, hi] of possible open-parenthesis counts: ''('' raises both, '')'' lowers both, ''*'' lowers lo and raises hi.'
+- Clamp lo at 0; if hi ever goes negative it is invalid; at the end valid iff lo == 0.
+follow_ups:
+- Solve it with two stacks of indices.
+- Count the number of valid assignments instead (hard).
+tests:
+- name: simple star as empty
+  tags:
+  - boundary
+  code: |
+    assert check_valid_string('()') is True
+    assert check_valid_string('(*)') is True
+- name: star as open
+  tags:
+  - ordering
+  code: |
+    assert check_valid_string('(*))') is True
+- name: star before the open can't help
+  tags:
+  - ordering
+  - invalid
+  code: |
+    assert check_valid_string('*(') is False
+    assert check_valid_string(')*') is False
+- name: empty string
+  tags:
+  - empty
+  code: |
+    assert check_valid_string('') is True
+- name: single characters
+  tags:
+  - single
+  code: |
+    assert check_valid_string('*') is True
+    assert check_valid_string('(') is False
+    assert check_valid_string(')') is False
+- name: always-star-as-open or empty heuristics fail
+  tags:
+  - ordering
+  code: |
+    assert check_valid_string('(((*)') is False
+    assert check_valid_string('(*)(') is False
+    assert check_valid_string('*)(*') is True
+    assert check_valid_string('(*()') is True
+  hidden: true
+- name: many stars
+  tags:
+  - duplicate
+  code: |
+    assert check_valid_string('*****') is True
+    assert check_valid_string('((*)(*))((*') is False
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 100000
+    assert check_valid_string('(' * n + '*' * n) is True
+    assert check_valid_string('(' * (n + 1) + '*' * n) is False
+    assert check_valid_string('*' * n + ')' * n) is True
+    assert check_valid_string(')' + '*' * n) is False
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why does the [lo, hi] range capture all assignments?
+  kind: reasoning
+  key_points:
+  - The set of achievable open counts after a prefix is a contiguous integer range
+  - '''*'' extends it by one in each direction, ''('' and '')'' shift it'
+  - Dropping counts below 0 is safe because a negative count is invalid, and lo clamped at 0 corresponds to treating the star as empty or open
+- q: Give the exchange-argument or proof sketch for the two-stack / left-right-pass greedy variant.
+  kind: reasoning
+  key_points:
+  - Match each ')' with the nearest earlier '(' and only then with an earlier '*'
+  - Using a star as a closer for a '(' is only possible if the star is after that '('
+  - Remaining '(' must each be matched to a later '*', so compare indices
+- q: Complexity of range greedy vs DP vs two stacks.
+  kind: complexity
+  key_points:
+  - 'Range counters: O(n) time, O(1) space'
+  - 'Interval DP: O(n^3) time or O(n^2) with memo, O(n^2) space'
+  - 'Two stacks of indices: O(n) time, O(n) space'
+- q: 'Design: extend to multiple bracket types or streaming input.'
+  kind: design
+  key_points:
+  - Counters do not capture bracket types; need a stack
+  - With wildcards the state space grows; discuss DP over stack contents
+  - 'Streaming single-type: only lo and hi, answer at end'
+narration: []
+state_aloud:
+- Empty string is valid.
+- Star may be empty, so '*' alone is valid.
+- A ')' with no possible earlier opener is a hard failure.
+walkthrough: |
+  Instead of guessing each star, track the range of open-parenthesis counts that are still possible. A `(` increments both bounds, `)` decrements both, and `*` decrements the low bound and increments the high bound. If the high bound drops below zero too many closers appeared. Clamp the low bound at zero because negative counts can be avoided by treating stars as empty. At the end a zero must be in range, meaning low is zero.

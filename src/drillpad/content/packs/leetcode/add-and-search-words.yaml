@@ -1,0 +1,117 @@
+id: add-and-search-words
+title: Design Add and Search Words
+bar_level: 2
+target_minutes: 25
+patterns:
+- trie
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Design Add Search Words (LC 211)"
+statement: |
+  Implement `WordDictionary` with `add_word(word)` and `search(pattern)`. A pattern may contain `.` which matches any single letter; every other character must match exactly, and the whole word must be consumed.
+
+  Example: after adding `"bad"`, `"dad"`, `"mad"`: `search("pad")` is `False`, `search("bad")` is `True`, `search(".ad")` is `True`, `search("b..")` is `True`.
+starter: |
+  class WordDictionary:
+      def __init__(self):
+          pass
+
+      def add_word(self, word):
+          pass
+
+      def search(self, pattern):
+          pass
+hints:
+- Store words in a trie; exact characters follow one child.
+- For '.', branch into every child (DFS).
+- Remember the end-of-word flag when the pattern is exhausted.
+follow_ups:
+- What if patterns have '*' for any sequence?
+- How would you speed up a pattern with many leading wildcards?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    d=WordDictionary()
+    for w in ['bad','dad','mad']: d.add_word(w)
+    assert d.search('pad') is False
+    assert d.search('bad') is True
+    assert d.search('.ad') is True
+    assert d.search('b..') is True
+- name: length must match
+  tags:
+  - boundary
+  code: |
+    d=WordDictionary()
+    d.add_word('abc')
+    assert d.search('ab') is False and d.search('abcd') is False and d.search('...') is True and d.search('..') is False
+- name: empty dictionary
+  tags:
+  - empty
+  code: |
+    d=WordDictionary()
+    assert d.search('a') is False
+    assert d.search('.') is False
+    d.add_word('a')
+    assert d.search('.') is True
+- name: single letters
+  tags:
+  - single
+  code: |
+    d=WordDictionary()
+    d.add_word('a')
+    assert d.search('a') is True and d.search('.') is True and d.search('b') is False
+- name: duplicates and shared prefixes
+  tags:
+  - duplicate
+  code: |
+    d=WordDictionary()
+    for w in ['at','and','an','add','add']: d.add_word(w)
+    assert d.search('a') is False and d.search('.at') is False
+    assert d.search('an.') is True and d.search('a.d') is True and d.search('b.') is False
+- name: only dots across many words
+  tags:
+  - scale
+  hidden: true
+  code: |
+    d=WordDictionary()
+    for i in range(20000): d.add_word('w'+str(i))
+    assert d.search('.....') is True and d.search('w1234') is True and d.search('x....') is False and d.search('.......') is False
+complexity:
+- op: add_word
+  time: O(L)
+  space: O(L)
+- op: search
+  time: O(26^d * L)
+  space: O(L)
+extensions:
+- q: Worst-case search cost
+  kind: complexity
+  key_points:
+  - Each '.' branches into up to 26 children
+  - Cost grows exponentially in number of dots d, bounded by the trie size
+  - Without dots it is O(L)
+- q: 'Alternative: bucket words by length'
+  kind: design
+  key_points:
+  - Map length to a list of words
+  - Compare pattern against each word of equal length
+  - Simple when the dictionary is small or patterns are rare
+- q: Support '*' (any sequence)
+  kind: code
+  key_points:
+  - 'Branch: skip star or consume a child and keep star'
+  - Memoize on (node, pattern index)
+  - Avoid exponential blowup
+narration: []
+state_aloud:
+- Pattern shorter or longer than any word.
+- Empty dictionary.
+- End-of-word flag must be checked after the last char.
+- Dots in the first position.
+walkthrough: |
+  Words go into a trie with an end-of-word marker. Searching walks the pattern recursively: a normal character follows the matching child, while `.` tries every child. When the pattern is consumed the current node must be a word end. Without wildcards a lookup is O(L); each dot multiplies the branching.

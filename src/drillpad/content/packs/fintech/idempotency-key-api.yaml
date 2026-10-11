@@ -1,0 +1,275 @@
+id: idempotency-key-api
+title: Idempotent Payment API
+bar_level: 3
+target_minutes: 35
+patterns:
+- idempotency
+- hash-map
+- request-fingerprint
+- ttl
+firm_tags:
+- distsys
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Build `PaymentAPI`, a payment-creation endpoint that is safe to retry using an idempotency key.
+  Money is integer cents. Time is injected as `now` (integer seconds).
+
+  `PaymentAPI(balances, charge_hook=None, key_ttl=86400)` where `balances` is `{account: cents}`.
+  `create_payment(key, account, amount, now)` returns a response dict
+  `{"payment_id", "status", "account", "amount"}`:
+
+  * New key: assign `payment_id` `"pay_1"`, `"pay_2"`, ... (a counter that advances only when a payment is
+    really executed). If `balances[account] >= amount` debit it and respond `status="succeeded"`; otherwise
+    respond `status="declined"` and leave the balance alone. A decline is a deterministic outcome, so it IS
+    cached under the key too.
+  * Same key, same `(account, amount)`, not expired: return an equal dict WITHOUT executing again (no second
+    debit, no new payment id).
+  * Same key, different `(account, amount)`: raise `IdempotencyConflict`.
+  * `amount` must be an int > 0 and `account` must exist, else raise `ValueError` (nothing is cached).
+  * A key expires `key_ttl` seconds after its first use: when `now - first_use >= key_ttl` the key is
+    forgotten and the call is treated as brand new.
+  * `charge_hook(account, amount)`, if provided, is called after validation and before the balance is
+    touched, to simulate the processor call. If it raises, nothing is debited, nothing is cached (the key is
+    released so the client can retry), and the exception propagates.
+  * While a call for a key is in flight (inside `charge_hook`), a re-entrant call with the same key must raise
+    `InFlightError` rather than run a second charge.
+
+  `balance(account)` returns the current balance.
+starter: |
+  class IdempotencyConflict(Exception):
+      pass
+
+
+  class InFlightError(Exception):
+      pass
+
+
+  class PaymentAPI:
+      def __init__(self, balances, charge_hook=None, key_ttl=86400):
+          pass
+
+      def create_payment(self, key, account, amount, now):
+          pass
+
+      def balance(self, account):
+          pass
+hints:
+- Fingerprint the request as (account, amount) and store {fingerprint, response, first_seen} under the
+  key.
+- Mark the key IN_FLIGHT before calling the hook and remove it in a finally-style path if the hook raises.
+- Check expiry before anything else; an expired key is deleted and the request proceeds as new.
+follow_ups:
+- Where do you store idempotency records in production and how do you make the claim of a key atomic?
+- Should errors (5xx) be cached under the key? What about 4xx validation errors?
+- How long should keys live and what does that imply for client retry policy?
+tests:
+- name: replay returns the same response without a second debit
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    def raises(exc, fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except exc:
+            return True
+        return False
+
+    api = PaymentAPI({"a": 1000})
+    r1 = api.create_payment("k1", "a", 300, 0)
+    assert r1 == {"payment_id": "pay_1", "status": "succeeded", "account": "a", "amount": 300}
+    r2 = api.create_payment("k1", "a", 300, 5)
+    assert r2 == r1 and api.balance("a") == 700
+    r3 = api.create_payment("k2", "a", 300, 6)
+    assert r3["payment_id"] == "pay_2" and api.balance("a") == 400
+- name: same key with different parameters conflicts
+  tags:
+  - invalid
+  - duplicate
+  code: |
+    def raises(exc, fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except exc:
+            return True
+        return False
+
+    api = PaymentAPI({"a": 1000, "b": 1000})
+    api.create_payment("k", "a", 100, 0)
+    assert raises(IdempotencyConflict, api.create_payment, "k", "a", 101, 1)
+    assert raises(IdempotencyConflict, api.create_payment, "k", "b", 100, 1)
+    assert api.balance("a") == 900 and api.balance("b") == 1000
+- name: declines are cached and do not debit
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    def raises(exc, fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except exc:
+            return True
+        return False
+
+    api = PaymentAPI({"a": 100})
+    r = api.create_payment("k", "a", 150, 0)
+    assert r["status"] == "declined" and api.balance("a") == 100
+    r2 = api.create_payment("k", "a", 150, 1)
+    assert r2 == r
+    r3 = api.create_payment("k2", "a", 100, 2)
+    assert r3["status"] == "succeeded" and r3["payment_id"] == "pay_2"
+    assert api.balance("a") == 0
+- name: validation errors are not cached
+  tags:
+  - invalid
+  - empty
+  code: |
+    def raises(exc, fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except exc:
+            return True
+        return False
+
+    api = PaymentAPI({"a": 100})
+    assert raises(ValueError, api.create_payment, "k", "a", 0, 0)
+    assert raises(ValueError, api.create_payment, "k", "a", -5, 0)
+    assert raises(ValueError, api.create_payment, "k", "zzz", 5, 0)
+    assert raises(ValueError, api.create_payment, "k", "a", 1.5, 0)
+    r = api.create_payment("k", "a", 40, 1)
+    assert r["status"] == "succeeded" and r["payment_id"] == "pay_1" and api.balance("a") == 60
+- name: key ttl expiry starts a new payment
+  tags:
+  - time
+  - boundary
+  code: |
+    def raises(exc, fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except exc:
+            return True
+        return False
+
+    api = PaymentAPI({"a": 1000}, key_ttl=100)
+    api.create_payment("k", "a", 100, 0)
+    assert api.create_payment("k", "a", 100, 99)["payment_id"] == "pay_1"
+    assert api.balance("a") == 900
+    r = api.create_payment("k", "a", 100, 100)
+    assert r["payment_id"] == "pay_2" and api.balance("a") == 800, "expired exactly at first_use + ttl"
+    assert api.create_payment("k", "a", 250, 250)["amount"] == 250, "an expired key may be reused with new params"
+- name: hook failure releases the key
+  tags:
+  - state-reuse
+  - invalid
+  hidden: true
+  code: |
+    def raises(exc, fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except exc:
+            return True
+        return False
+
+    calls = []
+    state = {"fail": True}
+    def hook(account, amount):
+        calls.append((account, amount))
+        if state["fail"]:
+            raise RuntimeError("processor down")
+    api = PaymentAPI({"a": 500}, charge_hook=hook)
+    assert raises(RuntimeError, api.create_payment, "k", "a", 100, 0)
+    assert api.balance("a") == 500
+    state["fail"] = False
+    r = api.create_payment("k", "a", 100, 1)
+    assert r["status"] == "succeeded" and r["payment_id"] == "pay_1" and api.balance("a") == 400
+    assert len(calls) == 2
+    api.create_payment("k", "a", 100, 2)
+    assert len(calls) == 2, "replay must not call the processor"
+- name: re-entrant call while in flight
+  tags:
+  - concurrency
+  hidden: true
+  code: |
+    def raises(exc, fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except exc:
+            return True
+        return False
+
+    seen = {}
+    api_box = {}
+    def hook(account, amount):
+        if amount != 100:
+            return
+        seen["err"] = raises(InFlightError, api_box["api"].create_payment, "k", "a", 100, 1)
+        seen["other"] = api_box["api"].create_payment("other", "a", 1, 1)["status"]
+    api = PaymentAPI({"a": 500}, charge_hook=hook)
+    api_box["api"] = api
+    r = api.create_payment("k", "a", 100, 0)
+    assert seen["err"] is True and r["status"] == "succeeded"
+    assert api.balance("a") == 399
+- name: many keys and replays
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def raises(exc, fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except exc:
+            return True
+        return False
+
+    api = PaymentAPI({"a": 10**9})
+    n = 100000
+    for i in range(n):
+        api.create_payment("k%d" % i, "a", 1 + i % 7, i)
+    first = [api.create_payment("k%d" % i, "a", 1 + i % 7, i) for i in range(n)]
+    assert api.balance("a") == 10**9 - sum(1 + i % 7 for i in range(n))
+    assert first[n - 1]["payment_id"] == "pay_%d" % n
+complexity:
+- op: create_payment
+  time: O(1) expected
+  space: O(k)
+extensions:
+- q: 'Level 2: purge expired keys so memory stays bounded without a full scan.'
+  kind: code
+  key_points:
+  - Keep a FIFO/min-heap of (expiry, key) and pop expired entries on each call
+  - Guard against stale heap entries when a key was re-created after expiry
+  - Amortised O(log k) per call
+- q: 'Level 3: cache a failed hook (processor error) for a short time to avoid retry storms, but still
+    let the client retry later.'
+  kind: code
+  key_points:
+  - Distinguish retryable processor failures from permanent ones before deciding to cache
+  - Store an error response with a shorter TTL, still tied to the same fingerprint
+  - Make the replayed error identical to the first one
+- q: Design the production storage for idempotency records across many API servers.
+  kind: design
+  key_points:
+  - Atomic claim via unique index / SET NX / conditional put on (merchant, key) so exactly one request
+    wins
+  - Persist the response and the state (in-flight, done) in the same transaction as the payment
+  - 'In-flight timeout and recovery: a crashed worker must not block the key forever'
+- q: State time and space costs and what bounds memory.
+  kind: complexity
+  key_points:
+  - Dict lookup and insert are O(1) expected per call
+  - Space is O(live keys) bounded by TTL times request rate
+  - Fingerprint comparison is O(1) because it is a small tuple (hash large bodies)
+narration: []
+state_aloud:
+- Money is integer cents; amount must be a positive int, floats rejected.
+- 'The idempotency key identifies the operation, the fingerprint (account, amount) detects misuse: same
+  key different body is a conflict, not a replay.'
+- Cache declines (deterministic) but never cache validation errors or transient processor failures.
+- Mark the key in flight before the side effect; release it on failure so a retry can run; reject concurrent
+  duplicates.
+- Payment ids come from a counter that advances only on real executions, so replays are visibly side-effect
+  free.
+walkthrough: |
+  A dict maps key to a record {fingerprint, response, first_seen, state}. On each call: validate inputs, drop an expired record, then branch on the existing record: conflict if fingerprints differ, in-flight error if the record is still pending, otherwise return a copy of the stored response. For a new key write a pending record, run the hook inside try/except (deleting the record on failure), then debit or decline and store the response. Source: standard formulation.

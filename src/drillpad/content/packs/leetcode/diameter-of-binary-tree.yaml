@@ -1,0 +1,122 @@
+id: diameter-of-binary-tree
+title: Diameter of Binary Tree
+bar_level: 1
+target_minutes: 15
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Diameter of Binary Tree (LC 543)"
+statement: |
+  The diameter of a binary tree is the number of edges on the longest path between any two nodes. The path may or may not pass through the root. Return the diameter. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `[1,2,3,4,5]` has diameter `3` (path 4-2-1-3 or 5-2-1-3).
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def diameter(root):
+      pass
+hints:
+- The longest path through a node is the height of its left subtree plus the height of its right subtree.
+- Compute heights bottom-up and record the best sum seen at every node.
+- The answer need not pass through the root, so track a running maximum instead of returning it directly.
+follow_ups:
+- Return the actual path, not just its length.
+- What changes if edges have weights?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert diameter(build_tree([1,2,3,4,5])) == 3
+- name: empty tree
+  tags:
+  - empty
+  code: |
+    assert diameter(None) == 0
+    assert diameter(build_tree([1,2])) == 1
+- name: single node
+  tags:
+  - single
+  code: |
+    assert diameter(build_tree([1])) == 0
+    assert diameter(build_tree([1,2,3])) == 2
+- name: skewed
+  tags:
+  - boundary
+  code: |
+    assert diameter(build_tree([1,2,None,3,None,4])) == 3
+- name: longest path avoids the root
+  tags:
+  - ordering
+  code: |
+    assert diameter(build_tree([1,2,None,3,4,5,None,None,6])) == 4
+- name: equal values
+  tags:
+  - duplicate
+  code: |
+    assert diameter(build_tree([7,7,7,7,7,7,7])) == 4
+- name: big balanced tree
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 2**16 - 1
+    assert diameter(build_tree([1]*n)) == 30
+complexity:
+- op: overall
+  time: O(n)
+  space: O(h)
+extensions:
+- q: Why is the naive approach O(n^2)?
+  kind: complexity
+  key_points:
+  - Recomputing the height at every node repeats work
+  - On a skewed tree each height call is O(n)
+  - Returning height while updating a best value gives one pass
+- q: Return the path itself?
+  kind: design
+  key_points:
+  - Return (height, path-to-deepest-leaf) from each call
+  - Combine the two child paths at the best node
+  - Copying paths can raise cost; store child pointers instead
+- q: Why can the best path skip the root?
+  kind: reasoning
+  key_points:
+  - A subtree can contain a longer path than any through the root
+  - So the maximum over all nodes is needed
+  - That is why one global best is updated at each node
+narration: []
+state_aloud:
+- Empty tree has diameter 0.
+- Count edges, not nodes.
+- The best path may not pass through the root.
+- Skewed tree is just its height.
+walkthrough: |
+  Write a helper that returns the height of a subtree. At each node, the longest path bending at that node uses `left_height + right_height` edges; update a running maximum with it, then return `1 + max(left, right)` to the parent. After one traversal the stored maximum is the diameter. This is linear time and uses stack space proportional to the height.

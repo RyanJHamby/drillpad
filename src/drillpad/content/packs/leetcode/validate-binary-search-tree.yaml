@@ -1,0 +1,130 @@
+id: validate-binary-search-tree
+title: Validate Binary Search Tree
+bar_level: 2
+target_minutes: 20
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Validate BST (LC 98)"
+statement: |
+  Decide whether a binary tree is a valid binary search tree: for every node, all values in its left subtree are strictly smaller and all values in its right subtree are strictly larger. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `is_valid_bst(build_tree([2,1,3]))` is `True`; `[5,1,4,None,None,3,6]` is `False`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def is_valid_bst(root):
+      pass
+hints:
+- Checking only a node against its direct children is not enough.
+- Carry an open interval (low, high) down the recursion and tighten it at each step.
+- Alternatively an in-order traversal must be strictly increasing.
+follow_ups:
+- What if duplicates are allowed on one side?
+- Do it iteratively with an in-order stack.
+tests:
+- name: valid
+  tags:
+  - ordering
+  code: |
+    assert is_valid_bst(build_tree([2,1,3])) is True
+- name: right subtree contains a smaller value than root
+  tags:
+  - invalid
+  code: |
+    assert is_valid_bst(build_tree([5,1,4,None,None,3,6])) is False
+- name: deep violation of an ancestor
+  tags:
+  - boundary
+  code: |
+    assert is_valid_bst(build_tree([10,5,15,None,None,6,20])) is False
+- name: empty and single
+  tags:
+  - empty
+  - single
+  code: |
+    assert is_valid_bst(None) is True
+    assert is_valid_bst(build_tree([1])) is True
+    assert is_valid_bst(build_tree([2,1,3])) is True
+- name: equal values are invalid
+  tags:
+  - duplicate
+  code: |
+    assert is_valid_bst(build_tree([2,2,2])) is False
+    assert is_valid_bst(build_tree([1,1])) is False
+- name: extreme values
+  tags:
+  - boundary
+  code: |
+    assert is_valid_bst(build_tree([-2147483648])) is True
+    assert is_valid_bst(build_tree([2147483647,-2147483648,None])) is True
+- name: skewed valid tree
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=TreeNode(0)
+    c=r
+    for i in range(1,500):
+        c.right=TreeNode(i)
+        c=c.right
+    assert is_valid_bst(r) is True
+    c.right=TreeNode(3)
+    assert is_valid_bst(r) is False
+complexity:
+- op: overall
+  time: O(n)
+  space: O(h)
+extensions:
+- q: In-order alternative
+  kind: code
+  key_points:
+  - In-order traversal of a BST is strictly increasing
+  - Keep the previous value and compare
+  - Iterative stack avoids recursion limit
+- q: Complexity, and why bounds instead of child checks?
+  kind: complexity
+  key_points:
+  - Time O(n), each node visited once
+  - Space O(h) call stack
+  - A node must respect every ancestor, not just its parent; bounds carry that down
+- q: 'Design: validating a huge on-disk tree'
+  kind: design
+  key_points:
+  - Stream in-order and compare to the previous key
+  - Memory O(h) with an explicit stack
+  - Handle duplicates per the policy of the structure
+narration: []
+state_aloud:
+- Empty tree is valid.
+- Equal values violate strictness.
+- Use None/inf bounds, not INT_MIN sentinels.
+walkthrough: |
+  Recurse with an allowed open interval for each node, starting at (-inf, +inf). A node's value must lie strictly inside it; the left child inherits (low, node.val) and the right child (node.val, high). This enforces every ancestor's constraint, not just the parent's, and visits each node once.

@@ -1,0 +1,97 @@
+id: target-sum
+title: Target Sum
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Target Sum (LC 494)"
+statement: |
+  Place a `+` or `-` sign in front of every number in `nums` (non-negative integers) so the signed sum equals `target`. Return how many sign assignments achieve it. Different assignments count separately even if they give the same expression value, including for zeros.
+
+  Example: `find_target_sum_ways([1,1,1,1,1], 3)` returns `5`.
+starter: |
+  def find_target_sum_ways(nums, target):
+      pass
+hints:
+- 'Signs split the numbers into a P group (plus) and an N group (minus): P - N = target and P + N = total.'
+- So count subsets with sum (total + target) / 2. That must be a non-negative integer.
+- 'State: ways[s] = number of subsets reaching sum s; iterate s downward per item. Zeros double the count.'
+follow_ups:
+- Return one valid assignment.
+- Allow negative numbers.
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert find_target_sum_ways([1,1,1,1,1],3)==5
+- name: single
+  tags:
+  - single
+  code: |
+    assert find_target_sum_ways([1],1)==1
+    assert find_target_sum_ways([1],-1)==1
+- name: unreachable
+  tags:
+  - invalid
+  code: |
+    assert find_target_sum_ways([1],2)==0
+    assert find_target_sum_ways([1,2,3],7)==0
+- name: zeros double
+  tags:
+  - duplicate
+  code: |
+    assert find_target_sum_ways([0,0,0],0)==8
+    assert find_target_sum_ways([1,0],1)==2
+- name: parity
+  tags:
+  - boundary
+  code: |
+    assert find_target_sum_ways([1,2],2)==0
+- name: negative target
+  tags:
+  - boundary
+  code: |
+    assert find_target_sum_ways([100],-200)==0
+    assert find_target_sum_ways([1,1,1,1,1],-3)==5
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import math
+    assert find_target_sum_ways([1]*1000,0)==math.comb(1000,500)
+    assert find_target_sum_ways([1]*1000,1000)==1
+complexity:
+- op: overall
+  time: O(n * S)
+  space: O(S)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - n items by subset-sum range S = (total+target)/2
+  - Pseudo-polynomial
+  - 1D array gives O(S) space
+- q: The subset-sum reduction
+  kind: design
+  key_points:
+  - P - N = target and P + N = total
+  - So P = (total + target) / 2
+  - Reject when |target| > total or parity is odd
+- q: Direct DP over running sums
+  kind: code
+  key_points:
+  - Dictionary from running sum to count
+  - Each item branches into +x and -x
+  - Same answer, handles negative numbers naturally
+narration: []
+state_aloud:
+- Every number must receive a sign.
+- Zeros give two choices each.
+- Odd (total+target) or |target| above total means 0.
+walkthrough: If plus-group sum is `P` and minus-group sum is `N`, then `P - N = target` and `P + N = total`, so `P = (total + target) / 2`. The answer is the number of subsets with sum `P` (0 if it is not a non-negative integer). Count subsets with `ways[s] += ways[s - x]` for `s` descending per item; a zero doubles `ways[0]`. O(n * P) time, O(P) space.

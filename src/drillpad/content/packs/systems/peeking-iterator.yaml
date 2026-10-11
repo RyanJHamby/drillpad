@@ -1,0 +1,167 @@
+id: peeking-iterator
+title: Peeking Iterator
+bar_level: 1
+target_minutes: 12
+patterns:
+- iterator
+- lookahead
+- adapter
+firm_tags: []
+statement: |
+  Implement `PeekingIterator(iterator)` (LeetCode 284) that wraps any Python iterator.
+
+  - `peek()` -> the next element without consuming it; repeated calls return the same element.
+  - `next()` -> consume and return the next element.
+  - `has_next()` -> `True` if more elements remain.
+  - `peek()` or `next()` when exhausted raise `StopIteration`.
+  - It must be lazy: construction may pull at most ONE element from the wrapped iterator, and
+    elements are never pulled twice. The wrapped iterator can be infinite, or have `None` as
+    an element.
+
+  Example
+  ```python
+  p = PeekingIterator(iter([1, 2, 3]))
+  p.next() -> 1; p.peek() -> 2; p.next() -> 2; p.next() -> 3; p.has_next() -> False
+  ```
+starter: |
+  class PeekingIterator:
+      def __init__(self, iterator):
+          pass
+
+      def peek(self):
+          pass
+
+      def next(self):
+          pass
+
+      def has_next(self):
+          pass
+hints:
+- Hold one buffered element, pulled from the underlying iterator ahead of time.
+- Use a private sentinel to mean 'exhausted' because None may be a real element.
+- next returns the buffer and refills it.
+follow_ups:
+- What changes if the iterator can raise errors partway?
+- How would you make it thread-safe?
+tests:
+- name: leetcode example
+  tags:
+  - ordering
+  - single
+  code: |
+    p = PeekingIterator(iter([1, 2, 3]))
+    assert p.next() == 1
+    assert p.peek() == 2 and p.peek() == 2
+    assert p.next() == 2 and p.next() == 3
+    assert p.has_next() is False
+- name: exhausted raises
+  tags:
+  - empty
+  - invalid
+  code: |
+    p = PeekingIterator(iter([]))
+    assert p.has_next() is False
+    for fn in (p.peek, p.next):
+        try:
+            fn()
+        except StopIteration:
+            pass
+        else:
+            raise AssertionError("expected StopIteration")
+    q = PeekingIterator(iter([7]))
+    assert q.next() == 7
+    try:
+        q.peek()
+    except StopIteration:
+        pass
+    else:
+        raise AssertionError("expected StopIteration")
+- name: none elements are real elements
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    p = PeekingIterator(iter([None, None, 0]))
+    assert p.has_next() is True and p.peek() is None
+    assert p.next() is None and p.next() is None and p.peek() == 0
+    assert p.next() == 0 and p.has_next() is False
+- name: is lazy
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    pulled = []
+    def gen():
+        i = 0
+        while True:
+            pulled.append(i)
+            yield i
+            i += 1
+    p = PeekingIterator(gen())
+    assert len(pulled) <= 1
+    assert p.peek() == 0 and p.peek() == 0 and len(pulled) <= 1
+    assert p.next() == 0 and p.next() == 1
+    assert len(pulled) <= 3
+    for _ in range(1000):
+        p.next()
+    assert p.peek() == 1002
+- name: wraps generic iterators
+  hidden: true
+  tags:
+  - ordering
+  - single
+  code: |
+    p = PeekingIterator(iter("abc"))
+    out = []
+    while p.has_next():
+        out.append(p.peek() + p.next())
+    assert out == ["aa", "bb", "cc"]
+complexity:
+- op: peek
+  time: O(1)
+  space: O(1)
+- op: next
+  time: O(1)
+  space: O(1)
+- op: has_next
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Time and extra space?
+  kind: complexity
+  key_points:
+  - All operations are O(1) plus the underlying iterator's own cost
+  - Extra space is a single buffered element
+  - Peeking k ahead would need a buffer of k elements
+- q: Generalise to peek(k) and to a push-back/undo iterator.
+  kind: design
+  key_points:
+  - A deque buffer filled on demand
+  - Push-back is appending to the front of the buffer
+  - 'Keep pulls lazy: only pull as many as the largest requested lookahead'
+- q: Why a sentinel rather than None or a has-value flag, and how do generators interact?
+  kind: design
+  key_points:
+  - None can be a legitimate element, so a private sentinel object avoids ambiguity
+  - next(it, sentinel) avoids exceptions for control flow
+  - Wrapping a generator pulls one element eagerly at construction, which may run side effects
+- q: Where do peeking iterators show up?
+  kind: reasoning
+  key_points:
+  - Parsers/tokenisers that need one token of lookahead (LL(1))
+  - Merging sorted streams, k-way merge
+  - Stream processing windows
+narration: []
+state_aloud:
+- None as an element.
+- Repeated peeks are idempotent.
+- Construction pulls at most one element.
+- Exhausted peek/next raise StopIteration.
+walkthrough: The wrapper keeps one buffered lookahead element obtained with next(it, sentinel). peek returns
+  the buffer, next returns it and refills from the underlying iterator, and has_next checks the buffer
+  against the private sentinel, so None elements work and nothing beyond one element is pulled early.
+  All operations are O(1).
+anki_queries: []
+categories:
+- systems-impl

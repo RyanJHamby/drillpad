@@ -1,0 +1,95 @@
+id: subsets-ii
+title: Subsets II
+bar_level: 2
+target_minutes: 22
+patterns:
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Subsets II (LC 90)"
+statement: |
+  Given an integer array `nums` that may contain duplicate values, return all possible subsets (the power set) without repeating any subset. Two subsets are the same if they hold the same multiset of values. Return them in any order.
+
+  Example: `subsets_with_dup([1,2,2])` returns `[[], [1], [2], [1,2], [2,2], [1,2,2]]` in some order.
+starter: |
+  def subsets_with_dup(nums):
+      pass
+hints:
+- Sort the array so equal values are neighbours.
+- 'Use the subsets recursion: record the path at every node, then extend with later elements.'
+- Inside the loop skip nums[i] if i > start and nums[i] == nums[i-1]; that stops two identical branches from the same parent.
+follow_ups:
+- Count the distinct subsets without generating them.
+- Return only subsets whose sum equals a target.
+tests:
+- name: with a duplicate
+  tags:
+  - duplicate
+  code: |
+    r=subsets_with_dup([1,2,2])
+    assert sorted(sorted(s) for s in r)==[[],[1],[1,2],[1,2,2],[2],[2,2]]
+- name: single element
+  tags:
+  - single
+  code: |
+    assert sorted(subsets_with_dup([0]))==[[],[0]]
+- name: unsorted input
+  tags:
+  - ordering
+  code: |
+    r=subsets_with_dup([4,1,4])
+    assert sorted(sorted(s) for s in r)==[[],[1],[1,4],[1,4,4],[4],[4,4]]
+- name: all equal
+  tags:
+  - boundary
+  - duplicate
+  hidden: true
+  code: |
+    r=subsets_with_dup([3,3,3])
+    assert sorted(r)==[[],[3],[3,3],[3,3,3]]
+- name: empty input
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert subsets_with_dup([])==[[]]
+- name: heavy duplication
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=subsets_with_dup([1]*20+[2]*20)
+    assert len(r)==21*21
+    assert len({tuple(sorted(s)) for s in r})==441
+complexity:
+- op: overall
+  time: O(n * 2^n)
+  space: O(n)
+extensions:
+- q: Why is the heavy-duplication case fast now?
+  kind: complexity
+  key_points:
+  - Dedup prunes branches so work is proportional to distinct subsets
+  - With counts c1..ck the number of subsets is the product of (ci+1)
+  - A power-set-then-set approach would touch 2^n subsets
+- q: Implement it with value/count pairs.
+  kind: code
+  key_points:
+  - Counter the values then for each value choose 0..count copies
+  - Recursion depth equals number of distinct values
+  - No explicit skip check is needed
+- q: How does this relate to Combination Sum II?
+  kind: design
+  key_points:
+  - Same sort and same-level skip rule
+  - 'The difference is the acceptance condition: every node vs only sum==target'
+  - Both rely on the first-copy-at-a-level argument for uniqueness
+narration: []
+state_aloud:
+- Sort first or the skip rule fails.
+- Empty input returns [[]].
+- Skip on i > start, not i > 0.
+walkthrough: |
+  Sort the numbers and use the usual start-index subset recursion, appending a copy of the path at each node. The only addition is a guard in the loop that skips an element equal to the previous element at the same depth, which prevents the same value from starting two sibling branches. Equal values can still stack deeper in a single path, so subsets like [2,2] are produced.

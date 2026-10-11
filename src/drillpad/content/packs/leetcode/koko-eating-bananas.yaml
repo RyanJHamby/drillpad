@@ -1,0 +1,91 @@
+id: koko-eating-bananas
+title: Koko Eating Bananas
+bar_level: 2
+target_minutes: 20
+patterns:
+- binary-search
+firm_tags:
+- ai-infra
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Koko Eating Bananas (LC 875)"
+statement: |
+  There are piles of bananas, `piles[i]` in pile i, and `h` hours. Each hour Koko picks one pile and eats up to `k` bananas from it (if the pile has fewer, she finishes it and wastes the rest of the hour). Return the smallest integer eating speed `k` that finishes everything within `h` hours. It is guaranteed `h >= len(piles)`.
+
+  Example: `min_speed([3,6,7,11], 8)` returns `4`.
+starter: |
+  def min_speed(piles, h):
+      pass
+hints:
+- Time needed is non-increasing as k grows, so the feasibility is monotonic.
+- Binary search over the answer k between 1 and max(piles).
+- feasible(k) sums ceil(pile / k) and compares with h.
+follow_ups:
+- Where else does 'binary search on the answer' apply?
+- What if the hours were fractional?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert min_speed([3,6,7,11],8)==4
+- name: tight, one hour per pile
+  tags:
+  - boundary
+  code: |
+    assert min_speed([30,11,23,4,20],5)==30
+- name: generous hours
+  tags:
+  - boundary
+  code: |
+    assert min_speed([30,11,23,4,20],6)==23
+- name: single pile
+  tags:
+  - single
+  code: |
+    assert min_speed([10],10)==1
+    assert min_speed([10],1)==10
+- name: duplicates
+  tags:
+  - duplicate
+  code: |
+    assert min_speed([5,5,5,5],8)==3
+- name: huge piles
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=min_speed([10**9]*1000,2000)
+    assert r==500000000
+complexity:
+- op: overall
+  time: O(n log m)
+  space: O(1)
+extensions:
+- q: Complexity?
+  kind: complexity
+  key_points:
+  - log(max pile) iterations of binary search
+  - Each feasibility check is O(n)
+  - Space O(1)
+- q: Recognizing binary search on answer
+  kind: reasoning
+  key_points:
+  - Answer space is ordered and feasibility is monotonic
+  - Search the answer range instead of an array
+  - 'Same shape: shipping capacity, split array largest sum'
+- q: 'Design: batching GPU jobs with a throughput limit'
+  kind: design
+  key_points:
+  - Treat max throughput as the searched parameter
+  - feasible() simulates the schedule against a deadline
+  - Use real-valued bounds with an epsilon or integer ticks
+narration: []
+state_aloud:
+- Single pile.
+- h exactly equals the number of piles (answer is the largest pile).
+- Ceiling division, not floor.
+- 'Large values: avoid float division.'
+walkthrough: |
+  The minimum speed lies between 1 and the largest pile, and finishing time never increases as the speed rises. Binary search that range with a feasibility check that sums `ceil(pile / k)` hours over all piles. If it fits within `h`, try a smaller speed; otherwise go higher. The first feasible speed is the answer.

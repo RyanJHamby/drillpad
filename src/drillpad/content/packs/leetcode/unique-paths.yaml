@@ -1,0 +1,92 @@
+id: unique-paths
+title: Unique Paths
+bar_level: 2
+target_minutes: 20
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Unique Paths (LC 62)"
+statement: |
+  A robot sits at the top-left of an `m x n` grid (`m` rows, `n` columns) and wants the bottom-right cell. It can only move right or down. Return the number of distinct paths. Both `m` and `n` are at least 1.
+
+  Example: `unique_paths(3, 7)` returns `28`.
+starter: |
+  def unique_paths(m, n):
+      pass
+hints:
+- You enter any cell from above or from the left.
+- 'State: paths[r][c] is the number of ways to reach cell (r, c).'
+- First row and first column are all 1; each other cell is the sum of the cell above and the cell to the left.
+follow_ups:
+- Some cells are obstacles (Unique Paths II).
+- Closed form using combinations?
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert unique_paths(3,7)==28
+- name: 3 by 2
+  tags:
+  - boundary
+  code: |
+    assert unique_paths(3,2)==3
+- name: one cell
+  tags:
+  - single
+  code: |
+    assert unique_paths(1,1)==1
+- name: one row or column
+  tags:
+  - boundary
+  code: |
+    assert unique_paths(1,5)==1
+    assert unique_paths(6,1)==1
+- name: symmetry
+  tags:
+  - duplicate
+  code: |
+    assert unique_paths(7,3)==28
+    assert unique_paths(23,12)==193536720
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import math
+    assert unique_paths(100,100)==math.comb(198,99)
+    assert unique_paths(500,500)==math.comb(998,499)
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(n)
+  accepted_space:
+  - O(m * n)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - m*n cells with constant work each
+  - One row of length n is enough, so O(n) space
+  - Plain recursion is exponential without memoisation
+- q: Closed form
+  kind: code
+  key_points:
+  - Any path has m-1 downs and n-1 rights
+  - Answer is C(m+n-2, m-1)
+  - Compute it with an iterative product to avoid huge factorials
+- q: Obstacles in the grid
+  kind: design
+  key_points:
+  - Blocked cells hold 0 paths
+  - Same recurrence otherwise
+  - Start or end blocked gives 0
+narration: []
+state_aloud:
+- 1 x 1 grid has exactly one path.
+- A single row or column has one path.
+- Answers can be large; Python ints are fine.
+walkthrough: 'Let `paths[r][c]` be the number of ways to reach cell `(r, c)`. Any path arrives from above or from the left, so `paths[r][c] = paths[r-1][c] + paths[r][c-1]` with the first row and column fixed at 1. Because each row only needs the previous one, a single row updated in place suffices: O(m*n) time, O(n) space.'

@@ -1,0 +1,268 @@
+id: payment-state-machine
+title: Payment State Machine (authorize/capture/refund)
+bar_level: 3
+target_minutes: 35
+patterns:
+- state-machine
+- hash-map
+- lazy-expiry
+- idempotency
+firm_tags:
+- distsys
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `PaymentProcessor`, the core of a card-payment lifecycle: authorize, capture, void and refund.
+  All amounts are positive integers in minor units (cents). Never use floats. Time is injected: every
+  mutating call and `summary` receives `now` (integer seconds) so tests are deterministic.
+
+  States: `AUTHORIZED`, `CAPTURED`, `VOIDED`, `EXPIRED`, `PARTIALLY_REFUNDED`, `REFUNDED`.
+
+  * `authorize(pid, amount, now)` creates a payment in `AUTHORIZED` and returns the state string. `amount`
+    must be > 0 and `pid` must be new, otherwise raise `PaymentError`.
+  * `capture(pid, now, amount=None)` is allowed only from `AUTHORIZED`. `amount=None` captures the whole
+    authorization; a smaller amount captures part and the remainder of the hold is released. A capture larger
+    than the authorization, or <= 0, is an error. Only ONE capture is allowed. Returns `CAPTURED`.
+  * `void(pid, now)` is allowed only from `AUTHORIZED`; returns `VOIDED`.
+  * An authorization expires when `now - authorized_at >= auth_ttl` (constructor arg, default 604800 = 7 days).
+    Expiry is evaluated lazily on every call: an expired payment moves to `EXPIRED` and capture/void on it
+    raise `PaymentError`.
+  * `refund(pid, amount, now, refund_id=None)` is allowed from `CAPTURED` or `PARTIALLY_REFUNDED`. Cumulative
+    refunds may not exceed the captured amount. State becomes `PARTIALLY_REFUNDED`, or `REFUNDED` once the
+    refunded total equals the captured total. If `refund_id` is given and was already applied to this payment,
+    the call is an idempotent replay: change nothing and return the current state.
+  * `summary(pid, now)` returns `{"state", "authorized", "captured", "refunded"}` (ints, 0 when not applicable).
+
+  Any invalid transition, unknown `pid`, or bad amount raises `PaymentError` and must leave the payment
+  unchanged. A failed call must never half-apply.
+starter: |
+  class PaymentError(Exception):
+      pass
+
+
+  class PaymentProcessor:
+      def __init__(self, auth_ttl=604800):
+          pass
+
+      def authorize(self, pid, amount, now):
+          pass
+
+      def capture(self, pid, now, amount=None):
+          pass
+
+      def void(self, pid, now):
+          pass
+
+      def refund(self, pid, amount, now, refund_id=None):
+          pass
+
+      def summary(self, pid, now):
+          pass
+hints:
+- Store one dict per payment id and put every legal transition in one place; check the source state first,
+  then mutate.
+- 'Expiry needs no timer: at the top of every call compare now - authorized_at to the TTL and flip AUTHORIZED
+  to EXPIRED.'
+- Validate everything before touching state so a rejected refund or capture leaves the payment exactly
+  as it was.
+follow_ups:
+- How do you support multiple partial captures (e.g. shipping an order in two boxes)?
+- Which of these operations must be idempotent in production and how do you key them?
+- How would you persist this so two servers cannot double-capture the same authorization?
+tests:
+- name: happy path authorize capture full refund
+  tags:
+  - ordering
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except PaymentError:
+            return True
+        return False
+
+    p = PaymentProcessor()
+    assert p.authorize("p1", 1000, 0) == "AUTHORIZED"
+    assert p.capture("p1", 10) == "CAPTURED"
+    assert p.summary("p1", 11) == {"state": "CAPTURED", "authorized": 1000, "captured": 1000, "refunded": 0}
+    assert p.refund("p1", 400, 20) == "PARTIALLY_REFUNDED"
+    assert p.refund("p1", 600, 21) == "REFUNDED"
+    assert p.summary("p1", 22)["refunded"] == 1000
+- name: partial capture releases the remainder
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except PaymentError:
+            return True
+        return False
+
+    p = PaymentProcessor()
+    p.authorize("p1", 1000, 0)
+    assert p.capture("p1", 5, amount=700) == "CAPTURED"
+    s = p.summary("p1", 6)
+    assert (s["authorized"], s["captured"]) == (1000, 700)
+    assert raises(p.capture, "p1", 7), "only one capture is allowed"
+    assert raises(p.refund, "p1", 701, 8), "cannot refund more than captured"
+    assert p.refund("p1", 700, 9) == "REFUNDED"
+- name: invalid transitions raise and change nothing
+  tags:
+  - invalid
+  - duplicate
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except PaymentError:
+            return True
+        return False
+
+    p = PaymentProcessor()
+    assert p.authorize("p1", 500, 0) == "AUTHORIZED"
+    assert raises(p.refund, "p1", 100, 1), "refund before capture"
+    assert raises(p.capture, "p1", 1, amount=501), "capture above authorization"
+    assert raises(p.capture, "p1", 1, amount=0)
+    assert raises(p.authorize, "p1", 500, 1), "duplicate id"
+    assert raises(p.authorize, "p2", 0, 1)
+    assert raises(p.authorize, "p2", -5, 1)
+    assert raises(p.void, "nope", 1), "unknown id"
+    assert p.summary("p1", 2)["state"] == "AUTHORIZED"
+    assert p.void("p1", 3) == "VOIDED"
+    assert raises(p.capture, "p1", 4)
+    assert raises(p.void, "p1", 5)
+- name: authorization expiry is lazy and inclusive
+  tags:
+  - time
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except PaymentError:
+            return True
+        return False
+
+    p = PaymentProcessor(auth_ttl=100)
+    p.authorize("a", 10, 0)
+    p.authorize("b", 10, 0)
+    assert p.capture("a", 99) == "CAPTURED", "one second before expiry"
+    assert raises(p.capture, "b", 100), "now - authorized_at >= ttl is expired"
+    assert p.summary("b", 101)["state"] == "EXPIRED"
+    assert raises(p.void, "b", 102)
+    q = PaymentProcessor()
+    q.authorize("c", 10, 0)
+    assert q.summary("c", 604799)["state"] == "AUTHORIZED"
+    assert q.summary("c", 604800)["state"] == "EXPIRED"
+- name: refund id replays are idempotent
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except PaymentError:
+            return True
+        return False
+
+    p = PaymentProcessor()
+    p.authorize("p", 1000, 0)
+    p.capture("p", 1)
+    assert p.refund("p", 300, 2, refund_id="r1") == "PARTIALLY_REFUNDED"
+    assert p.refund("p", 300, 3, refund_id="r1") == "PARTIALLY_REFUNDED"
+    assert p.summary("p", 4)["refunded"] == 300, "replay must not refund twice"
+    assert p.refund("p", 300, 5, refund_id="r2") == "PARTIALLY_REFUNDED"
+    assert p.summary("p", 6)["refunded"] == 600
+    assert raises(p.refund, "p", 500, 7, refund_id="r3")
+    assert p.summary("p", 8)["refunded"] == 600, "failed refund must not half-apply"
+- name: terminal states reject further work
+  tags:
+  - invalid
+  - state-reuse
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except PaymentError:
+            return True
+        return False
+
+    p = PaymentProcessor()
+    p.authorize("p", 100, 0)
+    p.capture("p", 1)
+    p.refund("p", 100, 2)
+    assert p.summary("p", 3)["state"] == "REFUNDED"
+    assert raises(p.refund, "p", 1, 4)
+    assert raises(p.capture, "p", 5)
+    assert raises(p.void, "p", 6)
+    assert raises(p.refund, "p", 0, 7)
+- name: many payments
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except PaymentError:
+            return True
+        return False
+
+    p = PaymentProcessor()
+    n = 150000
+    for i in range(n):
+        p.authorize(i, 100 + i, i)
+    for i in range(n):
+        p.capture(i, i + 1)
+    for i in range(0, n, 2):
+        p.refund(i, 50, n)
+    assert p.summary(0, n)["state"] == "PARTIALLY_REFUNDED"
+    assert p.summary(n - 1, n)["state"] == "CAPTURED"
+    assert p.summary(2, n) == {"state": "PARTIALLY_REFUNDED", "authorized": 102, "captured": 102, "refunded": 50}
+complexity:
+- op: each operation
+  time: O(1)
+  space: O(n)
+extensions:
+- q: 'Level 2: allow multiple partial captures against one authorization (multi-capture) until the authorized
+    amount is used up.'
+  kind: code
+  key_points:
+  - Track captured_total and remaining = authorized - captured_total; reject a capture above remaining
+  - State stays AUTHORIZED (or PARTIALLY_CAPTURED) until the remainder is released or captured
+  - Refund ceiling is the cumulative captured amount, not the authorization
+- q: 'Level 3: add a dispute (chargeback) path: CAPTURED -> DISPUTED -> WON/LOST, blocking refunds while
+    disputed.'
+  kind: code
+  key_points:
+  - Model the new states in a transition table rather than scattered ifs
+  - A lost dispute behaves like a full refund of the remaining captured amount
+  - Refund during DISPUTED must raise, and the state must not change
+- q: How do you make capture safe when two workers race on the same authorization?
+  kind: design
+  key_points:
+  - Conditional write / compare-and-set on the state column (WHERE state='AUTHORIZED') or a row lock
+  - Idempotency key on capture so a client retry returns the first result
+  - Append-only event log of transitions gives an audit trail and recovery after a crash
+- q: What is the cost per operation and how much memory does the processor hold?
+  kind: complexity
+  key_points:
+  - Dict lookup plus constant work makes each call O(1)
+  - Space is O(payments) plus O(refund ids) because replays need remembered ids
+  - Lazy expiry avoids a timer or a scan over all payments (an eager sweep would be O(n) per tick)
+narration: []
+state_aloud:
+- Money is integer cents; capture and refund amounts are validated > 0 and bounded by authorized / captured.
+- Every transition is checked against the current state before any mutation so a failed call is atomic.
+- 'Expiry is lazy: evaluated on each call, boundary is inclusive (now - authorized_at >= ttl).'
+- Refund replays with the same refund_id must not double-refund; refunds are cumulative and capped at
+  captured.
+- 'Ask: can an authorization be captured more than once, and what happens to the uncaptured remainder?'
+walkthrough: |
+  A dict maps payment id to a small record (state, authorized, captured, refunded, authorized_at, seen refund ids). Each public method first looks the record up, applies lazy expiry, then validates the transition and the amounts, and only then mutates. That ordering makes every failure atomic. Refund ids are kept per payment so a client retry is a no-op replay. This is a standard formulation (card authorize/capture/refund lifecycle as used in Stripe/Adyen style APIs); no source-doc version exists, so it follows the common screen shape.

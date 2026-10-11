@@ -1,0 +1,74 @@
+id: generic-fintech
+name: Generic fintech / payments company
+family: fintech
+confidence: inferred
+sources:
+- private notes:section 3
+- private notes:Format section
+- private notes:section 1
+format:
+  rounds: milestone-based practical problems whose requirements grow live
+  platform: CoderPad / CodeSignal class
+  minutes: 60
+  problems_per_round: 1 (multi-milestone)
+  language_notes: Python is a safe default (the firm's own prep tip).
+  ai_assistance_allowed: unknown
+format_confidence: inferred
+weights:
+  correctness: 20
+  edge_cases: 15
+  complexity: 8
+  pace: 10
+  communication: 15
+  extensions: 22
+  quality: 10
+weights_confidence: inferred
+bar:
+  pass_score: 68
+  floors:
+    correctness: 0.6
+    edge_cases: 0.4
+bar_confidence: inferred
+pace:
+  target_minutes_by_level:
+    1: 8
+    2: 15
+    3: 25
+    4: 35
+  first_code_by_minute: 5
+  approach_by_minute: 3
+pace_confidence: inferred
+what_earns_points:
+- names the grouping / identity key out loud
+- extensible milestone 1
+- 'tests out loud: empty, single, normal, adversarial'
+- integer cents or Decimal for money
+- idempotency and duplicate handling mentioned
+what_loses_points:
+- float for currency
+- rewriting instead of extending
+- going silent for 5+ minutes
+red_flags:
+- ignoring an interviewer hint without saying why
+canonical_topics:
+- ledger
+- dedup
+- rate-limiter
+- ttl-cache
+- interval-merge
+- reconciliation
+- idempotency
+problem_ids:
+- lru-cache
+- ttl-cache
+- token-bucket
+- sliding-window-counter
+- min-heap
+missing_problems:
+- problem: in-memory ledger with idempotent transfers and balance checks
+  source: private notes:section 3
+tags:
+- fintech
+- staged
+- python
+notes: Added beyond the requested list because the fintech family needs a default for weights.

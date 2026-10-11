@@ -1,0 +1,262 @@
+id: health-checker-circuit
+title: Health Checker + Circuit Breaker
+bar_level: 3
+target_minutes: 40
+patterns:
+- circuit-breaker
+- health-check
+- hysteresis
+- sliding-window
+- state-machine
+- injected-clock
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Two cooperating resilience components for calls to model backends.
+
+  **`CircuitBreaker(window=10, failure_ratio=0.5, min_calls=5, cooldown=30.0, half_open_probes=2)`**
+  (`ValueError` if `window < 1`, `failure_ratio` not in `(0, 1]`, `min_calls < 1`, `cooldown < 0` or
+  `half_open_probes < 1`). Time is always the `now` argument. States are `"closed"`, `"open"`,
+  `"half_open"`.
+  - `state(now) -> str`: if the state is open and `now - opened_at >= cooldown`, it becomes `half_open`
+    (probe counters reset) before being returned.
+  - `allow(now) -> bool`: closed -> `True`; open -> `False`; half-open -> `True` for the first
+    `half_open_probes` calls (each counts as a started probe), `False` afterwards.
+  - `record(success, now)`: the outcome of a call.
+    * closed: append to a sliding window of the last `window` outcomes. If at least `min_calls`
+      outcomes are in the window and `failures / len(window) >= failure_ratio`, open the circuit
+      (`opened_at = now`) and clear the window.
+    * half-open: a failure reopens (`opened_at = now`); after `half_open_probes` successes the circuit
+      closes with an empty window.
+    * open: ignored (a late response must not close the circuit).
+
+  **`HealthChecker(backends, unhealthy_after=3, healthy_after=2)`**: active health-check results with
+  hysteresis. All backends start healthy. `report(backend, ok)` (`KeyError` if unknown): a result that
+  disagrees with the current state extends a streak; the state flips once the streak reaches
+  `unhealthy_after` (for failures) or `healthy_after` (for successes); a result that agrees with the
+  current state resets the streak. `healthy()` returns healthy backends in registration order.
+  `ValueError` if a threshold is `< 1`.
+
+  The breaker's `record` must be O(1): do not recount the window.
+starter: |
+  class CircuitBreaker:
+      def __init__(self, window=10, failure_ratio=0.5, min_calls=5, cooldown=30.0, half_open_probes=2):
+          pass
+
+      def allow(self, now):
+          pass
+
+      def record(self, success, now):
+          pass
+
+      def state(self, now):
+          pass
+
+
+  class HealthChecker:
+      def __init__(self, backends, unhealthy_after=3, healthy_after=2):
+          pass
+
+      def report(self, backend, ok):
+          pass
+
+      def healthy(self):
+          pass
+hints:
+- Keep a deque of outcomes plus a running failure count. When the deque exceeds `window`, pop the left
+  and adjust the count.
+- Make state(now) the only place that performs the open -> half-open transition, and call it from allow()
+  and record().
+- 'HealthChecker: one streak counter per backend that resets whenever a result agrees with the current
+  state.'
+follow_ups:
+- Exponential backoff of the cooldown on repeated reopenings.
+- Per-backend breakers with outlier ejection limited to a maximum percentage of the fleet.
+- Time-based windows (last 60 seconds) instead of count-based windows.
+tests:
+- name: breaker opens when the failure ratio is reached over enough calls
+  code: |
+    b = CircuitBreaker(window=10, failure_ratio=0.5, min_calls=4, cooldown=30)
+    assert b.state(0) == "closed"
+    for ok in [True, False, True]:
+        b.record(ok, 0)
+    assert b.state(0) == "closed", "only 3 calls: below min_calls"
+    b.record(False, 1)                       # 2 failures of 4 = 0.5 -> open
+    assert b.state(1) == "open" and not b.allow(1)
+  hidden: false
+  tags:
+  - boundary
+  - state-reuse
+- name: cooldown moves open to half-open and limits probes
+  code: |
+    b = CircuitBreaker(window=4, failure_ratio=0.5, min_calls=2, cooldown=10, half_open_probes=2)
+    b.record(False, 100); b.record(False, 100)
+    assert b.state(109.9) == "open" and not b.allow(109.9)
+    assert b.state(110) == "half_open"
+    assert b.allow(110) and b.allow(110) and not b.allow(110), "exactly 2 probes"
+  hidden: false
+  tags:
+  - time
+  - boundary
+- name: 'half-open: a probe failure reopens, enough successes close'
+  code: |
+    b = CircuitBreaker(window=4, failure_ratio=0.5, min_calls=2, cooldown=10, half_open_probes=2)
+    b.record(False, 0); b.record(False, 0)
+    assert b.allow(10)
+    b.record(False, 10)
+    assert b.state(10) == "open" and not b.allow(15) and b.state(20) == "half_open"
+    assert b.allow(20) and b.allow(20)
+    b.record(True, 21); assert b.state(21) == "half_open"
+    b.record(True, 21); assert b.state(21) == "closed"
+    assert b.allow(22)
+    b.record(True, 22)
+    assert b.state(22) == "closed", "window starts fresh after closing"
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: old results slide out of the window
+  code: |
+    b = CircuitBreaker(window=4, failure_ratio=0.75, min_calls=4, cooldown=5)
+    for ok in [False, False, True, True]:        # 2/4 = 0.5 < 0.75
+        b.record(ok, 0)
+    assert b.state(0) == "closed"
+    b.record(True, 0)                            # window now [F, T, T, T]
+    b.record(False, 0); b.record(False, 0)       # [T, T, F, F] = 0.5
+    assert b.state(0) == "closed"
+    b.record(False, 0)                           # [T, F, F, F] = 0.75
+    assert b.state(0) == "open"
+  hidden: true
+  tags:
+  - time
+  - ordering
+- name: results while open are ignored; invalid config
+  code: |
+    b = CircuitBreaker(window=2, failure_ratio=1.0, min_calls=2, cooldown=10)
+    b.record(False, 0); b.record(False, 0)
+    b.record(True, 1); b.record(True, 2)
+    assert b.state(2) == "open", "late responses do not close an open circuit"
+    for kw in [dict(window=0), dict(failure_ratio=0), dict(failure_ratio=1.5), dict(min_calls=0),
+               dict(cooldown=-1), dict(half_open_probes=0)]:
+        try:
+            CircuitBreaker(**kw)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(kw)
+  hidden: true
+  tags:
+  - invalid
+  - single
+- name: health checker needs consecutive results to flip state
+  code: |
+    h = HealthChecker(["a", "b", "c"], unhealthy_after=3, healthy_after=2)
+    assert h.healthy() == ["a", "b", "c"]
+    h.report("a", False); h.report("a", False)
+    h.report("a", True)                          # streak broken
+    h.report("a", False); h.report("a", False)
+    assert h.healthy() == ["a", "b", "c"]
+    h.report("a", False)
+    assert h.healthy() == ["b", "c"]
+    h.report("a", True)
+    assert h.healthy() == ["b", "c"], "one success is not enough"
+    h.report("a", True)
+    assert h.healthy() == ["a", "b", "c"], "back in registration order"
+  hidden: true
+  tags:
+  - state-reuse
+  - ordering
+  - duplicate
+- name: health checker errors and empty set
+  code: |
+    h = HealthChecker([])
+    assert h.healthy() == []
+    h2 = HealthChecker(["x"], 1, 1)
+    try:
+        h2.report("nope", True)
+    except KeyError:
+        pass
+    else:
+        raise AssertionError
+    h2.report("x", False)
+    assert h2.healthy() == []
+    h2.report("x", True)
+    assert h2.healthy() == ["x"]
+    for args in [(["x"], 0, 1), (["x"], 1, 0)]:
+        try:
+            HealthChecker(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError
+  hidden: true
+  tags:
+  - empty
+  - invalid
+- name: 1M outcomes through a 1000-call window
+  code: |
+    b = CircuitBreaker(window=1000, failure_ratio=0.9, min_calls=1000, cooldown=1.0, half_open_probes=1)
+    opens = 0
+    for i in range(1000000):
+        t = i * 0.001
+        if b.allow(t):
+            was = b.state(t)
+            b.record(i % 4 != 0, t)             # 25% failures: stays closed
+            opens += b.state(t) == "open"
+    assert opens == 0 and b.state(1000.0) == "closed"
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: record
+  time: O(1)
+  space: O(W)
+- op: allow
+  time: O(1)
+  space: O(1)
+- op: report
+  time: O(1)
+  space: O(N)
+extensions:
+- q: 'Level 2: make the cooldown back off. Each consecutive reopening from half-open doubles the cooldown
+    up to `max_cooldown`; a successful close resets it.'
+  kind: code
+  key_points:
+  - Track a reopen counter; cooldown_eff = min(cooldown * 2**reopens, max_cooldown)
+  - Reset the counter only when the circuit closes after half-open probes succeed
+  - Use now injected, never a wall clock, so tests stay deterministic
+- q: How do the breaker and the health checker complement each other in a router for LLM backends?
+  kind: design
+  key_points:
+  - Active health checks detect a dead replica with no traffic; the breaker reacts to real request failures
+    and slowness
+  - The router excludes backends that are unhealthy OR have an open circuit, and falls back to another
+    provider (see provider-pool-failover)
+  - Limit ejections (for example at most half the fleet) so a bad signal cannot remove all capacity
+- q: Why count-based windows with a minimum number of calls, and what do the half-open probes protect
+    against?
+  kind: reasoning
+  key_points:
+  - A minimum call count prevents opening on 1 failure out of 1 request
+  - Limited probes avoid a thundering herd onto a recovering backend; any probe failure reopens at once
+  - Hysteresis in the health checker avoids flapping on single blips
+- q: Cost per call and space; what breaks if you recompute the failure ratio from the window?
+  kind: complexity
+  key_points:
+  - record and allow are O(1); space is O(window) per breaker and O(1) per backend for the checker
+  - Summing the window per call is O(W) and fails the scale test at 1M calls with W=1000
+  - A time-bucketed window gives O(buckets) memory and O(1) updates
+narration: []
+state_aloud:
+- 'Define when failure_ratio applies: needs min_calls outcomes in the window.'
+- Half-open allows a limited number of probes, one failure reopens.
+- Late results while open are ignored.
+- 'Cooldown boundary: now - opened_at >= cooldown.'
+- Health checker uses consecutive results, with different thresholds for down and up.
+walkthrough: |
+  The breaker is a three-state machine. Closed: a deque of the last `window` outcomes with a running failure count opens the circuit when the ratio threshold is met with enough calls. Open: calls are denied until the cooldown elapses, which state(now) turns into half-open. Half-open: a limited number of probes; a failure reopens, enough successes close. The HealthChecker is a per-backend streak counter with separate thresholds for going down and coming back up. This is the standard breaker pattern and complements the user's note on resilience patterns; the specific rule set is defined in the statement. See also provider-pool-failover for the consecutive-failure variant.
+categories:
+- ai-infra

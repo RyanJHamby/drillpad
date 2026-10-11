@@ -1,0 +1,108 @@
+id: sliding-window-maximum
+title: Sliding Window Maximum
+bar_level: 3
+target_minutes: 38
+patterns:
+- sliding-window
+- heap-top-k
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Sliding Window Maximum (LC 239)"
+statement: |
+  Given a list `nums` and a window size `k`, the window starts at the left edge and moves one position right at a time. Return a list containing the maximum value of each window position, in order.
+
+  Example: `max_sliding_window([1,3,-1,-3,5,3,6,7], 3)` returns `[3,3,5,5,6,7]`.
+starter: |
+  def max_sliding_window(nums, k):
+      pass
+hints:
+- Scanning each window for its max is O(nk).
+- A max-heap with lazy deletion gives O(n log n).
+- 'A monotonic deque of indices (values decreasing) gives O(n): drop smaller values from the back, drop
+  out-of-window indices from the front.'
+follow_ups:
+- How would you do a rolling max over a live price stream?
+- Compute the rolling minimum too, in the same pass.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert max_sliding_window([1,3,-1,-3,5,3,6,7],3)==[3,3,5,5,6,7]
+- name: empty input
+  tags:
+  - empty
+  code: |
+    assert max_sliding_window([],3)==[]
+- name: single element
+  tags:
+  - single
+  code: |
+    assert max_sliding_window([1],1)==[1]
+- name: window of one
+  tags:
+  - zero-capacity
+  code: |
+    assert max_sliding_window([4,2,9,1],1)==[4,2,9,1]
+- name: window equals length
+  tags:
+  - boundary
+  code: |
+    assert max_sliding_window([2,5,1],3)==[5]
+- name: equal values and decreasing run
+  tags:
+  - duplicate
+  code: |
+    assert max_sliding_window([5,5,5,5],2)==[5,5,5]
+    assert max_sliding_window([9,8,7,6,5],2)==[9,8,7,6]
+- name: max leaves the window
+  tags:
+  - time
+  code: |
+    assert max_sliding_window([8,1,2,3],3)==[8,3]
+- name: large window over long array
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    k=50000
+    xs=list(range(n))
+    r=max_sliding_window(xs,k)
+    assert len(r)==n-k+1 and r[0]==k-1 and r[-1]==n-1
+    ys=list(range(n,0,-1))
+    r=max_sliding_window(ys,k)
+    assert r[0]==n and r[-1]==k
+complexity:
+- op: overall
+  time: O(n)
+  space: O(k)
+extensions:
+- q: Why is the deque version O(n)?
+  kind: complexity
+  key_points:
+  - Each index is pushed once and popped at most once
+  - Amortised O(1) per element
+  - Deque size is at most k
+- q: Streaming rolling max with timestamps.
+  kind: design
+  key_points:
+  - Window defined by time, expire front entries older than T
+  - Monotonic deque of (timestamp, value)
+  - Same amortised cost, memory bounded by entries within window
+- q: Heap versus deque.
+  kind: reasoning
+  key_points:
+  - Heap with lazy deletion is O(n log n) and holds stale entries
+  - Deque is O(n) and simpler to bound
+  - Heap generalises to top-k or median more easily
+narration: []
+state_aloud:
+- Empty list or k <= 0 handling.
+- k equals 1 and k equals n.
+- Equal values and the max sliding out of the window.
+walkthrough: |
+  Keep a deque of indices whose values are strictly decreasing. For each new index, pop smaller values off the back (they can never be a max again), push the index, and pop the front if it has left the window. Once the first window is full, the front of the deque is the window max.

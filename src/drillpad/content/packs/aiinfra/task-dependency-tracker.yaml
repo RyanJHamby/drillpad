@@ -1,0 +1,249 @@
+id: task-dependency-tracker
+title: Agent task dependency tracker with cycle detection
+bar_level: 3
+target_minutes: 30
+patterns:
+- dag
+- topological-sort
+- cycle-detection
+- state-machine
+- cascading-failure
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Implement `TaskTracker`, the dependency tracker an agent runtime would use to decide what may
+  run next. Tasks are hashable ids. Each task has a state: `"pending"`, `"done"`, `"failed"` or
+  `"blocked"` (a pending task downstream of a failure).
+
+  - `add(task, deps=())`: `ValueError` if `task` exists or any dep is unknown (nothing changes).
+    A task added with a failed or blocked dependency starts `"blocked"`.
+  - `add_dep(task, dep)`: add one more prerequisite to a PENDING task. `ValueError` for unknown
+    ids, a non-pending `task`, or if it would create a cycle (including `task == dep`); on error
+    nothing changes. If `dep` is failed/blocked, `task` and everything downstream become blocked.
+  - `state(task)`; `ready() -> sorted list` of pending tasks whose deps are all `"done"`.
+  - `complete(task) -> sorted list of newly ready tasks`: `ValueError` unless `task` is ready.
+  - `fail(task)`: `ValueError` unless pending; marks it failed and every transitive pending
+    dependent `"blocked"`. Unrelated tasks are unaffected.
+  - `order() -> list`: a topological order of ALL tasks, smallest id first among ready ties.
+  Inputs can be 30,000 tasks deep: avoid recursion.
+starter: |
+  class TaskTracker:
+      def __init__(self):
+          pass
+hints:
+- 'Keep both directions: deps[task] and rdeps[task].'
+- 'Cycle check for add_dep(task, dep): can you reach `task` by walking prerequisites from `dep`? Use an
+  explicit stack.'
+- Cascade with a BFS queue and do not mutate a set while iterating it.
+follow_ups:
+- Add retry(task) that moves failed back to pending and unblocks downstream.
+- 'Add priorities and a worker pool: which task does a free worker take?'
+- Compute the critical path / minimum total time with unlimited workers.
+- Group order() into parallel waves of in-degree-zero tasks.
+tests:
+- name: chain unlocks one task at a time
+  tags:
+  - empty
+  - single
+  - ordering
+  code: |
+    t = TaskTracker()
+    assert t.ready() == [] and t.order() == []
+    t.add("a"); t.add("b", ["a"]); t.add("c", ["b"])
+    assert t.ready() == ["a"] and t.state("c") == "pending"
+    assert t.complete("a") == ["b"] and t.ready() == ["b"]
+    assert t.state("a") == "done"
+    assert t.complete("b") == ["c"]
+    assert t.complete("c") == [] and t.ready() == []
+- name: diamond only unlocks when all prerequisites are done
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    t = TaskTracker()
+    t.add("a"); t.add("b", ["a"]); t.add("c", ["a"]); t.add("d", ["b", "c"])
+    assert t.complete("a") == ["b", "c"]
+    assert t.complete("b") == [], "d still waits for c"
+    assert t.ready() == ["c"]
+    assert t.complete("c") == ["d"]
+- name: add rejects duplicates and unknown deps
+  tags:
+  - invalid
+  code: |
+    t = TaskTracker()
+    t.add("a")
+    for args in [("a", []), ("b", ["zzz"]), ("c", ["a", "zzz"])]:
+        try:
+            t.add(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected ValueError {args}")
+    assert t.ready() == ["a"] and t.order() == ["a"], "failed add leaves no trace"
+    t.add("b", ["a"])
+- name: add_dep rejects cycles and leaves state unchanged
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    t = TaskTracker()
+    t.add("a"); t.add("b", ["a"]); t.add("c", ["b"]); t.add("x")
+    for args in [("a", "c"), ("a", "a"), ("b", "c")]:
+        try:
+            t.add_dep(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"cycle not detected {args}")
+    assert t.ready() == ["a", "x"]
+    t.add_dep("x", "c")                      # legal: no path back
+    assert t.ready() == ["a"] and t.order() == ["a", "b", "c", "x"]
+    try:
+        t.add_dep("a", "nope")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unknown dep")
+- name: failure blocks every downstream task
+  tags:
+  - state-reuse
+  - ordering
+  code: |
+    t = TaskTracker()
+    t.add("a"); t.add("b", ["a"]); t.add("c", ["b"]); t.add("d", ["a"]); t.add("z")
+    t.complete("a")
+    t.fail("b")
+    assert t.state("b") == "failed" and t.state("c") == "blocked"
+    assert t.state("d") == "pending" and t.state("z") == "pending", "unrelated work unaffected"
+    assert t.ready() == ["d", "z"]
+    try:
+        t.complete("c")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("blocked task cannot complete")
+- name: complete requires a ready task
+  tags:
+  - invalid
+  - boundary
+  hidden: true
+  code: |
+    t = TaskTracker()
+    t.add("a"); t.add("b", ["a"])
+    for name in ["b", "nope"]:
+        try:
+            t.complete(name)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"{name} is not ready")
+    t.complete("a")
+    try:
+        t.complete("a")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("double complete")
+    assert t.state("b") == "pending" and t.ready() == ["b"]
+- name: new tasks inherit failure from dependencies
+  tags:
+  - boundary
+  - state-reuse
+  hidden: true
+  code: |
+    t = TaskTracker()
+    t.add("a"); t.fail("a")
+    t.add("b", ["a"]); t.add("c", ["b"])
+    assert t.state("b") == "blocked" and t.state("c") == "blocked"
+    t.add("d")
+    t.add_dep("d", "a")
+    assert t.state("d") == "blocked" and t.ready() == []
+    try:
+        t.fail("a")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("failing twice")
+- name: order is topological with alphabetical ties
+  tags:
+  - ordering
+  hidden: true
+  code: |
+    t = TaskTracker()
+    t.add("d"); t.add("b"); t.add("a", ["d"]); t.add("c", ["b", "d"]); t.add("e", ["a", "c"])
+    assert t.order() == ["b", "d", "a", "c", "e"], t.order()
+- name: long chains do not blow the stack
+  tags:
+  - scale
+  hidden: true
+  code: |
+    t = TaskTracker()
+    n = 30000
+    t.add(0)
+    for i in range(1, n):
+        t.add(i, [i - 1])
+    try:
+        t.add_dep(0, n - 1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("cycle through a long chain")
+    assert t.order() == list(range(n))
+    t.fail(0)
+    assert t.state(n - 1) == "blocked" and t.ready() == []
+complexity:
+- op: add
+  time: O(D)
+  space: O(D)
+- op: add_dep
+  time: O(V + E)
+  space: O(V)
+- op: complete
+  time: O(R)
+  space: O(1)
+- op: fail
+  time: O(V + E)
+  space: O(V)
+- op: order
+  time: O((V + E) log V)
+  space: O(V)
+extensions:
+- q: 'Level 2: add retry(task) and make blocked tasks recover.'
+  kind: code
+  key_points:
+  - failed -> pending; downstream blocked tasks become pending again only if no OTHER dependency is still
+    failed/blocked
+  - Re-evaluate downstream with a BFS using the same rule, not a blind reset
+  - retry on a task that is not failed raises ValueError
+- q: 'Level 3: add run_with_workers(durations, k) simulation and critical_path().'
+  kind: code
+  key_points:
+  - Event loop with a min-heap of finish times; a freed worker takes the smallest ready id
+  - critical_path is the longest weighted path in the DAG via topological DP
+  - Deterministic tie-breaking so results are reproducible
+- q: How would you run this durably for real agents (crashes, concurrent workers)?
+  kind: design
+  key_points:
+  - Persist state transitions and make complete/fail idempotent by task id
+  - Workers lease tasks with a timeout so crashed workers' tasks return to ready
+  - 'Cascading failure policy may be configurable: block, skip, or continue'
+- q: Cost of cycle checks and cascades?
+  kind: complexity
+  key_points:
+  - 'add_dep cycle check is a DFS: O(V + E) worst case; add at creation needs none since deps already
+    exist'
+  - 'fail cascades touch each downstream task once: O(V + E)'
+  - 'order is Kahn''s with a heap: O((V + E) log V)'
+narration: []
+state_aloud:
+- 'State machine is explicit: pending/done/failed/blocked; illegal transitions raise.'
+- Cycle check before mutating anything so a rejected add_dep leaves state intact.
+- Cascade iteratively with a queue; recursion would overflow on long chains.
+- A task depending on a failed task must start blocked.
+walkthrough: |
+  The tracker stores prerequisites and dependents in two dicts plus a status dict. add validates then wires both directions, inheriting a blocked state if any dependency is already failed or blocked. add_dep rejects a cycle by walking prerequisites from the new dependency with an explicit stack and looking for the task. ready() filters pending tasks whose dependencies are all done; complete() flips a ready task to done and returns the dependents that thereby became ready. fail() marks the task failed and BFS-blocks every pending descendant. order() is Kahn's algorithm with a heap for deterministic tie-breaking. Source: standard formulation.
+categories:
+- ai-infra
+- systems-impl

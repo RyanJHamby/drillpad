@@ -1,0 +1,104 @@
+id: pow-x-n
+title: Pow(x, n)
+bar_level: 2
+target_minutes: 20
+patterns:
+- math
+- binary-search
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Implement `my_pow(x, n)`: return `x` raised to the integer power `n` as a float. `n` may be negative or zero and may be as large in magnitude as `2**31`. Do not use `**` or `pow`.
+
+  Example: `my_pow(2.0, 10)` returns `1024.0`; `my_pow(2.0, -2)` returns `0.25`.
+starter: |
+  def my_pow(x, n):
+      pass
+hints:
+- Multiplying x by itself n times is O(n), hopeless for n near 2^31.
+- x^n = (x^(n/2))^2 when n is even, and x * x^(n-1) when odd.
+- 'Iterative form: square the base each step and multiply into the result when the current bit of n is set. Handle negative n by inverting x and negating n.'
+follow_ups:
+- Do it recursively and compare stack depth.
+- Compute x^n mod m for integers.
+tests:
+- name: positive power
+  tags:
+  - boundary
+  code: |
+    assert my_pow(2.0, 10) == 1024.0
+    assert my_pow(3.0, 5) == 243.0
+- name: negative power
+  tags:
+  - invalid
+  code: |
+    assert my_pow(2.0, -2) == 0.25
+    assert my_pow(0.5, -3) == 8.0
+- name: zero exponent
+  tags:
+  - zero-capacity
+  code: |
+    assert my_pow(5.0, 0) == 1.0
+    assert my_pow(0.0, 0) == 1.0
+- name: exponent one and base one
+  tags:
+  - single
+  code: |
+    assert my_pow(7.5, 1) == 7.5
+    assert my_pow(1.0, 123456) == 1.0
+- name: negative base parity
+  tags:
+  - boundary
+  code: |
+    assert my_pow(-2.0, 3) == -8.0
+    assert my_pow(-2.0, 4) == 16.0
+    assert my_pow(-1.0, 2147483647) == -1.0
+  hidden: true
+- name: fractional result
+  tags:
+  - duplicate
+  code: |
+    assert abs(my_pow(2.1, 3) - 9.261) < 1e-9
+  hidden: true
+- name: extreme exponents
+  tags:
+  - scale
+  code: |
+    assert my_pow(2.0, -2147483648) == 0.0
+    assert my_pow(1.0, -2147483648) == 1.0
+    assert my_pow(-1.0, -2147483648) == 1.0
+    assert my_pow(0.0, 5) == 0.0
+    assert my_pow(1.0000001, 2147483647) > 1.0
+  hidden: true
+complexity:
+- op: overall
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: Why does repeated squaring take O(log n) multiplications?
+  kind: complexity
+  key_points:
+  - Each step halves the exponent
+  - At most one extra multiply per set bit, so at most ~2 log2(n) multiplications
+  - Iterative form uses O(1) space; recursion uses O(log n) stack
+- q: Pitfalls with negative n and the minimum 32-bit integer.
+  kind: reasoning
+  key_points:
+  - -n overflows in fixed-width languages when n = -2^31; use a wider type
+  - Invert x first (1/x) then use the positive exponent, or compute then invert
+  - x = 0 with negative n is a division by zero and should be rejected or defined
+- q: 'Design: floating point error and a modular variant.'
+  kind: design
+  key_points:
+  - Squaring repeatedly accumulates relative error roughly proportional to log n
+  - Modular exponentiation takes (a*b) % m at each step, so values stay below m^2
+  - Matrix or polynomial exponentiation uses the same loop with a different multiply
+narration: []
+state_aloud:
+- n = 0 gives 1.0.
+- Negative exponents and n = -2^31.
+- Don't loop n times.
+walkthrough: |
+  Handle a negative exponent by inverting the base and negating the exponent. Then use binary exponentiation: while the exponent is nonzero, multiply the result by the current base if the lowest bit is set, square the base and shift the exponent right. That is O(log n) multiplications.

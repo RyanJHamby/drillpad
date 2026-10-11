@@ -1,0 +1,137 @@
+id: hashmap-chaining
+title: Hash map with separate chaining
+bar_level: 2
+target_minutes: 20
+patterns: [hash-table, chaining, load-factor-resize]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:8 - *"'
+statement: |
+  Implement `HashMapChaining(capacity=8, load_factor=0.75)` from scratch (do not wrap dict):
+  an array of buckets, each a list of (key, value) pairs. API: `put(k, v)` (overwrites an
+  existing key), `get(k)` (KeyError if missing), `delete(k)` (KeyError if missing), `len()`.
+  Double the bucket count and rehash when size / capacity exceeds the load factor.
+  Use Python's `hash(key)` for hashing.
+starter: |
+  class HashMapChaining:
+      def __init__(self, capacity=8, load_factor=0.75):
+          pass
+hints:
+  - Bucket index depends on capacity, so every entry must be re-placed on resize.
+  - put must scan the bucket for an existing key first, otherwise you create duplicates.
+follow_ups:
+  - Why 0.75 as the load factor?
+  - How would you resist hash-flooding attacks (per-instance salt)?
+  - What if each bucket were a balanced BST instead of a list?
+  - How do you avoid the O(n) latency spike on resize (incremental rehashing)?
+tests:
+  - name: put get overwrite
+    tags: [duplicate]
+    code: |
+      m = HashMapChaining()
+      m.put("a", 1); m.put("b", 2); m.put("a", 3)
+      assert m.get("a") == 3 and m.get("b") == 2 and len(m) == 2
+  - name: delete and missing keys
+    tags: [invalid, empty, single]
+    code: |
+      m = HashMapChaining()
+      m.put(1, "x")
+      m.delete(1)
+      assert len(m) == 0
+      for fn in (lambda: m.get(1), lambda: m.delete(1)):
+          try: fn()
+          except KeyError: pass
+          else: raise AssertionError("expected KeyError")
+  - name: survives resizes
+    tags: [scale, boundary]
+    code: |
+      m = HashMapChaining(capacity=2)
+      for i in range(1000): m.put(i, i * i)
+      assert len(m) == 1000
+      assert all(m.get(i) == i * i for i in range(1000))
+      for i in range(0, 1000, 2): m.delete(i)
+      assert len(m) == 500 and m.get(1) == 1
+  - name: all keys collide
+    tags: [scale, duplicate]
+    hidden: true
+    code: |
+      class K:
+          def __init__(self, n): self.n = n
+          def __hash__(self): return 42
+          def __eq__(self, o): return isinstance(o, K) and o.n == self.n
+      m = HashMapChaining()
+      for i in range(50): m.put(K(i), i)
+      assert len(m) == 50 and all(m.get(K(i)) == i for i in range(50))
+      m.delete(K(10)); m.put(K(11), "new")
+      assert len(m) == 49 and m.get(K(11)) == "new"
+  - name: none and falsy values
+    tags: [invalid]
+    hidden: true
+    code: |
+      m = HashMapChaining()
+      m.put("n", None); m.put(0, 0)
+      assert m.get("n") is None and m.get(0) == 0 and len(m) == 2
+  - name: reinsert after delete and clear
+    tags: [state-reuse, duplicate, empty]
+    hidden: true
+    code: |
+      m = HashMapChaining()
+      for i in range(20): m.put(i, i)
+      for i in range(20): m.delete(i)
+      assert len(m) == 0
+      m.put(3, "again")
+      assert m.get(3) == "again" and len(m) == 1
+complexity:
+- op: get/put/delete
+  time: O(1) expected
+  space: O(n)
+- op: get/put/delete (worst case)
+  time: O(n) worst case
+  space: O(n)
+- op: resize
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why is 0.75 a common load factor?
+  kind: reasoning
+  key_points:
+  - Empirical tradeoff between memory waste (low) and chain length (high)
+  - 0.7 to 0.8 is the usual sweet spot
+  - Expected chain length equals the load factor under uniform hashing
+- q: What is the worst case for get/put/delete and when does it happen? What does resize cost?
+  kind: complexity
+  key_points:
+  - O(n) if all keys land in one bucket (linear scan of one chain)
+  - Average O(1) relies on uniform hashing and bounded load factor
+  - Resize is O(n) but amortized O(1) per insert across doubling
+  - Space O(n) plus bucket array
+- q: How would you resist hash-flooding attacks?
+  kind: design
+  key_points:
+  - Attacker crafts colliding keys to force O(n) per op
+  - Per-instance random salt/seed in the hash (as CPython randomizes str hashing)
+  - Alternatively a keyed hash such as SipHash
+  - Or bound chain cost with a tree per bucket
+- q: What if each bucket were a balanced BST? How would you avoid the O(n) resize latency spike?
+  kind: design
+  key_points:
+  - BST caps worst-case bucket lookup at O(log k) (Java treeifies past about 8 entries)
+  - Costs more memory and needs ordered or comparable keys
+  - 'Incremental rehashing: migrate a few buckets per operation, keep old and new tables during migration'
+  - Tradeoff is implementation complexity
+narration:
+- I'll use an array of buckets, each a list of key-value pairs, and resize by doubling when load factor crosses 0.75.
+- '[silent] silently write put/get/delete'
+- One thing to watch — put needs to check for an existing key first so we overwrite instead of duplicating.
+- '[silent] silently write _resize'
+- Resize just re-inserts every entry through put, since the bucket index depends on the new capacity.
+- Let me trace inserting enough keys to force one resize and confirm size and bucket count are consistent.
+state_aloud:
+- All keys hashing to the same bucket — degrades to O(n) linear scan; worth mentioning as the worst case even though average is O(1).
+- Overwriting an existing key — must update in place, not append a duplicate.
+- Resize mid-rehash — recomputing `_hash` after `_cap` changes is required since bucket index depends on capacity.
+- Deleting a key that doesn't exist — raise `KeyError` rather than silently no-op, matching dict semantics.
+- Negative or non-hashable keys — `hash()` can return negative ints in general hash functions (not Python's, but worth noting), so a real implementation should mask/abs before modulo.
+walkthrough: |
+  An array of buckets holds lists of key-value pairs, and a key's bucket is its hash modulo the current capacity. `get`/`put`/`delete` are O(1) expected under uniform hashing and O(n) if every key collides. When the load factor passes a threshold such as 0.75, the table doubles and re-inserts every entry, since the bucket index depends on the new capacity; this is O(n) but amortized O(1) per insert. `put` must check for an existing key first so it overwrites instead of duplicating, and deleting a missing key raises `KeyError`.
+categories: [systems-impl]

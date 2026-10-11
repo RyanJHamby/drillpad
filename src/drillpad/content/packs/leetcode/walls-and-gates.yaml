@@ -1,0 +1,121 @@
+id: walls-and-gates
+title: Walls and Gates
+bar_level: 2
+target_minutes: 22
+patterns:
+- graph-bfs-dfs
+- multi-source-bfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Walls and Gates (LC 286)"
+statement: |
+  A grid `rooms` uses three values: `-1` for a wall, `0` for a gate, and `INF = 2147483647` for an empty room. Fill every empty room with the number of steps (up, down, left, right) to its nearest gate. Rooms that cannot reach any gate keep the value `INF`.
+
+  Modify the grid in place and also return that same grid object.
+
+  Example: a room two steps from the closest gate becomes `2`.
+prelude: |
+  INF = 2147483647
+starter: |
+  def walls_and_gates(rooms):
+      pass
+hints:
+- Running a BFS from every room is too slow; reverse the direction.
+- Start one BFS from all gates at once by putting every gate in the queue at distance 0.
+- A room is updated the first time it is reached; only expand into cells still equal to INF.
+follow_ups:
+- Return the distance to the nearest gate without modifying the input.
+- Gates can open and close; how do you update?
+tests:
+- name: mixed grid
+  tags:
+  - ordering
+  code: |
+    INF=2147483647
+    g=[[INF,-1,0,INF],[INF,INF,INF,-1],[INF,-1,INF,-1],[0,-1,INF,INF]]
+    r=walls_and_gates(g)
+    assert r is g
+    assert g==[[3,-1,0,1],[2,2,1,-1],[1,-1,2,-1],[0,-1,3,4]]
+- name: no gates
+  tags:
+  - invalid
+  code: |
+    INF=2147483647
+    g=[[INF,INF],[INF,-1]]
+    assert walls_and_gates(g) is g
+    assert g==[[INF,INF],[INF,-1]]
+- name: only a gate
+  tags:
+  - single
+  code: |
+    g=[[0]]
+    assert walls_and_gates(g) is g
+    assert g==[[0]]
+- name: empty grid
+  tags:
+  - empty
+  hidden: true
+  code: |
+    g=[]
+    assert walls_and_gates(g) is g
+- name: room walled off from gate
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    INF=2147483647
+    g=[[0,-1,INF]]
+    assert walls_and_gates(g) is g
+    assert g==[[0,-1,INF]]
+- name: two gates share the nearest
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    INF=2147483647
+    g=[[0,INF,INF,INF,0]]
+    walls_and_gates(g)
+    assert g==[[0,1,2,1,0]]
+- name: large grid single gate
+  tags:
+  - scale
+  hidden: true
+  code: |
+    INF=2147483647
+    n=500
+    g=[[INF]*n for _ in range(n)]
+    g[0][0]=0
+    assert walls_and_gates(g) is g
+    assert all(g[i][j]==i+j for i in range(n) for j in range(n))
+complexity:
+- op: overall
+  time: O(R * C)
+  space: O(R * C)
+extensions:
+- q: Compare multi-source BFS with a BFS per room.
+  kind: complexity
+  key_points:
+  - Per-room BFS costs O((RC)^2) in the worst case
+  - Multi-source BFS visits each cell once, O(RC)
+  - Queue can hold up to O(RC) cells
+- q: Why is the first time a room is reached the shortest distance?
+  kind: reasoning
+  key_points:
+  - BFS expands in non-decreasing distance layers
+  - All gates start at distance 0 so layers are measured from the nearest one
+  - So a later arrival can never be shorter
+- q: How would this scale to a map with weighted roads?
+  kind: design
+  key_points:
+  - Switch to multi-source Dijkstra with a heap seeded with all gates
+  - Same relaxation idea, O(E log V)
+  - Keep distances in the grid and skip stale heap entries
+narration: []
+state_aloud:
+- Unreachable rooms stay INF.
+- No gates leaves the grid unchanged.
+- Return the same grid object.
+walkthrough: |
+  Seed a queue with the coordinates of every gate and run a standard BFS. Pop a cell, look at its four neighbours, and for each neighbour that is still INF set it to the current cell's value plus one and enqueue it. Because the queue processes cells in order of distance from the nearest gate, the first assignment is already the minimum, and cells walled off from all gates are never touched.

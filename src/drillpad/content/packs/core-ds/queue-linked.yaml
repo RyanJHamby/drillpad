@@ -1,0 +1,107 @@
+id: queue-linked
+title: FIFO queue on a singly linked list
+bar_level: 1
+target_minutes: 12
+patterns: [queue, linked-list, head-tail-pointers]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:6 - *"'
+statement: |
+  Implement `Queue` backed by a singly linked list with head and tail pointers (no list.pop(0),
+  no collections.deque). API: `enqueue(val)`, `dequeue()`, `peek()`, `len()`.
+  `dequeue`/`peek` on an empty queue raise IndexError. All operations O(1).
+starter: |
+  class Queue:
+      def __init__(self):
+          pass
+hints:
+  - Keep a tail pointer so enqueue does not walk the list.
+  - When the last node is dequeued, reset the tail as well as the head.
+follow_ups:
+  - How would you make this thread-safe for producer/consumer (lock, then condition variable)?
+  - How would you bound the queue size?
+  - Why not a Python list with pop(0)?
+  - How would you peek at the tail?
+tests:
+  - name: fifo order
+    tags: [ordering]
+    code: |
+      q = Queue()
+      for i in range(5): q.enqueue(i)
+      assert len(q) == 5 and q.peek() == 0
+      assert [q.dequeue() for _ in range(5)] == [0, 1, 2, 3, 4]
+      assert len(q) == 0
+  - name: empty raises
+    tags: [empty, invalid]
+    code: |
+      q = Queue()
+      for fn in (q.dequeue, q.peek):
+          try: fn()
+          except IndexError: pass
+          else: raise AssertionError("empty should raise IndexError")
+  - name: drain to empty then reuse
+    tags: [state-reuse, single, boundary]
+    code: |
+      q = Queue()
+      for round_ in range(3):
+          q.enqueue(1); q.enqueue(2)
+          assert q.dequeue() == 1 and q.dequeue() == 2
+          assert len(q) == 0
+      q.enqueue(9)
+      assert q.peek() == 9 and q.dequeue() == 9
+  - name: interleaved against model
+    tags: [scale, ordering]
+    hidden: true
+    code: |
+      from collections import deque
+      q, m = Queue(), deque()
+      for i in range(500):
+          q.enqueue(i); m.append(i)
+          if i % 3 != 0:
+              assert q.dequeue() == m.popleft()
+      assert len(q) == len(m)
+      while m: assert q.dequeue() == m.popleft()
+complexity:
+- op: enqueue/dequeue/peek
+  time: O(1)
+  space: O(n)
+extensions:
+- q: How would you make this thread-safe for producer/consumer?
+  kind: design
+  key_points:
+  - Lock around enqueue and dequeue
+  - Condition variable so consumers block on empty instead of busy-polling
+  - Predicate in a while loop to handle spurious wakeups
+- q: How would you bound the queue size?
+  kind: design
+  key_points:
+  - Track size against a cap
+  - Block producers (backpressure) or reject when full
+  - 'Alternative: drop-oldest policy; state the choice'
+- q: Why not a Python list with pop(0)? What is the space cost of your version?
+  kind: complexity
+  key_points:
+  - list.pop(0) is O(n) because it shifts all elements
+  - Linked head removal is O(1) with a tail pointer for O(1) enqueue
+  - Space O(n) with a pointer of overhead per node, no resizing
+- q: What bug appears if dequeue of the last node only resets head?
+  kind: reasoning
+  key_points:
+  - Tail still points at the removed node
+  - Next enqueue attaches to a dead node, so the item is lost
+  - Reset both head and tail when the queue empties
+narration:
+- I'll use a singly linked list with head and tail pointers so both ends are O(1).
+- '[silent] silently write the Node class and enqueue'
+- Tracking tail separately here — otherwise enqueue would be O(n) to walk to the end.
+- '[silent] silently write dequeue'
+- 'Edge case: when the last node is dequeued, I reset tail to None too, not just head.'
+- Let me trace enqueue(1), enqueue(2), dequeue() to check pointers are consistent.
+state_aloud:
+- Dequeue/peek on empty queue — raise, don't return `None` silently (ambiguous with a stored `None` value).
+- Dequeue down to the last element — must reset `_tail` to `None`, not just `_head`, or the next enqueue corrupts the list.
+- Single-element queue — head and tail point to the same node; enqueue/dequeue paths must not double-free or dangle it.
+- Repeated dequeue-to-empty then enqueue cycles — verify pointers reset cleanly each time (good stress test).
+walkthrough: |
+  A singly linked list with both head and tail pointers makes enqueue (append at tail) and dequeue (pop at head) O(1), with O(n) space and no amortized resizing. Tracking the tail separately is what avoids an O(n) walk on enqueue. The key invariant is that when the last node is dequeued, `_tail` must be reset to `None` along with `_head`, or the next enqueue corrupts the list. Dequeue and peek on an empty queue raise instead of returning `None`. Using a Python list with `pop(0)` would be O(n) per dequeue because it shifts all elements.
+categories: [leetcode, trading, ai-infra, systems-impl]

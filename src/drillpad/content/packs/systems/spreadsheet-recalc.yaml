@@ -1,0 +1,234 @@
+id: spreadsheet-recalc
+title: Spreadsheet with Dependent Cell Recalculation
+bar_level: 3
+target_minutes: 35
+patterns:
+- dependency-graph
+- topological-sort
+- cycle-detection
+firm_tags: []
+categories:
+- systems-impl
+statement: |
+  Build a tiny spreadsheet. A cell name is uppercase letters followed by digits (`A1`, `B12`). A cell holds either a number or a formula.
+
+  ```python
+  class Spreadsheet:
+      evaluations: int          # total formula evaluations performed so far
+      def set(self, cell, content): ...
+      def get(self, cell): ...
+  ```
+
+  - `content` is an `int`/`float` constant, or a string starting with `=` such as `"=A1+B2*2"`. Formulas support integer literals, cell references, `+`, `-`, `*` (usual precedence), unary minus and parentheses.
+  - `get(cell)` returns the current value. A cell that was never set has value `0`.
+  - After `set`, every formula that depends on the changed cell, directly or transitively, must reflect the new value. Do not recompute lazily on every `get`: values are kept up to date eagerly, and each affected formula is evaluated **exactly once** per `set` (so a diamond-shaped dependency does not evaluate its tip twice). Increment `evaluations` once per formula evaluation; a `set` of a formula counts its own evaluation too, a `set` of a constant counts none for itself.
+  - Replacing a formula must drop its old dependency links and add the new ones; replacing a formula with a constant stops it from reacting to its former inputs.
+  - A formula that would create a cycle (including a self reference) must raise `ValueError` and leave the spreadsheet exactly as it was. A malformed formula or invalid cell name also raises `ValueError` without changing state.
+
+  Example:
+  ```python
+  s = Spreadsheet()
+  s.set("A1", 2); s.set("B1", "=A1*10")
+  s.get("B1")        # 20
+  s.set("A1", 3)
+  s.get("B1")        # 30
+  ```
+starter: |
+  class Spreadsheet:
+      def __init__(self):
+          self.evaluations = 0
+
+      def set(self, cell, content):
+          pass
+
+      def get(self, cell):
+          pass
+hints:
+- Keep two maps - for each cell the cells it reads (parents) and the cells that read it (children). Parse a formula once, when it is set.
+- On set, the cells to refresh are the new cell plus everything reachable through children, evaluated in topological order so every input is final before use.
+- Detect a cycle before mutating anything - a new formula is cyclic exactly when one of its references is the cell itself or one of the cell's transitive dependents.
+follow_ups:
+- Lazy recalculation with dirty flags instead of eager. When is each better?
+- Add SUM(A1:A100) ranges. How do you keep dependency edges from exploding?
+tests:
+- name: constants and simple formula
+  tags:
+  - state-reuse
+  code: |
+    s = Spreadsheet()
+    s.set("A1", 2)
+    s.set("B1", "=A1*10+1")
+    assert s.get("B1") == 21
+    s.set("A1", 3)
+    assert s.get("B1") == 31
+    assert s.get("Z9") == 0
+    s.set("C1", "=(A1+B1)*2-A1")
+    assert s.get("C1") == 65
+    s.set("D1", "=-A1+Q7")
+    assert s.get("D1") == -3
+- name: transitive updates
+  tags:
+  - ordering
+  code: |
+    s = Spreadsheet()
+    s.set("A1", 1)
+    s.set("A2", "=A1+1")
+    s.set("A3", "=A2+1")
+    s.set("A4", "=A3+A1")
+    assert s.get("A4") == 4
+    s.set("A1", 10)
+    assert (s.get("A2"), s.get("A3"), s.get("A4")) == (11, 12, 22)
+- name: diamond evaluates each cell once
+  tags:
+  - duplicate
+  code: |
+    s = Spreadsheet()
+    s.set("A1", 1)
+    s.set("B1", "=A1+1")
+    s.set("C1", "=A1*2")
+    s.set("D1", "=B1+C1")
+    assert s.get("D1") == 4
+    e0 = s.evaluations
+    s.set("A1", 5)
+    assert s.get("D1") == 16
+    assert s.evaluations - e0 == 3
+- name: formula replaced updates edges
+  tags:
+  - state-reuse
+  code: |
+    s = Spreadsheet()
+    s.set("A1", 1)
+    s.set("B1", 100)
+    s.set("C1", "=A1+1")
+    assert s.get("C1") == 2
+    s.set("C1", "=B1+1")
+    assert s.get("C1") == 101
+    e0 = s.evaluations
+    s.set("A1", 7)
+    assert s.evaluations == e0 and s.get("C1") == 101
+    s.set("B1", 200)
+    assert s.get("C1") == 201
+- name: formula replaced by constant
+  tags:
+  - boundary
+  code: |
+    s = Spreadsheet()
+    s.set("A1", 4)
+    s.set("B1", "=A1*2")
+    s.set("C1", "=B1+1")
+    s.set("B1", 50)
+    assert s.get("C1") == 51
+    e0 = s.evaluations
+    s.set("A1", 9)
+    assert s.evaluations == e0
+    assert s.get("B1") == 50 and s.get("C1") == 51
+- name: cycles rejected without corrupting state
+  tags:
+  - invalid
+  code: |
+    s = Spreadsheet()
+    s.set("A1", 1)
+    s.set("B1", "=A1+1")
+    s.set("C1", "=B1+1")
+    for cell, f in (("A1", "=C1+1"), ("B1", "=B1"), ("A1", "=A1+1")):
+        try:
+            s.set(cell, f)
+        except ValueError:
+            pass
+        else:
+            assert False, "cycle accepted"
+    assert (s.get("A1"), s.get("B1"), s.get("C1")) == (1, 2, 3)
+    s.set("A1", 10)
+    assert (s.get("B1"), s.get("C1")) == (11, 12)
+- name: malformed input rejected
+  tags:
+  - invalid
+  code: |
+    s = Spreadsheet()
+    s.set("A1", 1)
+    for cell, c in (("B1", "=A1+"), ("B1", "A1+1"), ("b1", 3), ("B1", "=A1 $ 2"), ("B1", "=(A1")):
+        try:
+            s.set(cell, c)
+        except ValueError:
+            pass
+        else:
+            assert False, (cell, c)
+    assert s.get("B1") == 0 and s.get("A1") == 1
+- name: forward reference to unset cell
+  tags:
+  - empty
+  code: |
+    s = Spreadsheet()
+    s.set("B1", "=A1+5")
+    assert s.get("B1") == 5
+    s.set("A1", 2)
+    assert s.get("B1") == 7
+- name: long chain updates incrementally
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 5000
+    s = Spreadsheet()
+    s.set("A1", 1)
+    for i in range(2, n + 1):
+        s.set("A%d" % i, "=A%d+1" % (i - 1))
+    assert s.get("A%d" % n) == n
+    e0 = s.evaluations
+    for k in range(20):
+        s.set("A1", 100 + k)
+    assert s.get("A%d" % n) == 119 + n - 1
+    assert s.evaluations - e0 == 20 * (n - 1)
+- name: diamond ladder is not exponential
+  tags:
+  - scale
+  hidden: true
+  code: |
+    s = Spreadsheet()
+    s.set("A0", 1)
+    s.set("B0", 1)
+    for i in range(1, 41):
+        s.set("A%d" % i, "=A%d+B%d" % (i - 1, i - 1))
+        s.set("B%d" % i, "=A%d+B%d" % (i - 1, i - 1))
+    assert s.get("A40") == 2 ** 40
+    e0 = s.evaluations
+    s.set("A0", 3)
+    assert s.get("B40") == 4 * 2 ** 39
+    assert s.evaluations - e0 == 80
+complexity:
+- op: set
+  time: O(d + e)
+  space: O(c + e)
+extensions:
+- q: What does a set cost and why must recompute follow a topological order?
+  kind: complexity
+  key_points:
+  - Cost is proportional to the affected subgraph, d dependent cells plus e edges among them, not the whole sheet
+  - Evaluating in topological order means every input is final, so each cell is computed once
+  - Naive recursive re-evaluation without memoization is exponential on diamond ladders
+- q: Eager versus lazy recalculation - which and why?
+  kind: design
+  key_points:
+  - Eager pays on write and makes reads O(1); lazy marks dirty cells and pays on read
+  - Lazy wins when many writes happen between reads or most cells are never read
+  - Lazy needs a recursion or explicit stack on read and still needs cycle detection at set time
+- q: How do you detect cycles and keep state intact?
+  kind: design
+  key_points:
+  - Compute the transitive dependents of the target before mutating; a new reference inside that set (or the cell itself) is a cycle
+  - Validate and parse first, mutate the graph only after all checks pass
+  - Iterative DFS avoids recursion limits on chains of thousands of cells
+- q: Add SUM over a range such as A1:A1000. What changes in the dependency graph?
+  kind: design
+  key_points:
+  - A range node avoids a quadratic number of edges when many formulas share it
+  - Incremental sums can apply a delta from the changed cell instead of re-adding the whole range
+  - Ranges over unset cells and range growth need care when cells are later set
+narration: []
+state_aloud:
+- Unset cells read as 0 and can still be referenced before they exist.
+- Replacing a formula must remove stale parent links.
+- Reject cycles including self reference, and leave state unchanged.
+- Each dependent evaluated once even with diamond dependencies.
+walkthrough: |
+  Keep `parents[cell]` (cells a formula reads) and `children[cell]` (formulas that read it). `set` parses the content first, rejects cycles by checking whether any referenced cell is the target or one of its transitive children, and only then updates links. The cells to refresh are found with an iterative DFS over `children`; reversed postorder is a topological order, so evaluating in that order computes every dependent exactly once with all inputs final. Constants just store a value and trigger the same propagation.

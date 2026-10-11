@@ -1,0 +1,93 @@
+id: best-time-buy-sell-cooldown
+title: Best Time to Buy and Sell Stock with Cooldown
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Best Time Stock Cooldown (LC 309)"
+statement: |
+  `prices[i]` is a stock price on day `i`. You may trade as often as you like but hold at most one share, and after selling you cannot buy on the very next day (one cooldown day). Return the maximum profit. An empty or one-day list yields 0.
+
+  Example: `max_profit_cooldown([1,2,3,0,2])` returns `3` (buy 1, sell 2, rest, buy 0, sell 2).
+starter: |
+  def max_profit_cooldown(prices):
+      pass
+hints:
+- 'Each day you are in one of three states: holding, just sold (cooling down), or resting free.'
+- 'State: hold[i], sold[i], rest[i] = best profit at the end of day i in that state.'
+- hold = max(hold, rest - p); sold = hold_prev + p; rest = max(rest, sold_prev). Start hold = -inf.
+follow_ups:
+- Add a flat transaction fee instead of a cooldown.
+- Limit to k transactions.
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert max_profit_cooldown([1,2,3,0,2])==3
+- name: one day
+  tags:
+  - single
+  code: |
+    assert max_profit_cooldown([1])==0
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert max_profit_cooldown([])==0
+- name: falling
+  tags:
+  - boundary
+  code: |
+    assert max_profit_cooldown([5,4,3,2,1])==0
+    assert max_profit_cooldown([2,1])==0
+- name: cooldown matters
+  tags:
+  - time
+  code: |
+    assert max_profit_cooldown([1,2,4])==3
+    assert max_profit_cooldown([6,1,6,4,3,0,2])==7
+- name: flat
+  tags:
+  - duplicate
+  code: |
+    assert max_profit_cooldown([3,3,3,3])==0
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert max_profit_cooldown(list(range(100000)))==99999
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - One pass with a constant number of states
+  - O(1) space with three rolling variables
+  - Full state table would be O(n)
+- q: Replace cooldown with a fee, or limit k trades
+  kind: code
+  key_points:
+  - 'Fee: subtract it when selling, drop the rest state'
+  - 'k trades: add a trade-count dimension to the state'
+  - O(n*k) time for k trades
+- q: Reconstruct the trades
+  kind: design
+  key_points:
+  - Record the action chosen for each state per day
+  - Backtrack from the best final state
+  - Needs O(n) extra memory
+narration: []
+state_aloud:
+- Fewer than 2 days gives 0.
+- Cannot buy the day after selling.
+- Only one share held at a time.
+walkthrough: 'Track three profits at the end of each day: `hold` (own a share), `sold` (just sold today), `rest` (own nothing and free to buy). Transitions: `hold = max(hold, rest - price)`, `sold = hold_prev + price`, `rest = max(rest, sold_prev)`. The cooldown appears because buying only draws from `rest`, which lags `sold` by a day. The answer is `max(sold, rest)`; O(n) time, O(1) space.'

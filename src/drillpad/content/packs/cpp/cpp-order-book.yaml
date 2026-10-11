@@ -1,0 +1,324 @@
+id: cpp-order-book
+title: Limit Order Book (std::map price levels)
+language: cpp
+bar_level: 3
+target_minutes: 40
+patterns:
+- order-book
+- ordered-map
+- list-iterator
+- price-time-priority
+firm_tags:
+- quant-hft
+statement: |
+  Implement `class OrderBook`, a single-symbol limit order book with price-time priority (C++20). The shared
+  types `Side { Buy, Sell }`, `Fill { order_id, price, qty }`, `PriceLevel { price, qty }` and
+  `LimitResult { id, fills }` are provided. Prices and quantities are positive `std::int64_t`.
+
+  API:
+  - `LimitResult limit(Side, price, qty)`: ids are 1, 2, 3, ... in call order. The order first matches against the
+    opposite side while it crosses (buy price >= best ask, sell price <= best bid), best price first and FIFO within a
+    price level. Each fill is `{resting_order_id, price, qty}` and trades at the RESTING order's price. An unfilled
+    remainder rests in the book (keeping the same id). Throws `std::invalid_argument` for price <= 0 or qty <= 0
+    (a rejected order consumes no id).
+  - `std::vector<Fill> market(Side, qty)`: matches at any price; the unfilled remainder is discarded (never rests,
+    consumes no id).
+  - `bool cancel(id)`: true only if the order was resting; false for unknown, cancelled or fully filled ids.
+  - `std::optional<int64_t> best_bid() const` / `best_ask() const`
+  - `std::vector<PriceLevel> depth(Side) const`: non-empty levels, best price first, with summed remaining quantity.
+
+  Design constraints: price levels must live in a sorted `std::map` (bids sorted descending via `std::greater<>`),
+  each level holds a `std::list` of resting orders, and `cancel` must be O(1) per call plus map access (keep an
+  `unordered_map` from id to list iterator). Empty levels must be erased.
+
+  Example:
+  ```cpp
+  OrderBook b;
+  auto s = b.limit(Side::Sell, 100, 10);
+  auto r = b.limit(Side::Buy, 105, 4);   // fills == {{s.id, 100, 4}}; no remainder
+  ```
+starter: |
+  class OrderBook {
+  public:
+      // Ids are 1, 2, 3, ... in the order limit() calls are accepted. Throws std::invalid_argument for
+      // price <= 0 or qty <= 0 (a rejected order consumes no id).
+      LimitResult limit(Side side, std::int64_t price, std::int64_t qty) {
+          (void)side; (void)price; (void)qty;
+          return {};
+      }
+      // Matches at any price; unfilled remainder is discarded (never rests, consumes no id).
+      std::vector<Fill> market(Side side, std::int64_t qty) { (void)side; (void)qty; return {}; }
+      // true iff the order was resting and is now removed.
+      bool cancel(std::uint64_t id) { (void)id; return false; }
+      std::optional<std::int64_t> best_bid() const { return std::nullopt; }
+      std::optional<std::int64_t> best_ask() const { return std::nullopt; }
+      // Non-empty levels, best price first.
+      std::vector<PriceLevel> depth(Side side) const { (void)side; return {}; }
+  };
+prelude: |
+  enum class Side { Buy, Sell };
+  struct Fill {
+      std::uint64_t order_id;   // the RESTING order that was hit
+      std::int64_t price;       // always the resting order's price
+      std::int64_t qty;
+      bool operator==(const Fill&) const = default;
+  };
+  struct PriceLevel {
+      std::int64_t price;
+      std::int64_t qty;         // total remaining quantity at this price
+      bool operator==(const PriceLevel&) const = default;
+  };
+  struct LimitResult {
+      std::uint64_t id;
+      std::vector<Fill> fills;
+  };
+hints:
+- 'bids_: std::map<int64_t, std::list<Order>, std::greater<>>, asks_: std::map<int64_t, std::list<Order>>.
+  begin() is then the best price on both sides, so one templated sweep() can serve both.'
+- For O(1) cancel keep unordered_map<id, {side, price, list::iterator}>. std::list iterators stay valid
+  while other nodes come and go, so erasing by iterator is O(1).
+- 'Sweep loop: take min(incoming, front.qty); pop a fully filled front order (and its index entry); erase
+  a level when its list empties; stop at the first level that no longer crosses.'
+follow_ups:
+- How do you make this fast in a real HFT system (flat arrays indexed by price tick, intrusive lists,
+  pooled orders)?
+- Where does std::map hurt (pointer chasing, allocation per level), and what replaces it?
+- How do you add modify (reduce qty keeps priority, increase loses it)?
+- How would you make the book event-sourced and deterministic for replay?
+tests:
+- name: rest then best bid and ask
+  tags:
+  - single
+  - empty
+  code: |
+    OrderBook b;
+    CHECK(!b.best_bid().has_value());
+    CHECK(!b.best_ask().has_value());
+    auto r1 = b.limit(Side::Buy, 100, 10);
+    auto r2 = b.limit(Side::Sell, 105, 5);
+    CHECK_EQ(r1.id, 1u);
+    CHECK_EQ(r2.id, 2u);
+    CHECK(r1.fills.empty() && r2.fills.empty());
+    CHECK_EQ(*b.best_bid(), 100);
+    CHECK_EQ(*b.best_ask(), 105);
+- name: full match trades at the resting price
+  tags:
+  - single
+  - boundary
+  code: |
+    OrderBook b;
+    auto s = b.limit(Side::Sell, 100, 10);
+    auto r = b.limit(Side::Buy, 105, 10);   // willing to pay 105, trades at the resting 100
+    std::vector<Fill> want = {{s.id, 100, 10}};
+    CHECK(r.fills == want);
+    CHECK(!b.best_ask().has_value());
+    CHECK(!b.best_bid().has_value());
+    CHECK_EQ(r.id, 2u);
+- name: price-time priority within a level
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    OrderBook b;
+    auto a = b.limit(Side::Sell, 100, 5);
+    auto c = b.limit(Side::Sell, 100, 5);
+    auto r = b.limit(Side::Buy, 100, 7);
+    std::vector<Fill> want = {{a.id, 100, 5}, {c.id, 100, 2}};
+    CHECK(r.fills == want);
+    std::vector<PriceLevel> d = {{100, 3}};
+    CHECK(b.depth(Side::Sell) == d);
+- name: walks levels best price first
+  tags:
+  - ordering
+  - scale
+  code: |
+    OrderBook b;
+    auto a = b.limit(Side::Sell, 102, 4);
+    auto c = b.limit(Side::Sell, 101, 4);
+    auto e = b.limit(Side::Sell, 103, 4);
+    auto r = b.limit(Side::Buy, 102, 10);   // 101 then 102; 103 is beyond the limit
+    std::vector<Fill> want = {{c.id, 101, 4}, {a.id, 102, 4}};
+    CHECK(r.fills == want);
+    CHECK_EQ(*b.best_bid(), 102);           // remainder of 2 rests
+    CHECK_EQ(*b.best_ask(), 103);
+    std::vector<PriceLevel> bids = {{102, 2}};
+    CHECK(b.depth(Side::Buy) == bids);
+    (void)e;
+- name: sell side matches highest bid first
+  tags:
+  - ordering
+  code: |
+    OrderBook b;
+    auto lo = b.limit(Side::Buy, 98, 5);
+    auto hi = b.limit(Side::Buy, 99, 5);
+    auto r = b.limit(Side::Sell, 98, 8);
+    std::vector<Fill> want = {{hi.id, 99, 5}, {lo.id, 98, 3}};
+    CHECK(r.fills == want);
+    std::vector<PriceLevel> d = {{98, 2}};
+    CHECK(b.depth(Side::Buy) == d);
+- name: non-crossing orders rest without trading
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    OrderBook b;
+    b.limit(Side::Sell, 101, 5);
+    auto r = b.limit(Side::Buy, 100, 5);
+    CHECK(r.fills.empty());
+    CHECK_EQ(*b.best_bid(), 100);
+    CHECK_EQ(*b.best_ask(), 101);
+    b.limit(Side::Buy, 100, 3);
+    std::vector<PriceLevel> d = {{100, 8}};
+    CHECK(b.depth(Side::Buy) == d);
+- name: market order sweeps and discards leftovers
+  tags:
+  - boundary
+  - single
+  code: |
+    OrderBook b;
+    auto a = b.limit(Side::Sell, 100, 3);
+    auto c = b.limit(Side::Sell, 101, 3);
+    auto fills = b.market(Side::Buy, 10);
+    std::vector<Fill> want = {{a.id, 100, 3}, {c.id, 101, 3}};
+    CHECK(fills == want);
+    CHECK(!b.best_bid().has_value());       // leftover 4 is discarded, never rests
+    CHECK(!b.best_ask().has_value());
+    auto next = b.limit(Side::Buy, 90, 1);
+    CHECK_EQ(next.id, 3u);                  // market consumed no id
+    CHECK(b.market(Side::Sell, 5).size() == 1u);
+- name: cancel semantics
+  tags:
+  - invalid
+  - state-reuse
+  - duplicate
+  code: |
+    OrderBook b;
+    auto a = b.limit(Side::Buy, 100, 5);
+    auto c = b.limit(Side::Buy, 100, 5);
+    CHECK(b.cancel(a.id));
+    CHECK(!b.cancel(a.id));                 // already cancelled
+    CHECK(!b.cancel(999));                  // unknown
+    auto r = b.limit(Side::Sell, 100, 5);
+    CHECK_EQ(r.fills.size(), 1u);
+    CHECK_EQ(r.fills[0].order_id, c.id);
+    CHECK(!b.cancel(c.id));                 // fully filled
+    CHECK(!b.best_bid().has_value());
+- name: cancel removes an empty level
+  tags:
+  - empty
+  - state-reuse
+  code: |
+    OrderBook b;
+    auto a = b.limit(Side::Sell, 105, 5);
+    auto c = b.limit(Side::Sell, 106, 5);
+    CHECK(b.cancel(a.id));
+    CHECK_EQ(*b.best_ask(), 106);
+    CHECK(b.cancel(c.id));
+    CHECK(!b.best_ask().has_value());
+    CHECK(b.depth(Side::Sell).empty());
+- name: rejects bad input without consuming ids
+  hidden: true
+  tags:
+  - invalid
+  code: |
+    OrderBook b;
+    CHECK_THROWS(b.limit(Side::Buy, 0, 5));
+    CHECK_THROWS(b.limit(Side::Buy, -3, 5));
+    CHECK_THROWS(b.limit(Side::Sell, 100, 0));
+    CHECK_THROWS(b.market(Side::Buy, 0));
+    auto r = b.limit(Side::Buy, 100, 1);
+    CHECK_EQ(r.id, 1u);
+- name: partially filled resting order keeps its queue position
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    OrderBook b;
+    auto a = b.limit(Side::Sell, 100, 10);
+    auto c = b.limit(Side::Sell, 100, 10);
+    b.limit(Side::Buy, 100, 4);             // a now has 6 left but must still be ahead of c
+    auto r = b.limit(Side::Buy, 100, 8);
+    std::vector<Fill> want = {{a.id, 100, 6}, {c.id, 100, 2}};
+    CHECK(r.fills == want);
+- name: cancel scales with a long queue
+  hidden: true
+  tags:
+  - scale
+  code: |
+    OrderBook b;
+    std::vector<std::uint64_t> ids;
+    for (int i = 0; i < 60000; i++) ids.push_back(b.limit(Side::Buy, 100, 1).id);
+    for (int i = 59999; i >= 0; i -= 2) CHECK(b.cancel(ids[i]));
+    for (int i = 0; i < 60000; i += 2) CHECK(b.cancel(ids[i]));
+    CHECK(!b.best_bid().has_value());
+- name: large sweep stays fast
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    OrderBook b;
+    for (int i = 0; i < 50000; i++) b.limit(Side::Sell, 100 + i % 100, 1);
+    auto fills = b.market(Side::Buy, 50000);
+    CHECK_EQ(fills.size(), 50000u);
+    CHECK(fills.front().price == 100 && fills.back().price == 199);
+    for (std::size_t i = 1; i < fills.size(); i++) CHECK(fills[i - 1].price <= fills[i].price);
+    CHECK(!b.best_ask().has_value());
+complexity:
+- op: limit (no fills)
+  time: O(log L)
+  space: O(1)
+- op: limit (k fills)
+  time: O(k + log L)
+  space: O(k)
+- op: cancel
+  time: O(log L)
+  space: O(1)
+- op: depth
+  time: O(n)
+  space: O(L)
+- op: book
+  time: O(log L)
+  space: O(n)
+extensions:
+- q: What is the cost of each operation, and what dominates in practice?
+  kind: complexity
+  key_points:
+  - Add/cancel are O(log L) for the map access to the level, L being the number of distinct price levels;
+    best price is O(1) via begin()
+  - Matching is O(k) for k fills plus O(log L) per level erased
+  - In practice cache misses from node-based map and list dominate, not the logarithm
+- q: Replace std::map with something faster for a tick-sized price grid.
+  kind: design
+  key_points:
+  - Flat array (or ring) of levels indexed by (price - base) / tick gives O(1) level access and contiguous
+    memory
+  - Track best bid/ask with an index that is only recomputed when the best level empties
+  - Orders live in a pre-allocated pool linked intrusively by index, so no allocation on the hot path
+- q: Why is the matching order a property you must test, and what breaks it?
+  kind: reasoning
+  key_points:
+  - Price-time priority means a partially filled order keeps its place at the front of its level
+  - Re-inserting a partially filled order at the back is a subtle priority bug that tests miss
+  - A cancel/replace that raises quantity must lose priority; one that lowers it may keep it
+- q: What are the thread-safety and determinism requirements?
+  kind: design
+  key_points:
+  - 'A matching engine is single-threaded by design: one sequencer thread gives a total order of events
+    and deterministic replay'
+  - Inputs arrive through a SPSC/MPSC queue; outputs (fills) go out through another
+  - 'Avoid anything non-deterministic on the hot path: unordered_map iteration order, pointers as keys,
+    wall-clock time'
+narration: []
+state_aloud:
+- Fills execute at the resting order's price, not the incoming limit price.
+- 'Crossing is inclusive: a buy at the best ask price trades.'
+- A partially filled resting order keeps its queue position; empty levels must be erased so best_bid/ask
+  are correct.
+- Rejected orders and market orders consume no id; cancel of an unknown or filled id returns false.
+walkthrough: |
+  Two sorted `std::map`s (bids with `std::greater<>`) put the best price at `begin()`, each level is a FIFO `std::list`, and an `unordered_map` from id to list iterator gives O(1) cancel because list iterators survive unrelated erases. One templated `sweep` consumes crossing levels for both sides. Python would reach for a heap plus lazy deletion; C++ ordered containers and stable iterators let you delete eagerly and keep the book exact.
+anki_queries: []
+categories:
+- trading

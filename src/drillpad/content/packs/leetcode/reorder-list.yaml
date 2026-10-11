@@ -1,0 +1,128 @@
+id: reorder-list
+title: Reorder List
+bar_level: 2
+target_minutes: 22
+patterns:
+- linked-list
+- two-pointers
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Reorder List (LC 143)"
+statement: |
+  Given the head of a singly linked list `L0 -> L1 -> ... -> Ln`, rearrange it in place into `L0 -> Ln -> L1 -> Ln-1 -> L2 -> Ln-2 -> ...`. You may only relink nodes, not change their values. The function returns nothing; the caller keeps the original head. `ListNode`, `build_list` and `to_list` are provided.
+
+  Example: `[1,2,3,4]` becomes `[1,4,2,3]`, and `[1,2,3,4,5]` becomes `[1,5,2,4,3]`.
+prelude: |
+  class ListNode:
+      def __init__(self, val=0, next=None):
+          self.val = val
+          self.next = next
+
+  def build_list(vals):
+      head = None
+      for v in reversed(vals):
+          head = ListNode(v, head)
+      return head
+
+  def to_list(head):
+      out = []
+      while head:
+          out.append(head.val)
+          head = head.next
+      return out
+starter: |
+  def reorder_list(head):
+      pass
+hints:
+- The second half, reversed, is exactly the sequence of nodes you need to interleave.
+- Find the middle with slow and fast pointers, then cut the list there.
+- Reverse the second half in place, then weave the two halves one node at a time.
+follow_ups:
+- Can you do it without extra O(n) memory?
+- What changes if the list is doubly linked?
+tests:
+- name: even length
+  tags:
+  - ordering
+  code: |
+    h = build_list([1,2,3,4]); reorder_list(h)
+    assert to_list(h) == [1,4,2,3]
+- name: odd length
+  tags:
+  - boundary
+  code: |
+    h = build_list([1,2,3,4,5]); reorder_list(h)
+    assert to_list(h) == [1,5,2,4,3]
+- name: empty and single
+  tags:
+  - empty
+  - single
+  code: |
+    reorder_list(None)
+    h = build_list([7]); reorder_list(h)
+    assert to_list(h) == [7]
+    h = build_list([1,2,3]); reorder_list(h)
+    assert to_list(h) == [1,3,2]
+- name: two nodes
+  tags:
+  - boundary
+  code: |
+    h = build_list([1,2]); reorder_list(h)
+    assert to_list(h) == [1,2]
+    h = build_list([1,2,3,4,5,6]); reorder_list(h)
+    assert to_list(h) == [1,6,2,5,3,4]
+- name: duplicate values
+  tags:
+  - duplicate
+  code: |
+    h = build_list([5,5,1,1]); reorder_list(h)
+    assert to_list(h) == [5,1,5,1]
+- name: long list
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 100000
+    h = build_list(list(range(n))); reorder_list(h)
+    exp = []
+    lo, hi, take_lo = 0, n - 1, True
+    while lo <= hi:
+        if take_lo:
+            exp.append(lo); lo += 1
+        else:
+            exp.append(hi); hi -= 1
+        take_lo = not take_lo
+    assert to_list(h) == exp
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why not walk to the tail for every insertion?
+  kind: complexity
+  key_points:
+  - Walking to the tail is O(n) each time
+  - That makes the whole reorder O(n^2)
+  - Reversing the back half once keeps it O(n)
+- q: Alternative using extra space?
+  kind: design
+  key_points:
+  - Push all nodes in an array and index from both ends
+  - O(n) time but O(n) extra space
+  - Or a stack holding only the second half
+- q: Why does the middle split matter for odd lengths?
+  kind: reasoning
+  key_points:
+  - Slow ends at the true middle for odd length
+  - The first half may be one node longer than the second
+  - Cut with slow.next = None to avoid a cycle
+narration: []
+state_aloud:
+- Empty list, single node, two nodes.
+- Odd versus even length changes where the split lands.
+- Mutating in place and returning nothing.
+- Terminate the first half with None to avoid a cycle.
+walkthrough: |
+  Find the middle with slow/fast pointers and cut the list after it. Reverse the second half in place. Then merge: take one node from the first half, one from the reversed second half, repeating until the second half is empty. The first half is never shorter than the second, so the leftover middle node stays last. It runs in linear time using constant extra space.

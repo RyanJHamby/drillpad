@@ -1,0 +1,98 @@
+id: task-scheduler
+title: Task Scheduler
+bar_level: 2
+target_minutes: 22
+patterns:
+- heap-top-k
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Task Scheduler (LC 621)"
+statement: |
+  A CPU runs one task per time unit, or sits idle. Tasks are labelled by single uppercase letters (given as a list). Two runs of the same label must be separated by at least `n` other time units (each either another task or idle). Tasks may run in any order. Return the minimum total number of time units needed to finish all tasks.
+
+  Example: `least_interval(["A","A","A","B","B","B"], 2)` returns `8` (A B idle A B idle A B).
+starter: |
+  def least_interval(tasks, n):
+      pass
+hints:
+- The most frequent task determines the skeleton of the schedule.
+- Frames of size n + 1, one per occurrence of the most frequent task except the last, give the minimum
+  length.
+- Other tasks fill the gaps; if there are more tasks than slots the answer is just len(tasks).
+follow_ups:
+- Output the actual schedule.
+- Tasks have a cooldown that differs per label.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert least_interval(["A","A","A","B","B","B"], 2) == 8
+- name: no cooldown
+  tags:
+  - zero-capacity
+  code: |
+    assert least_interval(["A","A","A","B","B","B"], 0) == 6
+- name: idle dominated
+  tags:
+  - boundary
+  code: |
+    assert least_interval(["A","A","A","A","A","A","B","C","D","E","F","G"], 2) == 16
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert least_interval([], 3) == 0
+    assert least_interval(["A"], 3) == 1
+- name: single task repeated
+  tags:
+  - single
+  code: |
+    assert least_interval(["A","A","A"], 2) == 7
+- name: several tasks share the maximum
+  tags:
+  - duplicate
+  code: |
+    assert least_interval(["A","A","B","B","C","C"], 2) == 6
+    assert least_interval(["A","A","A","B","B","B","C","C","D","D"], 2) == 10
+- name: large input
+  hidden: true
+  tags:
+  - scale
+  code: |
+    assert least_interval(["A"] * 50000 + ["B"] * 50000, 1) == 100000
+    assert least_interval(["A"] * 50000 + ["B"], 2) == 149998
+    assert least_interval(["A"] * 100000, 0) == 100000
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Derive the closed form.
+  kind: reasoning
+  key_points:
+  - maxf - 1 full frames of length n + 1 plus the final partial frame
+  - The final frame holds one slot per task tied for the max frequency
+  - Answer is max(len(tasks), that value)
+- q: Complexity?
+  kind: complexity
+  key_points:
+  - Counting is O(n)
+  - Only 26 letters so counts take O(1) space
+  - A heap simulation costs O(n log 26), effectively linear
+- q: Produce the schedule?
+  kind: design
+  key_points:
+  - Simulate with a max-heap of counts and a cooldown queue
+  - Each tick pop the best available, push it to cooldown with a ready time
+  - Insert idle when nothing is ready
+narration: []
+state_aloud:
+- n = 0 means no idling.
+- Empty task list.
+- Ties for the most frequent task.
+- Idle slots are only needed when tasks run out.
+walkthrough: |
+  Count task frequencies and find the maximum frequency `maxf` and how many tasks share it. The most frequent task forces `maxf - 1` frames of `n + 1` slots followed by a final row of the tied tasks. If the number of tasks exceeds that length, no idles are needed and the answer is `len(tasks)`; otherwise it is `(maxf - 1) * (n + 1) + ties`.

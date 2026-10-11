@@ -1,0 +1,91 @@
+id: minimum-window-substring
+title: Minimum Window Substring
+bar_level: 3
+target_minutes: 40
+patterns:
+- sliding-window
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Minimum Window Substring (LC 76)"
+statement: |
+  Given strings `s` and `t`, return the shortest contiguous substring of `s` that contains every character of `t` (respecting multiplicity). If no such substring exists return the empty string. If several shortest windows exist, any is fine in an interview; here the tests only use inputs with a unique answer.
+
+  Example: `min_window("ADOBECODEBANC", "ABC")` returns `"BANC"`.
+starter: |
+  def min_window(s, t):
+      pass
+hints:
+- Count what t needs, then expand a right pointer until the window satisfies all needs.
+- Once satisfied, shrink from the left while it stays satisfied and record the best.
+- Keep a single 'missing' counter so you do not re-check every letter each step.
+follow_ups:
+- How do you handle t containing duplicates?
+- What if t is huge versus s?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert min_window('ADOBECODEBANC','ABC')=='BANC'
+- name: whole string
+  tags:
+  - single
+  code: |
+    assert min_window('a','a')=='a'
+- name: multiplicity needed
+  tags:
+  - duplicate
+  code: |
+    assert min_window('a','aa')==''
+    assert min_window('aab','aab')=='aab'
+- name: no window
+  tags:
+  - invalid
+  code: |
+    assert min_window('abc','d')==''
+- name: empty target or source
+  tags:
+  - empty
+  code: |
+    assert min_window('','a')==''
+    assert min_window('abc','')==''
+- name: long input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    s='x'*100000+'ABC'+'y'*100000
+    assert min_window(s,'CBA')=='ABC'
+complexity:
+- op: overall
+  time: O(n + m)
+  space: O(k)
+extensions:
+- q: Why linear?
+  kind: complexity
+  key_points:
+  - Right pointer visits each char once
+  - Left pointer only moves forward
+  - Space is the distinct characters of t
+- q: Streaming s, can't store it
+  kind: design
+  key_points:
+  - Need to keep the window contents, so memory is window length
+  - Could keep deque of positions of relevant chars only
+  - 'Tradeoff: output requires the substring, return indices instead'
+- q: Why a missing counter instead of comparing maps?
+  kind: reasoning
+  key_points:
+  - Comparing dicts is O(k) per step
+  - Counter changes only when a needed char crosses zero
+  - Gives O(1) satisfied check
+narration: []
+state_aloud:
+- 'Empty t: define the answer (here empty string).'
+- t longer than s.
+- Characters needed more than once.
+walkthrough: |
+  Build a count of required characters and a `missing` total. Advance the right pointer, decrementing the need for each character and the missing counter when the character was still needed. When `missing` hits zero the window is valid, so advance the left pointer as far as possible while keeping it valid, recording the shortest window, then release one needed character and continue. Both pointers move monotonically, giving O(n + m).

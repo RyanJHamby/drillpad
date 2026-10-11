@@ -1,0 +1,160 @@
+id: asof-join
+title: As-of Join of Two Time Series
+bar_level: 3
+target_minutes: 30
+patterns:
+- two-pointers
+- merge
+- time-series
+- as-of-join
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement a backward **as-of join**, the standard way to attach "the quote in force" to each trade.
+
+  `asof_join(left, right, tolerance=None, allow_exact=True) -> list[tuple]`
+
+  `left` and `right` are lists of `(ts, payload)` sorted by integer `ts` (non-decreasing). For every left row, find the
+  LAST right row whose timestamp is at or before the left timestamp and return
+  `(left_ts, left_payload, right_payload_or_None)`, one output row per left row, in left order.
+
+  - `allow_exact=True`: a right row with `ts == left_ts` is eligible. If False, only strictly earlier right rows count.
+  - `tolerance`: if not None, the match is only valid when `left_ts - right_ts <= tolerance`; otherwise the right value
+    is `None` (do NOT fall back to an older row; the latest eligible row is the only candidate).
+  - If several right rows share the same timestamp, the LAST of them in input order wins.
+  - No eligible right row gives `None`. Empty `left` gives `[]`.
+  - If `left` is not sorted, raise `ValueError` (right is guaranteed sorted).
+
+  Use a single merge-style pass (two pointers): O(n + m), not a binary search or scan per row, and no sorting.
+starter: |
+  def asof_join(left, right, tolerance=None, allow_exact=True):
+      pass
+hints:
+- Both lists are sorted, so a single pointer j into right only moves forward as left timestamps grow.
+- For each left row, advance j while right[j].ts <= left.ts (or < when allow_exact is False); then right[j-1]
+  is the latest eligible row.
+- Tolerance only checks that one candidate. Equal right timestamps are handled for free because the pointer
+  moves past all of them, leaving the last.
+follow_ups:
+- How would you do this per symbol (group-by key) in one pass?
+- What changes for a forward as-of join (next quote after the trade)?
+- How would you compute it when right does not fit in memory?
+tests:
+- name: basic as-of match
+  code: |
+    trades = [(10, "t1"), (20, "t2"), (30, "t3")]
+    quotes = [(5, "qa"), (15, "qb"), (25, "qc")]
+    assert asof_join(trades, quotes) == [(10, "t1", "qa"), (20, "t2", "qb"), (30, "t3", "qc")]
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: before first quote and empty inputs
+  code: |
+    assert asof_join([(1, "a")], [(5, "q")]) == [(1, "a", None)]
+    assert asof_join([(1, "a"), (6, "b")], []) == [(1, "a", None), (6, "b", None)]
+    assert asof_join([], [(1, "q")]) == []
+    assert asof_join([], []) == []
+  hidden: false
+  tags:
+  - empty
+  - boundary
+- name: exact timestamp handling
+  code: |
+    q = [(10, "q10"), (20, "q20")]
+    assert asof_join([(10, "t"), (20, "u")], q) == [(10, "t", "q10"), (20, "u", "q20")]
+    assert asof_join([(10, "t"), (20, "u")], q, allow_exact=False) == [(10, "t", None), (20, "u", "q10")]
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: tolerance does not fall back to older rows
+  code: |
+    q = [(0, "old"), (10, "newer")]
+    t = [(12, "a"), (30, "b"), (3, "c")]
+    t.sort()
+    assert asof_join(t, q, tolerance=5) == [(3, "c", "old"), (12, "a", "newer"), (30, "b", None)]
+    assert asof_join([(15, "x")], q, tolerance=5) == [(15, "x", "newer")]
+    assert asof_join([(16, "x")], q, tolerance=5) == [(16, "x", None)]
+    assert asof_join([(10, "x")], [(10, "q")], tolerance=0) == [(10, "x", "q")]
+  hidden: false
+  tags:
+  - boundary
+  - time
+- name: duplicate timestamps on both sides
+  code: |
+    q = [(5, "first"), (5, "second"), (9, "nine")]
+    assert asof_join([(5, "a"), (5, "b"), (7, "c")], q) == [(5, "a", "second"), (5, "b", "second"), (7, "c", "second")]
+    assert asof_join([(5, "a")], q, allow_exact=False) == [(5, "a", None)]
+  hidden: false
+  tags:
+  - duplicate
+  - ordering
+- name: unsorted left is rejected
+  code: |
+    try:
+        asof_join([(5, "a"), (3, "b")], [(1, "q")])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unsorted left")
+    assert asof_join([(3, "b"), (5, "a")], [(1, "q")]) == [(3, "b", "q"), (5, "a", "q")]
+  hidden: true
+  tags:
+  - invalid
+  - ordering
+- name: 'scale: 200k trades against 200k quotes'
+  code: |
+    n = 200000
+    left = [(i * 2 + 1, i) for i in range(n)]
+    right = [(i * 3, i) for i in range(n)]
+    out = asof_join(left, right)
+    assert len(out) == n
+    for i in (0, 1, 1000, n - 1):
+        ts = i * 2 + 1
+        assert out[i][2] == min(ts // 3, n - 1)
+    out2 = asof_join(left, right, tolerance=2)
+    assert out2[0][2] == 0 and out2[-1][2] == (2 * n - 1) // 3
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: asof_join
+  time: O(n + m)
+  space: O(n)
+extensions:
+- q: 'Level 2: add a `by` key so each trade only matches quotes for its own symbol.'
+  key_points:
+  - Keep a dict symbol -> latest quote while merging, updated as the right pointer advances
+  - 'Still one pass over both lists: O(n + m) with O(S) extra state'
+  - Tolerance and allow_exact semantics apply per symbol
+  kind: code
+- q: 'Level 3: add direction="forward" and "nearest" matching.'
+  key_points:
+  - 'Forward: first right row at or after the left timestamp (pointer without the j-1 step)'
+  - 'Nearest: compare the backward and forward candidates, deciding ties explicitly'
+  - Tolerance applies to the absolute gap for nearest
+  kind: code
+- q: Compare the two-pointer merge with binary search per row and with a hash approach.
+  key_points:
+  - 'Two pointers: O(n + m) total, best when both sides are large and sorted'
+  - 'Binary search per left row: O(n log m), better when n << m'
+  - Hashing exact timestamps cannot express "latest at or before" without sorting anyway
+  kind: complexity
+- q: 'Design: why is as-of joining central to trade analysis and how do you keep it correct?'
+  key_points:
+  - Quote and trade clocks must be aligned (exchange vs capture timestamps), otherwise you join with look-ahead
+  - Use backward joins for TCA so a trade never sees a quote from its own future
+  - Document tie rules (allow_exact, last-wins) since they change slippage numbers
+  kind: design
+narration: []
+state_aloud:
+- 'Right rows at the same timestamp: the last in input order wins.'
+- Tolerance never falls back to older quotes; allow_exact controls whether equal timestamps match.
+- No quote yet gives None; empty left gives an empty list; backward-only (no look-ahead).
+walkthrough: |
+  Standard formulation (pandas.merge_asof, direction="backward"). Both inputs are sorted so one forward-moving pointer into the quotes gives O(n + m). Used for trade-vs-quote analysis in quant data pipelines; no specific doc problem.
+categories:
+- trading

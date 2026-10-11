@@ -1,0 +1,107 @@
+id: best-time-buy-sell-stock
+title: Best Time to Buy/Sell Stock (I)
+bar_level: 1
+target_minutes: 10
+patterns:
+- running-minimum
+- single-pass
+- kadane-variant
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  `max_profit(prices) -> int`: given a list of int prices (one per day), choose ONE day to buy and a LATER day to sell
+  (strictly after the buy day) and return the maximum profit. If no profitable trade exists (or fewer than 2 days),
+  return 0 (you may choose not to trade). Prices are non-negative ints.
+
+  Must be O(n): an all-pairs scan on a long series times out.
+starter: |
+  def max_profit(prices):
+      pass
+hints:
+- Track the lowest price seen so far as you scan left to right.
+- At each day the best sale today is price - min_so_far; keep the maximum of that.
+- Update the running minimum after computing the candidate profit, or you can sell on the same day you
+  bought (profit 0, harmless).
+follow_ups:
+- How would you also return the buy/sell days?
+- What if you may do unlimited trades? (see II)
+- Relate this to maximum subarray on price differences.
+tests:
+- name: typical
+  code: |
+    assert max_profit([7, 1, 5, 3, 6, 4]) == 5
+    assert max_profit([1, 2]) == 1
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: never profitable
+  code: |
+    assert max_profit([7, 6, 4, 3, 1]) == 0
+    assert max_profit([5, 5, 5]) == 0
+  hidden: false
+  tags:
+  - duplicate
+  - boundary
+- name: empty and one day
+  code: |
+    assert max_profit([]) == 0
+    assert max_profit([10]) == 0
+  hidden: false
+  tags:
+  - empty
+  - single
+- name: minimum after the maximum
+  code: |
+    assert max_profit([10, 100, 1, 2]) == 90
+    assert max_profit([3, 3, 1, 4]) == 3
+    assert max_profit([0, 5]) == 5
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: 'scale: 1M days'
+  code: |
+    n = 1000000
+    prices = [(i * 7919) % 10007 + 100 for i in range(n)]
+    got = max_profit(prices)
+    assert got > 9000
+    assert max_profit(list(range(n, 0, -1))) == 0
+    assert max_profit(list(range(n))) == n - 1
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: max_profit
+  time: O(n)
+  space: O(1)
+extensions:
+- q: 'Level 2: return (profit, buy_day, sell_day) with the earliest buy for ties.'
+  key_points:
+  - Track the index of the running minimum alongside its value
+  - Update best only on strict improvement so the earliest pair wins
+  - Return (0, -1, -1) or None-days when no profit is possible
+  kind: code
+- q: Complexity versus the brute-force approach.
+  key_points:
+  - Brute force is O(n^2) pairs
+  - One pass with a running minimum is O(n) time and O(1) space
+  - Equivalent to Kadane on daily differences
+  kind: complexity
+- q: 'Design: backtesting a "best possible trade" benchmark.'
+  key_points:
+  - It is an oracle with perfect hindsight, so use it only as an upper bound for strategy efficiency
+  - 'No fees or slippage here: real PnL needs a cost model and position limits'
+  - Streaming version keeps only the running min and best, so it works on a live feed
+  kind: design
+narration: []
+state_aloud:
+- Sell must be strictly after buy; no trade means profit 0.
+- Empty and single-day inputs return 0.
+- One pass with O(1) extra space.
+walkthrough: |
+  Standard LeetCode 121 (Best Time to Buy and Sell Stock). Single scan maintaining the minimum price so far and the best profit. Source: standard formulation.
+categories:
+- trading

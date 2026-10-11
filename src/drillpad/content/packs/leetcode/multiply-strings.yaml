@@ -1,0 +1,101 @@
+id: multiply-strings
+title: Multiply Strings
+bar_level: 2
+target_minutes: 25
+patterns:
+- math
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Given two non-negative integers as decimal strings `num1` and `num2` (no leading zeros except `"0"` itself), return their product as a string. Do not convert the strings to integers with `int()` and do not use big-integer arithmetic on whole numbers; multiply digit by digit.
+
+  Example: `multiply("123", "456")` returns `"56088"`.
+starter: |
+  def multiply(num1, num2):
+      pass
+hints:
+- 'Grade-school multiplication: each digit pair contributes to a known position.'
+- The product of digits i (from the left in num1) and j (num2) lands in positions i+j and i+j+1 of a result array of length len1+len2.
+- Accumulate into an int array, propagate carries once, then strip leading zeros (keep a single '0' if the product is zero).
+follow_ups:
+- 'Karatsuba: when does it beat schoolbook?'
+- Add two such strings (Add Strings).
+tests:
+- name: small
+  tags:
+  - boundary
+  code: |
+    assert multiply('2','3') == '6'
+    assert multiply('123','456') == '56088'
+- name: zero
+  tags:
+  - zero-capacity
+  code: |
+    assert multiply('0','12345') == '0'
+    assert multiply('999','0') == '0'
+    assert multiply('0','0') == '0'
+- name: carry chain
+  tags:
+  - boundary
+  code: |
+    assert multiply('99','99') == '9801'
+    assert multiply('999999','999999') == '999998000001'
+- name: one is identity
+  tags:
+  - single
+  code: |
+    assert multiply('1','8675309') == '8675309'
+- name: lengths differ widely
+  tags:
+  - ordering
+  code: |
+    assert multiply('9','1234567890123456789') == '11111111011111111101'
+  hidden: true
+- name: result digit count equals sum of lengths minus one when no overflow
+  tags:
+  - duplicate
+  code: |
+    assert multiply('10','10') == '100'
+    assert multiply('100','1000') == '100000'
+  hidden: true
+- name: large operands
+  tags:
+  - scale
+  code: |
+    a = '7' * 1800
+    b = '9' * 1700
+    assert multiply(a, b) == str(int(a) * int(b))
+    assert multiply('1' + '0' * 2000, '1' + '0' * 2000) == '1' + '0' * 4000
+  hidden: true
+complexity:
+- op: overall
+  time: O(n * m)
+  space: O(n + m)
+extensions:
+- q: Why is the result at most len1 + len2 digits?
+  kind: reasoning
+  key_points:
+  - num1 < 10^len1 and num2 < 10^len2 so the product < 10^(len1+len2)
+  - Position i+j+1 receives the low digit and i+j receives the carry
+  - Leading zeros can appear and must be stripped
+- q: Complexity and a faster alternative.
+  kind: complexity
+  key_points:
+  - 'Schoolbook: O(n*m) time, O(n+m) space'
+  - 'Karatsuba: O(n^1.585) with three recursive multiplies of half size'
+  - 'FFT/NTT-based: O(n log n) for very large operands'
+- q: 'Design: arbitrary precision library.'
+  kind: design
+  key_points:
+  - Store limbs in a larger base such as 10^9 or 2^32 to cut work
+  - Handle sign and zero separately
+  - 'Pick algorithm by size thresholds: schoolbook, then Karatsuba, then FFT'
+narration: []
+state_aloud:
+- Either operand may be '0'.
+- Strip leading zeros of the result.
+- No int() conversion of the whole strings.
+walkthrough: |
+  Allocate an int array of length len1+len2. For each digit pair multiply and add into the cell at i+j+1, then push the carry into cell i+j. After all pairs, convert to a string and strip leading zeros, returning "0" when everything is zero. Work is proportional to the product of the lengths.

@@ -1,0 +1,93 @@
+id: letter-combinations-phone
+title: Letter Combinations of a Phone Number
+bar_level: 2
+target_minutes: 22
+patterns:
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  A phone keypad maps digits to letters: 2 to "abc", 3 to "def", 4 to "ghi", 5 to "jkl", 6 to "mno", 7 to "pqrs", 8 to "tuv", 9 to "wxyz". Given a string `digits` containing only the digits 2 to 9, return every letter string it could spell, one letter per digit. Any order is fine. An empty input produces an empty list.
+
+  Example: `letter_combinations("23")` returns `["ad","ae","af","bd","be","bf","cd","ce","cf"]` in some order.
+starter: |
+  def letter_combinations(digits):
+      pass
+hints:
+- Each digit is a level in a decision tree and each of its letters is a branch.
+- Build a prefix string; when its length equals len(digits) record it.
+- 'Special case: empty digits must return [] and not [''''].'
+follow_ups:
+- Return results in lexicographic order.
+- Handle the digits 0 and 1 as separators or wildcards.
+tests:
+- name: two digits
+  tags:
+  - ordering
+  code: |
+    r=letter_combinations("23")
+    assert sorted(r)==["ad","ae","af","bd","be","bf","cd","ce","cf"]
+- name: single digit
+  tags:
+  - single
+  code: |
+    assert sorted(letter_combinations("2"))==["a","b","c"]
+- name: empty input
+  tags:
+  - empty
+  code: |
+    assert letter_combinations("")==[]
+- name: four-letter keys
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    r=letter_combinations("79")
+    assert len(r)==16 and len(set(r))==16
+    assert sorted(letter_combinations("7"))==["p","q","r","s"]
+- name: repeated digit
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    r=letter_combinations("22")
+    assert sorted(r)==sorted(a+b for a in "abc" for b in "abc")
+- name: eight digits
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=letter_combinations("79797979")
+    assert len(r)==4**8 and len(set(r))==4**8
+complexity:
+- op: overall
+  time: O(4^n * n)
+  space: O(n)
+extensions:
+- q: What is the size of the output?
+  kind: complexity
+  key_points:
+  - Product of letters per digit, at most 4^n
+  - Each string costs O(n) to build
+  - Extra space is O(n) for recursion and the prefix
+- q: Do it iteratively.
+  kind: code
+  key_points:
+  - Start with ['']
+  - For each digit replace the list by all prefix+letter pairs
+  - BFS-like, builds level by level, same total cost
+- q: How would you serve this as an autocomplete over a dictionary?
+  kind: design
+  key_points:
+  - Walk a trie alongside the digit choices
+  - Prune branches that are not a prefix of any word
+  - Cost is bounded by the dictionary instead of 4^n
+narration: []
+state_aloud:
+- Empty digits returns [] not [''].
+- Digits 7 and 9 have four letters.
+- Only digits 2-9 appear.
+walkthrough: |
+  Map each digit to its letters and recurse over the digit index while carrying the string built so far. When the index equals the number of digits, append the string. Otherwise iterate through the letters for the current digit and recurse. The empty input is handled before any recursion so that it returns an empty list rather than a list holding the empty string.

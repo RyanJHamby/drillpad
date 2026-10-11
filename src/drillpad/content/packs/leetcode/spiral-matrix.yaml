@@ -1,0 +1,118 @@
+id: spiral-matrix
+title: Spiral Matrix
+bar_level: 2
+target_minutes: 20
+patterns:
+- matrix-simulation
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Given an `m x n` matrix, return all its elements in clockwise spiral order, starting at the top-left cell. The input is not modified.
+
+  Example: `spiral_order([[1,2,3],[4,5,6],[7,8,9]])` returns `[1,2,3,6,9,8,7,4,5]`.
+starter: |
+  def spiral_order(matrix):
+      pass
+hints:
+- 'Peel the matrix one ring at a time: top row, right column, bottom row, left column.'
+- Keep four boundaries top, bottom, left, right and shrink them after each side.
+- After the top and right sides, re-check top <= bottom and left <= right before the bottom and left sides, or single rows and columns get visited twice.
+follow_ups:
+- Generate the spiral for an n x n matrix filled with 1..n^2.
+- Counter-clockwise from the bottom-right.
+tests:
+- name: 3x3
+  tags:
+  - boundary
+  code: |
+    assert spiral_order([[1,2,3],[4,5,6],[7,8,9]]) == [1,2,3,6,9,8,7,4,5]
+- name: 3x4
+  tags:
+  - boundary
+  code: |
+    assert spiral_order([[1,2,3,4],[5,6,7,8],[9,10,11,12]]) == [1,2,3,4,8,12,11,10,9,5,6,7]
+- name: single row
+  tags:
+  - single
+  code: |
+    assert spiral_order([[1,2,3]]) == [1,2,3]
+- name: single column
+  tags:
+  - single
+  code: |
+    assert spiral_order([[1],[2],[3]]) == [1,2,3]
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert spiral_order([]) == []
+    assert spiral_order([[]]) == []
+- name: tall matrix has no double visits
+  tags:
+  - boundary
+  code: |
+    assert spiral_order([[1,2],[3,4],[5,6],[7,8]]) == [1,2,4,6,8,7,5,3]
+  hidden: true
+- name: duplicates values and 1x1
+  tags:
+  - duplicate
+  code: |
+    assert spiral_order([[5]]) == [5]
+    assert spiral_order([[1,1],[1,1]]) == [1,1,1,1]
+  hidden: true
+- name: input is not mutated
+  tags:
+  - state-reuse
+  code: |
+    m=[[1,2],[3,4]]
+    assert spiral_order(m)==[1,2,4,3]
+    assert m==[[1,2],[3,4]]
+  hidden: true
+- name: large matrix
+  tags:
+  - scale
+  code: |
+    r, c = 1200, 1000
+    m = [[i * c + j for j in range(c)] for i in range(r)]
+    out = spiral_order(m)
+    assert len(out) == r * c and len(set(out)) == r * c
+    assert out[:3] == [0, 1, 2] and out[c - 1] == c - 1 and out[c] == 2 * c - 1
+  hidden: true
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(1)
+extensions:
+- q: How do you avoid revisiting cells in single-row or single-column leftovers?
+  kind: reasoning
+  key_points:
+  - After traversing the top and right sides, shrink top and right
+  - Guard the bottom side with top <= bottom and the left side with left <= right
+  - Otherwise a lone row is traversed twice in opposite directions
+- q: Complexity and alternatives.
+  kind: complexity
+  key_points:
+  - 'Every cell is emitted once: O(m*n) time'
+  - Output is O(m*n) but extra working space is O(1) with boundaries
+  - Direction-vector with a visited grid costs O(m*n) extra space
+- q: 'Design: stream cells without materialising the whole list.'
+  kind: design
+  key_points:
+  - Make it a generator yielding cells one by one
+  - Keep only the four boundary integers and current direction
+  - Consumers can stop early (take the first k spiral cells)
+- q: Generate an n x n spiral-filled matrix instead.
+  kind: code
+  key_points:
+  - Same boundary loop but assign counter values instead of reading
+  - O(n^2) time and the matrix is the output
+  - Boundary shrink order is identical
+narration: []
+state_aloud:
+- Empty matrix and empty first row.
+- Single row / single column.
+- Do not mutate the input.
+walkthrough: |
+  Maintain four boundaries and walk the ring: left to right along the top row, top to bottom down the right column, then, if rows remain, right to left along the bottom, and if columns remain, bottom to top along the left. Shrink the boundaries after each side. The two guards stop single rows or columns from being added twice.

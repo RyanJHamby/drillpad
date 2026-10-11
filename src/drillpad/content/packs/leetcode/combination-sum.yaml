@@ -1,0 +1,95 @@
+id: combination-sum
+title: Combination Sum
+bar_level: 2
+target_minutes: 25
+patterns:
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Combination Sum (LC 39)"
+statement: |
+  Given a list of distinct positive integers `candidates` and a positive `target`, return every unique combination of candidates that sums to `target`. Each candidate may be used any number of times. Two combinations are the same if they use the same numbers with the same counts; order of the outputs does not matter.
+
+  Example: `combination_sum([2,3,6,7], 7)` returns `[[2,2,3],[7]]`.
+starter: |
+  def combination_sum(candidates, target):
+      pass
+hints:
+- Build the combination one choice at a time and backtrack.
+- To avoid permutations of the same combo, only consider candidates from the current index onward.
+- Sort and stop the loop once a candidate exceeds the remaining target.
+follow_ups:
+- Each number may be used once, with duplicates in the input (Combination Sum II).
+- Count instead of enumerate.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert sorted(sorted(c) for c in combination_sum([2,3,6,7],7))==[[2,2,3],[7]]
+- name: multiple reuse
+  tags:
+  - duplicate
+  code: |
+    assert sorted(sorted(c) for c in combination_sum([2,3,5],8))==[[2,2,2,2],[2,3,3],[3,5]]
+- name: no combination
+  tags:
+  - invalid
+  code: |
+    assert combination_sum([2],1)==[]
+- name: empty candidates
+  tags:
+  - empty
+  code: |
+    assert combination_sum([],5)==[]
+- name: single candidate exact fit
+  tags:
+  - single
+  code: |
+    assert combination_sum([5],5)==[[5]]
+    assert combination_sum([3],9)==[[3,3,3]]
+- name: candidate bigger than target is skipped
+  tags:
+  - boundary
+  code: |
+    assert sorted(sorted(c) for c in combination_sum([1,10],3))==[[1,1,1]]
+- name: many results
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=combination_sum([2,3,5,7],60)
+    assert len(r)==len({tuple(sorted(c)) for c in r}) and all(sum(c)==60 for c in r) and len(r)==254
+complexity:
+- op: overall
+  time: O(n^(t/m))
+  space: O(t/m)
+extensions:
+- q: Output-sensitive complexity
+  kind: complexity
+  key_points:
+  - Bounded by n^(t/m) where t is target, m the smallest candidate
+  - Recursion depth is at most t/m
+  - Actual output size can dominate
+- q: Each candidate once, input has duplicates
+  kind: design
+  key_points:
+  - Sort the input
+  - Skip equal values at the same recursion level
+  - Advance the start index past the used element
+- q: Counting only
+  kind: code
+  key_points:
+  - 'Switch to dp: ways[s] += ways[s - c] with coins in the outer loop'
+  - O(t*n) time, O(t) space
+  - No enumeration needed
+narration: []
+state_aloud:
+- Empty candidates.
+- Target smaller than every candidate.
+- Avoid permutations (1,2 vs 2,1).
+- Reuse is allowed, so recurse with the same index.
+walkthrough: |
+  Sort the candidates, then run a DFS with a start index and a remaining target. At each step try each candidate from the start index onward, recursing with the same index so numbers can repeat, and break once a candidate exceeds the remaining target. Restricting choices to non-decreasing indices ensures each combination appears exactly once.

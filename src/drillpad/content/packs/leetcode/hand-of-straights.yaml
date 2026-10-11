@@ -1,0 +1,120 @@
+id: hand-of-straights
+title: Hand of Straights
+bar_level: 2
+target_minutes: 25
+patterns:
+- greedy
+- heap-top-k
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Hand of Straights (LC 846)"
+statement: |
+  Given a list of card values `hand` and an integer `group_size`, decide whether the cards can be partitioned into groups of exactly `group_size` cards where each group is `group_size` consecutive values (for example `[3,4,5]`). Every card must be used exactly once.
+
+  Example: `is_n_straight_hand([1,2,3,6,2,3,4,7,8], 3)` returns `True` (groups `[1,2,3]`, `[2,3,4]`, `[6,7,8]`).
+starter: |
+  def is_n_straight_hand(hand, group_size):
+      pass
+hints:
+- If len(hand) is not divisible by group_size, it is impossible immediately.
+- Count each value. The smallest remaining value must be the start of some group; what values must that group contain?
+- Repeatedly take the smallest card with a positive count, decrement the next group_size - 1 consecutive values, and fail if any is missing. Use sorted distinct keys or a min-heap.
+follow_ups:
+- Return the groups themselves.
+- What if the hand arrives as a stream?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert is_n_straight_hand([1,2,3,6,2,3,4,7,8],3) is True
+- name: cannot be split
+  tags:
+  - boundary
+  code: |
+    assert is_n_straight_hand([1,2,3,4,5],4) is False
+- name: size not divisible
+  tags:
+  - invalid
+  code: |
+    assert is_n_straight_hand([1,2,3,4],3) is False
+- name: group size one
+  tags:
+  - zero-capacity
+  - boundary
+  code: |
+    assert is_n_straight_hand([5,1,9],1) is True
+- name: empty hand
+  tags:
+  - empty
+  code: |
+    assert is_n_straight_hand([],3) is True
+- name: duplicates force overlapping groups
+  tags:
+  - duplicate
+  code: |
+    assert is_n_straight_hand([1,1,2,2,3,3],3) is True
+    assert is_n_straight_hand([1,1,2,3,3,4],3) is False
+  hidden: true
+- name: gap in values
+  tags:
+  - ordering
+  code: |
+    assert is_n_straight_hand([1,2,4,5,6,7],3) is False
+    assert is_n_straight_hand([8,10,12],3) is False
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 300000
+    g = 3
+    hand = []
+    for s in range(0, n, g):
+        hand += [s, s + 1, s + 2]
+    hand.reverse()
+    assert is_n_straight_hand(hand, g) is True
+    hand[0] += 1
+    assert is_n_straight_hand(hand, g) is False
+    big = list(range(100000)) * 2
+    assert is_n_straight_hand(big, 100000) is True
+  hidden: true
+complexity:
+- op: overall
+  time: O(n log n)
+  space: O(n)
+extensions:
+- q: Why must the smallest remaining card start a group?
+  kind: reasoning
+  key_points:
+  - Nothing smaller remains to put it after it in a group
+  - A group containing it must have it as its minimum, so it starts [x, x+1, ...]
+  - Forced choices mean no search or backtracking is needed
+- q: Give the exchange argument for the greedy, including why the choice is forced rather than merely optimal.
+  kind: reasoning
+  key_points:
+  - Any valid partition places the smallest card x in a group whose minimum is x
+  - That group is exactly x..x+k-1, so every valid partition contains it
+  - Removing it leaves a smaller instance of the same problem, so induction applies
+- q: Compare the heap and sorted-counter implementations.
+  kind: complexity
+  key_points:
+  - 'Counter plus sorted distinct keys: O(n log n) for the sort, O(n) for the sweep'
+  - 'Min-heap of distinct values: O(n log n) with lazy pops'
+  - Counter dict is O(d) space with d distinct values
+- q: 'Design: cards stream in and you must report feasibility at any time.'
+  kind: design
+  key_points:
+  - Keep a counter of values and re-run the sweep on demand, or maintain open groups ending at each value
+  - Open-groups map 'groups needing value v next' for online assignment
+  - Online decision is unsafe if future cards can change the best assignment; discuss amortised cost
+narration: []
+state_aloud:
+- Length must divide evenly by group_size.
+- group_size of 1 is always feasible.
+- Duplicates require overlapping groups.
+walkthrough: |
+  Count how many of each value there are. Walk the distinct values in increasing order; whenever a value still has a positive count it must start `count` new groups, so subtract that count from each of the next `group_size - 1` consecutive values and fail if any is short. Rejecting length mismatches up front keeps it simple. The sort dominates.

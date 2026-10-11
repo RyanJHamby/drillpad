@@ -1,0 +1,98 @@
+id: car-fleet
+title: Car Fleet
+bar_level: 2
+target_minutes: 22
+patterns:
+- stack
+- intervals
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Car Fleet (LC 853)"
+statement: |
+  Cars drive on a one-lane road toward a destination at mile `target`. Car `i` starts at `position[i]` with constant speed `speed[i]`. A car cannot pass the one ahead: if it catches up, it slows down and travels at the front car's speed, forming a fleet. A single car is also a fleet, and cars meeting exactly at the destination count as one fleet. Return the number of fleets that arrive.
+
+  Example: `car_fleet(12, [10,8,0,5,3], [2,4,1,1,3])` returns `3`.
+starter: |
+  def car_fleet(target, position, speed):
+      pass
+hints:
+- Compute each car's solo arrival time (target - position) / speed.
+- Process cars from closest to the target to farthest.
+- If a car's solo time is at most that of the fleet ahead it joins it; if greater it starts a new fleet.
+  Count strict increases in the running maximum time.
+follow_ups:
+- How would you return the fleet each car belongs to?
+- What changes if the road had passing lanes?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert car_fleet(12,[10,8,0,5,3],[2,4,1,1,3])==3
+- name: no cars
+  tags:
+  - empty
+  code: |
+    assert car_fleet(10,[],[])==0
+- name: single car
+  tags:
+  - single
+  code: |
+    assert car_fleet(10,[3],[3])==1
+- name: meeting exactly at the target merges
+  tags:
+  - boundary
+  code: |
+    assert car_fleet(10,[6,8],[4,2])==1
+- name: faster or slower cars behind
+  tags:
+  - invalid
+  code: |
+    assert car_fleet(100,[0,2,4],[4,2,1])==1
+    assert car_fleet(100,[0,2,4],[1,2,4])==3
+- name: input not sorted by position
+  tags:
+  - duplicate
+  code: |
+    assert car_fleet(10,[0,4,2],[2,1,3])==1
+- name: many cars
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    assert car_fleet(n,list(range(n)),[1]*n)==n
+    assert car_fleet(n,list(range(n)),[n-i for i in range(n)])==1
+complexity:
+- op: overall
+  time: O(n log n)
+  space: O(n)
+extensions:
+- q: Where does the n log n come from?
+  kind: complexity
+  key_points:
+  - Sorting by position dominates
+  - The scan afterwards is O(n)
+  - Space O(n) for the sorted pairs
+- q: Stack versus running maximum.
+  kind: design
+  key_points:
+  - A stack of fleet times works and mirrors the narrative
+  - Only the top matters, so a single variable (max time so far) is enough
+  - Space can drop to O(1) beyond sorting
+- q: Why is comparing arrival times enough?
+  kind: reasoning
+  key_points:
+  - A car catching a slower one ahead exactly means its solo time is <= the ahead time
+  - Cars can never overtake, so ordering by position is fixed
+  - Equal time means meeting at the target, so same fleet
+narration: []
+state_aloud:
+- Meeting exactly at the target merges.
+- Sort by position first; input is unordered.
+- Zero cars returns 0.
+walkthrough: |
+  Sort cars by position descending so the first is nearest the target. Compute each car's solo arrival time. Walk the sorted list tracking the arrival time of the lead fleet: if a car's time exceeds it, it cannot catch up and forms a new fleet (count it, update the lead time); otherwise it merges into the fleet ahead.

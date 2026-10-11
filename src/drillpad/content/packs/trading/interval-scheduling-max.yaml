@@ -1,0 +1,143 @@
+id: interval-scheduling-max
+title: Max Non-overlapping Orders (interval scheduling)
+bar_level: 2
+target_minutes: 20
+patterns:
+- greedy
+- interval-scheduling
+- sorting
+- exchange-argument
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  A scheduler holds time-boxed jobs (for example algo child orders, or exchange maintenance windows) and can run only one
+  at a time. Each job is `(start, end)` with ints and half-open occupancy `[start, end)`: two jobs may both run if one's
+  `end` is `<=` the other's `start` (touching is allowed).
+
+  `max_non_overlapping(orders) -> int` returns the largest number of jobs that can be scheduled without overlap. Jobs may
+  be given in any order, may be identical, and the list may be empty (answer 0). `ValueError` if any job has `end <= start`.
+
+  Needs O(n log n) (greedy by earliest finish time); an exponential or O(n^2) subset search will not pass the scale test.
+starter: |
+  def max_non_overlapping(orders):
+      pass
+hints:
+- 'Sort by END time, not start: finishing earliest leaves the most room for the rest.'
+- Walk in that order, keep last_end; take a job when its start >= last_end (touching allowed) and set
+  last_end = its end.
+- 'Argue correctness with the exchange argument: any optimal schedule can swap its first job for the earliest-finishing
+  one.'
+follow_ups:
+- What if jobs have weights? (weighted interval scheduling)
+- How would you return the chosen jobs?
+- How does this relate to minimum meeting rooms?
+tests:
+- name: basic greedy
+  code: |
+    assert max_non_overlapping([(1, 3), (2, 4), (3, 5), (0, 6), (5, 7), (8, 9), (5, 9)]) == 4
+    assert max_non_overlapping([(1, 2), (2, 3), (3, 4), (1, 3)]) == 3
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: empty and single
+  code: |
+    assert max_non_overlapping([]) == 0
+    assert max_non_overlapping([(5, 6)]) == 1
+  hidden: false
+  tags:
+  - empty
+  - single
+- name: touching jobs are compatible
+  code: |
+    assert max_non_overlapping([(0, 5), (5, 10), (10, 15)]) == 3
+    assert max_non_overlapping([(0, 5), (4, 10), (10, 15)]) == 2
+  hidden: false
+  tags:
+  - boundary
+- name: identical and nested jobs
+  code: |
+    assert max_non_overlapping([(1, 10), (1, 10), (1, 10)]) == 1
+    assert max_non_overlapping([(1, 100), (2, 3), (4, 5), (6, 7)]) == 3
+    assert max_non_overlapping([(3, 4), (1, 2)]) == 2, "unsorted input"
+  hidden: false
+  tags:
+  - duplicate
+  - ordering
+- name: input is not mutated
+  code: |
+    orders = [(5, 6), (1, 2), (3, 4)]
+    snapshot = list(orders)
+    assert max_non_overlapping(orders) == 3
+    assert orders == snapshot
+  hidden: true
+  tags:
+  - state-reuse
+- name: rejects bad jobs
+  code: |
+    for bad in ([(3, 3)], [(1, 2), (5, 4)]):
+        try:
+            max_non_overlapping(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: 'scale: 300k jobs'
+  code: |
+    import random
+    rng = random.Random(1)
+    jobs = []
+    for _ in range(300000):
+        s = rng.randrange(0, 10**7)
+        jobs.append((s, s + 1 + rng.randrange(0, 500)))
+    got = max_non_overlapping(jobs)
+    assert 1000 < got <= 300000
+    assert max_non_overlapping([(i, i + 1) for i in range(300000)]) == 300000
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: max_non_overlapping
+  time: O(n log n)
+  space: O(n)
+extensions:
+- q: 'Level 2: weighted version - maximize total value of non-overlapping jobs.'
+  key_points:
+  - Sort by end, dp[i] = max(dp[i-1], value[i] + dp[p(i)]) where p(i) is the last compatible job (bisect
+    on end times)
+  - Greedy by earliest finish no longer works with weights
+  - O(n log n) with binary search for p(i)
+  kind: code
+- q: 'Level 3: return the minimum number of resources (rooms/connections) needed for all jobs.'
+  key_points:
+  - Sweep line over +1/-1 events, ending before starting at equal times for half-open intervals
+  - Or a min-heap of end times
+  - Answer is the maximum simultaneous overlap
+  kind: code
+- q: Complexity and what dominates.
+  key_points:
+  - Sorting dominates at O(n log n); the greedy scan is O(n)
+  - Space O(n) for the sorted copy (do not mutate the caller input)
+  - Counting sort on bounded integer times can make it O(n + T)
+  kind: complexity
+- q: 'Design: when does scheduling-by-intervals appear in trading infra?'
+  key_points:
+  - Allocating exclusive resources like order-entry sessions or batch windows
+  - Conflict detection for maintenance and trading halts
+  - 'Online arrival changes the problem: greedy by earliest finish needs all jobs up front'
+  kind: design
+narration: []
+state_aloud:
+- 'Half-open [start, end): touching jobs are compatible.'
+- Sort by end time; duplicates allowed; empty list returns 0.
+- end <= start is invalid.
+walkthrough: |
+  Standard activity-selection greedy (earliest finish time first), as in LeetCode 435 (Non-overlapping Intervals) counted the other way. Source: standard formulation.
+categories:
+- trading

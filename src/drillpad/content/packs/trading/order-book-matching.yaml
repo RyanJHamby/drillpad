@@ -1,0 +1,232 @@
+id: order-book-matching
+title: Limit order book with price-time priority matching
+bar_level: 3
+target_minutes: 30
+patterns:
+- order-book
+- heap-of-price-levels
+- fifo-per-level
+- lazy-deletion
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `OrderBook`, a single-symbol limit order book. Prices and quantities are positive
+  ints; sides are the strings `"buy"` and `"sell"`.
+
+  - `limit(side, price, qty) -> (order_id, fills)`: ids are 1, 2, 3, ... in call order. The order
+    first matches against the opposite side while it crosses (buy price >= best ask, or sell
+    price <= best bid), best price first, FIFO within a price level (price-time priority). Each
+    fill is `(resting_order_id, price, qty)` and trades at the RESTING order's price. Any
+    unfilled remainder rests in the book. An order that does not cross just rests.
+  - `market(side, qty) -> fills`: matches at any price; an unfilled remainder is discarded
+    (it never rests and consumes no id).
+  - `cancel(order_id) -> bool`: True if the order was resting and is now removed; False for an
+    unknown, already-cancelled or already-fully-filled id.
+  - `best_bid()` / `best_ask()`: best price on that side, or None if the side is empty.
+  - `depth(side) -> [(price, total_qty), ...]`: non-empty levels, best price first.
+  - `ValueError` for a side other than buy/sell, or a non-positive price or qty.
+starter: |
+  class OrderBook:
+      def __init__(self):
+          pass
+hints:
+- 'Per side: dict price -> deque of [order_id, remaining_qty], plus a heap of prices to find the best
+  level.'
+- Fills execute at the resting order's price; the incoming order only uses its price as a limit.
+- Cancel can leave an empty level behind in the heap; clean stale heap entries lazily when looking for
+  the best price.
+follow_ups:
+- How do you make cancel O(1) instead of O(level size)?
+- What changes for modify/amend (does it keep time priority)?
+- How would you add IOC / FOK / post-only order types?
+- How would you shard this across symbols and keep it deterministic?
+tests:
+- name: rest then best bid/ask
+  tags:
+  - empty
+  - single
+  code: |
+    ob = OrderBook()
+    assert ob.best_bid() is None and ob.best_ask() is None
+    assert ob.depth("buy") == [] and ob.depth("sell") == []
+    assert ob.limit("buy", 100, 5) == (1, [])
+    assert ob.best_bid() == 100 and ob.best_ask() is None
+    assert ob.limit("sell", 105, 2) == (2, [])
+    assert ob.best_ask() == 105
+    assert ob.depth("buy") == [(100, 5)]
+- name: full match fills at the resting price
+  tags:
+  - boundary
+  - ordering
+  code: |
+    ob = OrderBook()
+    ob.limit("sell", 101, 5)
+    oid, fills = ob.limit("buy", 105, 5)
+    assert fills == [(1, 101, 5)], fills          # resting order's price, not 105
+    assert ob.best_ask() is None and ob.best_bid() is None, "nothing may rest after a full fill"
+- name: price-time priority within a level
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    ob = OrderBook()
+    ob.limit("sell", 100, 2)       # id 1, first in time
+    ob.limit("sell", 100, 5)       # id 2
+    _, fills = ob.limit("buy", 100, 4)
+    assert fills == [(1, 100, 2), (2, 100, 2)], fills
+    assert ob.depth("sell") == [(100, 3)]
+- name: walks levels best price first
+  tags:
+  - ordering
+  code: |
+    ob = OrderBook()
+    ob.limit("sell", 101, 2)       # id 1
+    ob.limit("sell", 100, 2)       # id 2, better price despite arriving later
+    _, fills = ob.limit("buy", 101, 3)
+    assert fills == [(2, 100, 2), (1, 101, 1)], fills
+    assert ob.depth("sell") == [(101, 1)]
+- name: partial fill rests the remainder
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    ob = OrderBook()
+    ob.limit("sell", 100, 4)
+    oid, fills = ob.limit("buy", 100, 10)
+    assert fills == [(1, 100, 4)]
+    assert ob.best_bid() == 100 and ob.depth("buy") == [(100, 6)]
+    assert ob.best_ask() is None
+    _, f2 = ob.limit("sell", 100, 6)
+    assert f2 == [(oid, 100, 6)] and ob.best_bid() is None
+- name: non-crossing orders rest and do not trade
+  tags:
+  - ordering
+  - single
+  code: |
+    ob = OrderBook()
+    ob.limit("sell", 100, 1)
+    _, fills = ob.limit("buy", 99, 1)
+    assert fills == [] and ob.best_bid() == 99 and ob.best_ask() == 100
+    ob.limit("buy", 98, 1); ob.limit("buy", 99, 3)
+    assert ob.depth("buy") == [(99, 4), (98, 1)]
+- name: market order sweeps and discards leftover
+  tags:
+  - empty
+  - ordering
+  hidden: true
+  code: |
+    ob = OrderBook()
+    assert ob.market("buy", 10) == [], "market order on an empty book fills nothing"
+    ob.limit("sell", 100, 3); ob.limit("sell", 102, 3)
+    fills = ob.market("buy", 5)
+    assert fills == [(1, 100, 3), (2, 102, 2)], fills
+    assert ob.market("buy", 10) == [(2, 102, 1)]
+    assert ob.best_bid() is None, "market order remainder must never rest"
+- name: cancel semantics
+  tags:
+  - invalid
+  - state-reuse
+  hidden: true
+  code: |
+    ob = OrderBook()
+    a, _ = ob.limit("buy", 100, 1); b, _ = ob.limit("buy", 100, 1)
+    assert ob.cancel(a) is True
+    assert ob.cancel(a) is False, "double cancel"
+    assert ob.cancel(999) is False
+    _, fills = ob.limit("sell", 100, 1)
+    assert fills == [(b, 100, 1)], "cancelled order must not trade; remaining order keeps its place"
+    assert ob.cancel(b) is False, "filled orders cannot be cancelled"
+    c, _ = ob.limit("sell", 105, 1)
+    assert ob.cancel(c) and ob.best_ask() is None, "emptied level must disappear from best/depth"
+    ob.limit("sell", 105, 2)
+    assert ob.best_ask() == 105 and ob.depth("sell") == [(105, 2)]
+- name: rejects bad input
+  tags:
+  - invalid
+  - zero-capacity
+  hidden: true
+  code: |
+    ob = OrderBook()
+    for args in [("buy", 100, 0), ("buy", 100, -1), ("buy", 0, 1), ("buy", -5, 1), ("hold", 100, 1)]:
+        try:
+            ob.limit(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected ValueError for {args}")
+    try:
+        ob.market("sell", 0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("market qty 0")
+    assert ob.best_bid() is None and ob.depth("buy") == []
+- name: large sweep stays fast
+  tags:
+  - scale
+  - ordering
+  hidden: true
+  code: |
+    ob = OrderBook()
+    n = 20000
+    for i in range(n):
+        ob.limit("sell", 1000 + (i * 7919) % n, 1)
+    assert ob.best_ask() == 1000
+    _, fills = ob.limit("buy", 30000, n)
+    assert len(fills) == n
+    prices = [p for _, p, _ in fills]
+    assert prices == sorted(prices), "must trade lowest price first"
+    assert ob.best_ask() is None and ob.best_bid() is None
+complexity:
+- op: limit
+  time: O(log P + F)
+  space: O(N)
+- op: cancel
+  time: O(Q)
+  space: O(1)
+- op: best_bid/best_ask
+  time: O(1) amortized
+  space: O(1)
+- op: depth
+  time: O(P log P + N)
+  space: O(P)
+extensions:
+- q: 'Level 2: add amend(order_id, new_qty) and say whether it keeps queue position.'
+  kind: code
+  key_points:
+  - 'Reducing quantity in place keeps time priority; increasing quantity (or changing price) loses it:
+    cancel and re-enter at the back'
+  - Returns False for unknown or filled ids and rejects non-positive quantity
+  - Updates the id map and level totals consistently so depth() stays correct
+- q: 'Level 3: add order types IOC (fill what you can, drop the rest) and FOK (fill entirely or not at
+    all).'
+  kind: code
+  key_points:
+  - FOK must check available crossing quantity before mutating any state, so a failed FOK leaves the book
+    untouched
+  - IOC is a limit match whose remainder is discarded instead of rested
+  - Neither type ever consumes a resting slot or leaves a level behind
+- q: How do you get O(1) cancel and what does the single-threaded design buy you?
+  kind: design
+  key_points:
+  - Doubly linked list per price level plus an id -> node map gives O(1) unlink
+  - 'Single-threaded matcher per symbol: no locks, deterministic replay, shard by symbol for parallelism'
+  - Append-only event log before applying events enables crash recovery and replay
+- q: Cost of limit, cancel and best price; what changes with a price-indexed array?
+  kind: complexity
+  key_points:
+  - Heap or sorted map of levels gives O(log P) to add a level, O(1) peek; each fill is O(1) amortized
+  - Cancel is O(level size) with a deque, O(1) with a linked list
+  - 'Bounded tick range allows an array indexed by price: O(1) level access and better cache behavior'
+narration: []
+state_aloud:
+- Fills trade at the resting order's price, not the aggressor's limit.
+- Same-price orders are FIFO; a cancelled order must not lose the others their place.
+- Market order remainder is discarded, never rested; non-positive qty/price rejected.
+- Stale empty levels in the heap are cleaned lazily; I will assume integer ticks, not floats.
+walkthrough: |
+  Each side keeps a dict from price to a FIFO deque of resting orders and a heap of prices (negated for bids) to find the best level in O(1). An incoming order matches against the opposite side's best level while it crosses, trading at the resting price, consuming whole orders from the front of the queue and partially filling the last one. Whatever is left rests at the back of its level (time priority). Cancel removes the order from its deque via an id map; levels emptied by fills or cancels are left in the heap and discarded lazily when they surface at the top. Source: standard formulation.
+categories:
+- trading
+- systems-impl

@@ -1,0 +1,108 @@
+id: merge-triplets-to-target
+title: Merge Triplets to Form Target
+bar_level: 2
+target_minutes: 20
+patterns:
+- greedy
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  You have a list of triplets `[a, b, c]` and a `target` triplet. One operation picks two triplets `i` and `j` and replaces triplet `j` with the element-wise maximum of the two. You may repeat any number of times. Return `True` if the target triplet can appear in the list, else `False`.
+
+  Example: `merge_triplets([[2,5,3],[1,8,4],[1,7,5]], [2,7,5])` returns `True`: merging `[2,5,3]` with `[1,7,5]` gives `[2,7,5]`.
+starter: |
+  def merge_triplets(triplets, target):
+      pass
+hints:
+- Merging uses max, so a value can only grow. What does that say about triplets that exceed the target in some position?
+- Discard any triplet with any coordinate larger than the target; they can never be used.
+- Among the usable triplets, check that each target coordinate is matched by at least one of them.
+follow_ups:
+- Return which triplets you would merge.
+- Generalise to k-dimensional vectors.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert merge_triplets([[2,5,3],[1,8,4],[1,7,5]],[2,7,5]) is True
+- name: a needed value only appears with a too-large coordinate
+  tags:
+  - invalid
+  code: |
+    assert merge_triplets([[3,4,5],[4,5,6]],[3,2,5]) is False
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert merge_triplets([],[1,1,1]) is False
+- name: single exact match
+  tags:
+  - single
+  code: |
+    assert merge_triplets([[1,2,3]],[1,2,3]) is True
+    assert merge_triplets([[1,2,3]],[1,2,4]) is False
+- name: merging everything overshoots
+  tags:
+  - ordering
+  code: |
+    assert merge_triplets([[2,5,3],[1,9,4],[1,7,5]],[2,7,5]) is True
+    assert merge_triplets([[1,3,4],[2,5,5],[2,1,3]],[2,5,4]) is False
+  hidden: true
+- name: duplicates and zeros
+  tags:
+  - duplicate
+  - boundary
+  code: |
+    assert merge_triplets([[0,0,0],[0,0,0]],[0,0,0]) is True
+    assert merge_triplets([[0,0,1],[0,1,0],[1,0,0]],[1,1,1]) is True
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    import random
+    r = random.Random(1)
+    ts = [[r.randint(0, 10**6) for _ in range(3)] for _ in range(500000)]
+    assert merge_triplets(ts, [10**6 + 1, 0, 0]) is False
+    ts.append([5, 6, 7])
+    assert merge_triplets(ts, [5, 6, 7]) is True
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why can triplets exceeding the target be discarded?
+  kind: reasoning
+  key_points:
+  - Max-merge never decreases a coordinate
+  - A triplet with a coordinate above target would permanently overshoot
+  - So every triplet in a valid merge set is coordinate-wise <= target
+- q: Exchange-argument or proof sketch that checking each coordinate independently is enough.
+  kind: reasoning
+  key_points:
+  - Among valid (<= target) triplets, merging all of them yields the coordinate-wise maximum
+  - The result equals target iff each coordinate has some valid triplet attaining it
+  - Order does not matter because max is associative and commutative
+- q: Complexity and early exit.
+  kind: complexity
+  key_points:
+  - 'Single pass over n triplets with 3 comparisons each: O(n)'
+  - 'O(1) extra space: three booleans or a running max triple'
+  - Can stop early once all three coordinates are matched
+- q: 'Design: triplets arrive in a stream or have k dimensions.'
+  kind: design
+  key_points:
+  - Maintain a running coordinate-wise max over only the valid triplets
+  - 'k dimensions: a bitmask or k flags; O(n k) time, O(k) space'
+  - Answer can be queried at any time with O(k)
+narration: []
+state_aloud:
+- Empty list is False.
+- Exact triplet match is enough.
+- Never merge a triplet that exceeds the target in any coordinate.
+walkthrough: |
+  Only triplets that do not exceed the target in any coordinate can ever be merged, since max-merging cannot lower a value. Walk the list; for each usable triplet, record which target coordinates it matches exactly. If all three coordinates end up matched, merging those triplets yields the target.

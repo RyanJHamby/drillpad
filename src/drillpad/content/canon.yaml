@@ -1,0 +1,1387 @@
+note: Canonical coverage targets per lever. LeetCode = the public NeetCode 150 list plus Subarray Sum Equals K. The other levers are MY curation
+  from classic design/implementation screens and the user's firm docs, not an authoritative list; edit freely.
+levers:
+  leetcode:
+    label: LeetCode-style
+    basis: NeetCode 150 (public)
+    items:
+    - id: contains-duplicate
+      title: Contains Duplicate
+      group: arrays-hashing
+      level: 1
+    - id: valid-anagram
+      title: Valid Anagram
+      group: arrays-hashing
+      level: 1
+    - id: two-sum
+      title: Two Sum
+      group: arrays-hashing
+      level: 1
+    - id: group-anagrams
+      title: Group Anagrams
+      group: arrays-hashing
+      level: 2
+    - id: top-k-frequent-elements
+      title: Top K Frequent Elements
+      group: arrays-hashing
+      level: 2
+    - id: encode-decode-strings
+      title: Encode and Decode Strings
+      group: arrays-hashing
+      level: 2
+    - id: product-of-array-except-self
+      title: Product of Array Except Self
+      group: arrays-hashing
+      level: 2
+    - id: valid-sudoku
+      title: Valid Sudoku
+      group: arrays-hashing
+      level: 2
+    - id: longest-consecutive-sequence
+      title: Longest Consecutive Sequence
+      group: arrays-hashing
+      level: 2
+    - id: valid-palindrome
+      title: Valid Palindrome
+      group: two-pointers
+      level: 1
+    - id: two-sum-ii-sorted
+      title: Two Sum II (Sorted)
+      group: two-pointers
+      level: 1
+    - id: three-sum
+      title: 3Sum
+      group: two-pointers
+      level: 2
+    - id: container-with-most-water
+      title: Container With Most Water
+      group: two-pointers
+      level: 2
+    - id: trapping-rain-water
+      title: Trapping Rain Water
+      group: two-pointers
+      level: 3
+    - id: best-time-to-buy-sell-stock
+      title: Best Time to Buy and Sell Stock
+      group: sliding-window
+      level: 1
+    - id: longest-substring-without-repeating
+      title: Longest Substring Without Repeating Characters
+      group: sliding-window
+      level: 2
+    - id: longest-repeating-character-replacement
+      title: Longest Repeating Character Replacement
+      group: sliding-window
+      level: 2
+    - id: permutation-in-string
+      title: Permutation in String
+      group: sliding-window
+      level: 2
+    - id: minimum-window-substring
+      title: Minimum Window Substring
+      group: sliding-window
+      level: 3
+    - id: sliding-window-maximum
+      title: Sliding Window Maximum
+      group: sliding-window
+      level: 3
+    - id: valid-parentheses
+      title: Valid Parentheses
+      group: stack
+      level: 1
+    - id: min-stack
+      title: Min Stack
+      group: stack
+      level: 2
+    - id: evaluate-reverse-polish-notation
+      title: Evaluate Reverse Polish Notation
+      group: stack
+      level: 2
+    - id: generate-parentheses
+      title: Generate Parentheses
+      group: stack
+      level: 2
+    - id: daily-temperatures
+      title: Daily Temperatures
+      group: stack
+      level: 2
+    - id: car-fleet
+      title: Car Fleet
+      group: stack
+      level: 2
+    - id: largest-rectangle-in-histogram
+      title: Largest Rectangle in Histogram
+      group: stack
+      level: 3
+    - id: binary-search
+      title: Binary Search
+      group: binary-search
+      level: 1
+    - id: search-2d-matrix
+      title: Search a 2D Matrix
+      group: binary-search
+      level: 2
+    - id: koko-eating-bananas
+      title: Koko Eating Bananas
+      group: binary-search
+      level: 2
+    - id: find-minimum-rotated-sorted-array
+      title: Find Minimum in Rotated Sorted Array
+      group: binary-search
+      level: 2
+    - id: search-rotated-sorted-array
+      title: Search in Rotated Sorted Array
+      group: binary-search
+      level: 2
+    - id: time-based-key-value-store
+      title: Time Based Key-Value Store
+      group: binary-search
+      level: 2
+    - id: median-of-two-sorted-arrays
+      title: Median of Two Sorted Arrays
+      group: binary-search
+      level: 3
+    - id: reverse-linked-list
+      title: Reverse Linked List
+      group: linked-list
+      level: 1
+    - id: merge-two-sorted-lists
+      title: Merge Two Sorted Lists
+      group: linked-list
+      level: 1
+    - id: reorder-list
+      title: Reorder List
+      group: linked-list
+      level: 2
+    - id: remove-nth-node-from-end
+      title: Remove Nth Node From End
+      group: linked-list
+      level: 2
+    - id: copy-list-random-pointer
+      title: Copy List With Random Pointer
+      group: linked-list
+      level: 2
+    - id: add-two-numbers
+      title: Add Two Numbers
+      group: linked-list
+      level: 2
+    - id: linked-list-cycle
+      title: Linked List Cycle
+      group: linked-list
+      level: 1
+    - id: find-the-duplicate-number
+      title: Find the Duplicate Number
+      group: linked-list
+      level: 2
+    - id: lru-cache
+      title: LRU Cache
+      group: linked-list
+      level: 3
+    - id: merge-k-sorted-lists
+      title: Merge k Sorted Lists
+      group: linked-list
+      level: 3
+    - id: reverse-nodes-in-k-group
+      title: Reverse Nodes in k-Group
+      group: linked-list
+      level: 3
+    - id: invert-binary-tree
+      title: Invert Binary Tree
+      group: trees
+      level: 1
+    - id: max-depth-binary-tree
+      title: Maximum Depth of Binary Tree
+      group: trees
+      level: 1
+    - id: diameter-of-binary-tree
+      title: Diameter of Binary Tree
+      group: trees
+      level: 1
+    - id: balanced-binary-tree
+      title: Balanced Binary Tree
+      group: trees
+      level: 1
+    - id: same-tree
+      title: Same Tree
+      group: trees
+      level: 1
+    - id: subtree-of-another-tree
+      title: Subtree of Another Tree
+      group: trees
+      level: 1
+    - id: lowest-common-ancestor-bst
+      title: Lowest Common Ancestor of a BST
+      group: trees
+      level: 2
+    - id: binary-tree-level-order-traversal
+      title: Binary Tree Level Order Traversal
+      group: trees
+      level: 2
+    - id: binary-tree-right-side-view
+      title: Binary Tree Right Side View
+      group: trees
+      level: 2
+    - id: count-good-nodes
+      title: Count Good Nodes in Binary Tree
+      group: trees
+      level: 2
+    - id: validate-binary-search-tree
+      title: Validate Binary Search Tree
+      group: trees
+      level: 2
+    - id: kth-smallest-in-bst
+      title: Kth Smallest Element in a BST
+      group: trees
+      level: 2
+    - id: construct-tree-preorder-inorder
+      title: Construct Binary Tree from Preorder and Inorder
+      group: trees
+      level: 2
+    - id: binary-tree-maximum-path-sum
+      title: Binary Tree Maximum Path Sum
+      group: trees
+      level: 3
+    - id: serialize-deserialize-binary-tree
+      title: Serialize and Deserialize Binary Tree
+      group: trees
+      level: 3
+    - id: kth-largest-in-stream
+      title: Kth Largest Element in a Stream
+      group: heap
+      level: 1
+    - id: last-stone-weight
+      title: Last Stone Weight
+      group: heap
+      level: 1
+    - id: k-closest-points-to-origin
+      title: K Closest Points to Origin
+      group: heap
+      level: 2
+    - id: kth-largest-element
+      title: Kth Largest Element in an Array
+      group: heap
+      level: 2
+    - id: task-scheduler
+      title: Task Scheduler
+      group: heap
+      level: 2
+    - id: design-twitter
+      title: Design Twitter
+      group: heap
+      level: 3
+    - id: find-median-from-data-stream
+      title: Find Median from Data Stream
+      group: heap
+      level: 3
+    - id: subsets
+      title: Subsets
+      group: backtracking
+      level: 2
+    - id: combination-sum
+      title: Combination Sum
+      group: backtracking
+      level: 2
+    - id: combination-sum-ii
+      title: Combination Sum II
+      group: backtracking
+      level: 2
+    - id: permutations
+      title: Permutations
+      group: backtracking
+      level: 2
+    - id: subsets-ii
+      title: Subsets II
+      group: backtracking
+      level: 2
+    - id: palindrome-partitioning
+      title: Palindrome Partitioning
+      group: backtracking
+      level: 2
+    - id: letter-combinations-phone
+      title: Letter Combinations of a Phone Number
+      group: backtracking
+      level: 2
+    - id: n-queens
+      title: N-Queens
+      group: backtracking
+      level: 3
+    - id: word-search
+      title: Word Search
+      group: backtracking
+      level: 2
+    - id: implement-trie
+      title: Implement Trie
+      group: tries
+      level: 2
+    - id: add-and-search-words
+      title: Design Add and Search Words
+      group: tries
+      level: 2
+    - id: word-search-ii
+      title: Word Search II
+      group: tries
+      level: 3
+    - id: number-of-islands
+      title: Number of Islands
+      group: graphs
+      level: 2
+    - id: max-area-of-island
+      title: Max Area of Island
+      group: graphs
+      level: 2
+    - id: clone-graph
+      title: Clone Graph
+      group: graphs
+      level: 2
+    - id: walls-and-gates
+      title: Walls and Gates
+      group: graphs
+      level: 2
+    - id: rotting-oranges
+      title: Rotting Oranges
+      group: graphs
+      level: 2
+    - id: pacific-atlantic-water-flow
+      title: Pacific Atlantic Water Flow
+      group: graphs
+      level: 2
+    - id: surrounded-regions
+      title: Surrounded Regions
+      group: graphs
+      level: 2
+    - id: course-schedule
+      title: Course Schedule
+      group: graphs
+      level: 2
+    - id: course-schedule-ii
+      title: Course Schedule II
+      group: graphs
+      level: 2
+    - id: redundant-connection
+      title: Redundant Connection
+      group: graphs
+      level: 2
+    - id: number-of-connected-components
+      title: Number of Connected Components
+      group: graphs
+      level: 2
+    - id: graph-valid-tree
+      title: Graph Valid Tree
+      group: graphs
+      level: 2
+    - id: word-ladder
+      title: Word Ladder
+      group: graphs
+      level: 3
+    - id: reconstruct-itinerary
+      title: Reconstruct Itinerary
+      group: advanced-graphs
+      level: 3
+    - id: min-cost-connect-all-points
+      title: Min Cost to Connect All Points
+      group: advanced-graphs
+      level: 2
+    - id: network-delay-time
+      title: Network Delay Time
+      group: advanced-graphs
+      level: 2
+    - id: swim-in-rising-water
+      title: Swim in Rising Water
+      group: advanced-graphs
+      level: 3
+    - id: alien-dictionary
+      title: Alien Dictionary
+      group: advanced-graphs
+      level: 3
+    - id: cheapest-flights-within-k-stops
+      title: Cheapest Flights Within K Stops
+      group: advanced-graphs
+      level: 2
+    - id: climbing-stairs
+      title: Climbing Stairs
+      group: dp-1d
+      level: 1
+    - id: min-cost-climbing-stairs
+      title: Min Cost Climbing Stairs
+      group: dp-1d
+      level: 1
+    - id: house-robber
+      title: House Robber
+      group: dp-1d
+      level: 2
+    - id: house-robber-ii
+      title: House Robber II
+      group: dp-1d
+      level: 2
+    - id: longest-palindromic-substring
+      title: Longest Palindromic Substring
+      group: dp-1d
+      level: 2
+    - id: palindromic-substrings
+      title: Palindromic Substrings
+      group: dp-1d
+      level: 2
+    - id: decode-ways
+      title: Decode Ways
+      group: dp-1d
+      level: 2
+    - id: coin-change
+      title: Coin Change
+      group: dp-1d
+      level: 2
+    - id: maximum-product-subarray
+      title: Maximum Product Subarray
+      group: dp-1d
+      level: 2
+    - id: word-break
+      title: Word Break
+      group: dp-1d
+      level: 2
+    - id: longest-increasing-subsequence
+      title: Longest Increasing Subsequence
+      group: dp-1d
+      level: 2
+    - id: partition-equal-subset-sum
+      title: Partition Equal Subset Sum
+      group: dp-1d
+      level: 2
+    - id: unique-paths
+      title: Unique Paths
+      group: dp-2d
+      level: 2
+    - id: longest-common-subsequence
+      title: Longest Common Subsequence
+      group: dp-2d
+      level: 2
+    - id: best-time-buy-sell-cooldown
+      title: Best Time to Buy and Sell Stock with Cooldown
+      group: dp-2d
+      level: 2
+    - id: coin-change-ii
+      title: Coin Change II
+      group: dp-2d
+      level: 2
+    - id: target-sum
+      title: Target Sum
+      group: dp-2d
+      level: 2
+    - id: interleaving-string
+      title: Interleaving String
+      group: dp-2d
+      level: 3
+    - id: longest-increasing-path-matrix
+      title: Longest Increasing Path in a Matrix
+      group: dp-2d
+      level: 3
+    - id: distinct-subsequences
+      title: Distinct Subsequences
+      group: dp-2d
+      level: 3
+    - id: edit-distance
+      title: Edit Distance
+      group: dp-2d
+      level: 3
+    - id: burst-balloons
+      title: Burst Balloons
+      group: dp-2d
+      level: 3
+    - id: regular-expression-matching
+      title: Regular Expression Matching
+      group: dp-2d
+      level: 3
+    - id: unique-paths-with-obstacles
+      title: Unique Paths II (Obstacles)
+      group: dp-2d
+      level: 2
+    - id: maximum-subarray
+      title: Maximum Subarray
+      group: greedy
+      level: 2
+    - id: jump-game
+      title: Jump Game
+      group: greedy
+      level: 2
+    - id: jump-game-ii
+      title: Jump Game II
+      group: greedy
+      level: 2
+    - id: gas-station
+      title: Gas Station
+      group: greedy
+      level: 2
+    - id: hand-of-straights
+      title: Hand of Straights
+      group: greedy
+      level: 2
+    - id: merge-triplets-to-target
+      title: Merge Triplets to Form Target
+      group: greedy
+      level: 2
+    - id: partition-labels
+      title: Partition Labels
+      group: greedy
+      level: 2
+    - id: valid-parenthesis-string
+      title: Valid Parenthesis String
+      group: greedy
+      level: 2
+    - id: insert-interval
+      title: Insert Interval
+      group: intervals
+      level: 2
+    - id: merge-intervals
+      title: Merge Intervals
+      group: intervals
+      level: 2
+    - id: non-overlapping-intervals
+      title: Non-overlapping Intervals
+      group: intervals
+      level: 2
+    - id: meeting-rooms
+      title: Meeting Rooms
+      group: intervals
+      level: 1
+    - id: meeting-rooms-ii
+      title: Meeting Rooms II
+      group: intervals
+      level: 2
+    - id: minimum-interval-for-queries
+      title: Minimum Interval to Include Each Query
+      group: intervals
+      level: 3
+    - id: rotate-image
+      title: Rotate Image
+      group: math-geometry
+      level: 2
+    - id: spiral-matrix
+      title: Spiral Matrix
+      group: math-geometry
+      level: 2
+    - id: set-matrix-zeroes
+      title: Set Matrix Zeroes
+      group: math-geometry
+      level: 2
+    - id: happy-number
+      title: Happy Number
+      group: math-geometry
+      level: 1
+    - id: plus-one
+      title: Plus One
+      group: math-geometry
+      level: 1
+    - id: pow-x-n
+      title: Pow(x, n)
+      group: math-geometry
+      level: 2
+    - id: multiply-strings
+      title: Multiply Strings
+      group: math-geometry
+      level: 2
+    - id: detect-squares
+      title: Detect Squares
+      group: math-geometry
+      level: 2
+    - id: single-number
+      title: Single Number
+      group: bit-manipulation
+      level: 1
+    - id: number-of-1-bits
+      title: Number of 1 Bits
+      group: bit-manipulation
+      level: 1
+    - id: counting-bits
+      title: Counting Bits
+      group: bit-manipulation
+      level: 1
+    - id: reverse-bits
+      title: Reverse Bits
+      group: bit-manipulation
+      level: 1
+    - id: missing-number
+      title: Missing Number
+      group: bit-manipulation
+      level: 1
+    - id: sum-of-two-integers
+      title: Sum of Two Integers
+      group: bit-manipulation
+      level: 2
+    - id: reverse-integer
+      title: Reverse Integer
+      group: bit-manipulation
+      level: 2
+    - id: subarray-sum-equals-k
+      title: Subarray Sum Equals K
+      group: prefix-sum
+      level: 2
+    - id: gravity-letters-grid
+      title: 'Gravity: Letters Fall on a Grid'
+      group: grids
+      level: 2
+    - id: gravity-letter-blocks
+      title: 'Gravity: Letter Blocks Fall on a Grid'
+      group: grids
+      level: 3
+    - id: fair-array-remove-one
+      title: 'Remove One Planet: Equal Odd/Even Sums'
+      group: prefix-sum
+      level: 2
+    - id: sparse-matrix-multiply
+      title: Sparse Matrix Multiplication
+      group: math-geometry
+      level: 2
+  systems-impl:
+    label: Design / systems implementation
+    basis: curated (design screens + user firm docs)
+    items:
+    - id: lru-cache
+      title: LRU Cache
+      group: caches
+      level: 3
+    - id: lfu-cache
+      title: LFU Cache
+      group: caches
+      level: 3
+    - id: ttl-cache
+      title: TTL Cache
+      group: caches
+      level: 3
+    - id: write-policies
+      title: Write-through / Write-back Cache
+      group: caches
+      level: 3
+    - id: cache-aside
+      title: Cache-aside with Stampede Protection
+      group: caches
+      level: 3
+    - id: lru-with-ttl
+      title: LRU Cache with Per-key TTL
+      group: caches
+      level: 3
+    - id: two-level-cache
+      title: Two-level (L1/L2) Cache
+      group: caches
+      level: 3
+    - id: token-bucket
+      title: Token Bucket
+      group: rate-limiting
+      level: 3
+    - id: leaky-bucket
+      title: Leaky Bucket
+      group: rate-limiting
+      level: 3
+    - id: sliding-window-counter
+      title: Sliding Window Rate Limiter
+      group: rate-limiting
+      level: 3
+    - id: distributed-rate-limiter
+      title: Distributed Rate Limiter
+      group: rate-limiting
+      level: 3
+    - id: admission-control
+      title: Admission Control / Load Shedding
+      group: rate-limiting
+      level: 3
+    - id: logger-rate-limiter
+      title: Logger Rate Limiter
+      group: rate-limiting
+      level: 1
+    - id: hit-counter
+      title: Hit Counter
+      group: rate-limiting
+      level: 2
+    - id: thread-pool
+      title: Thread Pool
+      group: concurrency
+      level: 4
+    - id: bounded-queue
+      title: Bounded Blocking Queue
+      group: concurrency
+      level: 4
+    - id: read-write-lock
+      title: Read-Write Lock
+      group: concurrency
+      level: 4
+    - id: counting-semaphore
+      title: Counting Semaphore
+      group: concurrency
+      level: 4
+    - id: cyclic-barrier
+      title: Barrier / Latch
+      group: concurrency
+      level: 4
+    - id: dining-philosophers
+      title: Dining Philosophers
+      group: concurrency
+      level: 4
+    - id: web-crawler-concurrent
+      title: Concurrent Web Crawler
+      group: concurrency
+      level: 3
+    - id: event-bus-pubsub
+      title: Pub/Sub Event Bus
+      group: concurrency
+      level: 3
+    - id: connection-pool
+      title: Connection Pool
+      group: concurrency
+      level: 3
+    - id: object-pool
+      title: Object Pool
+      group: concurrency
+      level: 3
+    - id: consistent-hashing-ring
+      title: Consistent Hashing Ring
+      group: structures
+      level: 3
+    - id: bloom-filter
+      title: Bloom Filter
+      group: structures
+      level: 3
+    - id: skip-list
+      title: Skip List
+      group: structures
+      level: 3
+    - id: lru-from-scratch-ordered
+      title: Hash Map + Doubly Linked List Primitives
+      group: structures
+      level: 2
+    - id: insert-delete-getrandom-o1
+      title: Insert Delete GetRandom O(1)
+      group: structures
+      level: 2
+    - id: snapshot-array
+      title: Snapshot Array
+      group: structures
+      level: 2
+    - id: moving-average-stream
+      title: Moving Average From Data Stream
+      group: structures
+      level: 1
+    - id: circuit-breaker
+      title: Circuit Breaker
+      group: structures
+      level: 3
+    - id: ring-buffer
+      title: Fixed-capacity Ring Buffer
+      group: structures
+      level: 1
+    - id: min-heap
+      title: Binary Min-Heap
+      group: structures
+      level: 2
+    - id: hashmap-chaining
+      title: HashMap (Chaining)
+      group: structures
+      level: 2
+    - id: hashmap-open-addressing
+      title: HashMap (Open Addressing)
+      group: structures
+      level: 2
+    - id: text-editor-undo-redo
+      title: Text Editor with Undo/Redo
+      group: design-ood
+      level: 2
+    - id: in-memory-sql-table
+      title: In-memory Table with Queries
+      group: design-ood
+      level: 3
+    - id: in-memory-filesystem
+      title: In-memory File System
+      group: design-ood
+      level: 3
+    - id: kv-store-ttl-backup-restore
+      title: KV Store with TTL, Backup/Restore
+      group: design-ood
+      level: 3
+    - id: autocomplete-system
+      title: Autocomplete System
+      group: design-ood
+      level: 3
+    - id: url-shortener
+      title: URL Shortener
+      group: design-ood
+      level: 2
+    - id: job-scheduler-cron
+      title: Job Scheduler / Cron
+      group: design-ood
+      level: 3
+    - id: task-dependency-tracker
+      title: Task Dependency Tracker
+      group: design-ood
+      level: 3
+    - id: elevator-controller
+      title: Elevator Controller
+      group: design-ood
+      level: 3
+    - id: parking-lot
+      title: Parking Lot
+      group: design-ood
+      level: 2
+    - id: snake-game
+      title: Snake Game
+      group: design-ood
+      level: 2
+    - id: tic-tac-toe-nxn
+      title: Tic-Tac-Toe (NxN)
+      group: design-ood
+      level: 2
+    - id: basic-calculator
+      title: Basic Calculator (parser)
+      group: design-ood
+      level: 3
+    - id: json-parser
+      title: JSON Parser
+      group: design-ood
+      level: 3
+    - id: flatten-nested-iterator
+      title: Flatten Nested List Iterator
+      group: design-ood
+      level: 2
+    - id: peeking-iterator
+      title: Peeking Iterator
+      group: design-ood
+      level: 1
+    - id: text-justification
+      title: Text Justification
+      group: design-ood
+      level: 3
+    - id: log-parser-top-n
+      title: Log Parser / Top-N
+      group: design-ood
+      level: 2
+    - id: spreadsheet-recalc
+      title: Spreadsheet with Dependent Cell Recalculation
+      group: design-ood
+      level: 3
+    - id: server-cache-design-open-ended
+      title: Server-Backend Cache (Open-ended Design)
+      group: caches
+      level: 4
+  trading:
+    label: Trading / hedge fund
+    basis: curated (design screens + user firm docs)
+    items:
+    - id: order-book-matching
+      title: Order Book (price-time priority)
+      group: order-books
+      level: 3
+    - id: feed-handler-gap-recovery
+      title: Feed Handler with Gap Recovery
+      group: order-books
+      level: 3
+    - id: order-book-modify-cancel-ids
+      title: Order Book with Modify / Cancel by ID
+      group: order-books
+      level: 3
+    - id: matching-engine-ioc-fok
+      title: 'Matching Engine: IOC / FOK / Post-only'
+      group: order-books
+      level: 4
+    - id: best-bid-offer-top-of-book
+      title: Top-of-book / BBO Tracker
+      group: order-books
+      level: 2
+    - id: cross-venue-nbbo
+      title: Cross-venue NBBO Aggregator
+      group: order-books
+      level: 3
+    - id: order-id-dedup
+      title: Order ID Generator + Duplicate Detection
+      group: order-books
+      level: 2
+    - id: rolling-vwap
+      title: Rolling VWAP
+      group: streaming-analytics
+      level: 2
+    - id: twap-and-ema
+      title: TWAP and EMA
+      group: streaming-analytics
+      level: 2
+    - id: ohlc-bar-aggregation
+      title: OHLC Bar Aggregation from Ticks
+      group: streaming-analytics
+      level: 2
+    - id: sliding-window-maximum
+      title: Rolling Max/Min (monotonic deque)
+      group: streaming-analytics
+      level: 3
+    - id: stock-span
+      title: Stock Span Problem
+      group: streaming-analytics
+      level: 2
+    - id: running-median
+      title: Running Median of Prices
+      group: streaming-analytics
+      level: 3
+    - id: kth-largest-in-stream
+      title: Top-K Prices in a Stream
+      group: streaming-analytics
+      level: 2
+    - id: asof-join
+      title: As-of Join of Two Time Series
+      group: streaming-analytics
+      level: 3
+    - id: sliding-window-volatility
+      title: Rolling Volatility (Welford)
+      group: streaming-analytics
+      level: 2
+    - id: reservoir-sampling
+      title: Reservoir Sampling
+      group: streaming-analytics
+      level: 2
+    - id: weighted-random-pick
+      title: Weighted Random Pick
+      group: streaming-analytics
+      level: 2
+    - id: position-pnl-fifo-lifo
+      title: Position and PnL (FIFO/LIFO lots)
+      group: pnl-risk
+      level: 3
+    - id: risk-limit-checker
+      title: Pre-trade Risk Limit Checker
+      group: pnl-risk
+      level: 2
+    - id: trade-reconciliation
+      title: Trade Reconciliation Matcher
+      group: pnl-risk
+      level: 2
+    - id: order-throttle
+      title: Order Throttle (messages/sec per venue)
+      group: pnl-risk
+      level: 2
+    - id: fee-and-rebate-calc
+      title: Exchange Fee / Rebate Calculator
+      group: pnl-risk
+      level: 2
+    - id: best-time-buy-sell-stock
+      title: Best Time to Buy/Sell Stock (I)
+      group: algos-quant
+      level: 1
+    - id: best-time-buy-sell-stock-ii
+      title: Best Time to Buy/Sell Stock (II)
+      group: algos-quant
+      level: 2
+    - id: best-time-buy-sell-stock-iii
+      title: Best Time to Buy/Sell Stock (III/IV)
+      group: algos-quant
+      level: 3
+    - id: fenwick-tree-range-sum
+      title: Fenwick Tree (BIT) Range Queries
+      group: algos-quant
+      level: 3
+    - id: segment-tree-range-min
+      title: Segment Tree Range Min/Max
+      group: algos-quant
+      level: 3
+    - id: arbitrage-detection
+      title: Currency Arbitrage Detection (Bellman-Ford)
+      group: algos-quant
+      level: 3
+    - id: interval-scheduling-max
+      title: Max Non-overlapping Orders (interval scheduling)
+      group: algos-quant
+      level: 2
+    - id: kadane-max-profit-window
+      title: Maximum Subarray (Kadane) on Returns
+      group: algos-quant
+      level: 2
+    - id: event-driven-backtester
+      title: Event-driven Backtester Core
+      group: algos-quant
+      level: 3
+    - id: bit-tricks-flags
+      title: Bit Manipulation for Order Flags
+      group: algos-quant
+      level: 2
+    - id: server-cache-design-open-ended
+      title: Server-Backend Cache (Open-ended Design)
+      group: open-ended
+      level: 4
+  fintech:
+    label: Fintech
+    basis: curated (design screens + user firm docs)
+    items:
+    - id: payment-state-machine
+      title: Payment State Machine (authorize/capture/refund)
+      group: payments
+      level: 3
+    - id: idempotency-key-api
+      title: Idempotent Payment API
+      group: payments
+      level: 3
+    - id: webhook-delivery-retry
+      title: Webhook Delivery with Retry and Ordering
+      group: payments
+      level: 3
+    - id: wallet-holds-escrow
+      title: Wallet with Holds and Escrow
+      group: payments
+      level: 3
+    - id: split-payment-bill-splitting
+      title: Bill Splitting / Min Cash Flow
+      group: payments
+      level: 3
+    - id: luhn-card-validation
+      title: Luhn / Card Number Validation
+      group: payments
+      level: 1
+    - id: atm-cash-dispenser
+      title: ATM Cash Dispenser
+      group: payments
+      level: 2
+    - id: bank-ledger-transfers
+      title: Double-entry Ledger and Transfers
+      group: ledgers
+      level: 3
+    - id: temporal-ledger-asof-balance
+      title: Ledger with As-of Balance Queries
+      group: ledgers
+      level: 3
+    - id: statement-reconciliation
+      title: Bank Statement Reconciliation
+      group: ledgers
+      level: 2
+    - id: settlement-netting
+      title: Settlement Netting
+      group: ledgers
+      level: 3
+    - id: interest-accrual-amortization
+      title: Interest Accrual / Loan Amortization
+      group: ledgers
+      level: 2
+    - id: subscription-proration
+      title: Subscription Billing Proration
+      group: ledgers
+      level: 3
+    - id: fee-tier-calculator
+      title: Tiered Fee Calculator
+      group: ledgers
+      level: 2
+    - id: recurring-transaction-detection
+      title: Recurring Transaction Detection
+      group: data-risk
+      level: 3
+    - id: transaction-dedup
+      title: Transaction Deduplication
+      group: data-risk
+      level: 2
+    - id: fraud-velocity-rules
+      title: Fraud Velocity Rule Engine
+      group: data-risk
+      level: 3
+    - id: transaction-filter-pagination
+      title: Transaction Filter + Cursor Pagination
+      group: data-risk
+      level: 2
+    - id: currency-conversion-graph
+      title: Currency Conversion Graph
+      group: data-risk
+      level: 2
+    - id: retry-scheduler-backoff
+      title: Retry Scheduler with Backoff
+      group: data-risk
+      level: 2
+    - id: rate-limited-api-client
+      title: Rate-limited API Client with Pagination
+      group: data-risk
+      level: 2
+    - id: oms-order-management
+      title: Order Management System States
+      group: data-risk
+      level: 3
+  ai-infra:
+    label: AI labs / infra
+    basis: curated (design screens + user firm docs)
+    items:
+    - id: continuous-batching-scheduler
+      title: Continuous / Dynamic Batching Scheduler
+      group: serving
+      level: 3
+    - id: paged-kv-cache-allocator
+      title: Paged KV-cache Block Allocator
+      group: serving
+      level: 4
+    - id: prefix-cache-radix
+      title: Prefix Cache (radix/trie)
+      group: serving
+      level: 3
+    - id: request-router-consistent-hash
+      title: Request Router with Consistent Hashing
+      group: serving
+      level: 3
+    - id: priority-queue-preemption
+      title: Priority Queue with Preemption
+      group: serving
+      level: 3
+    - id: weighted-fair-queue
+      title: Weighted Fair Queueing
+      group: serving
+      level: 3
+    - id: load-balancer-least-conn
+      title: Load Balancer (least-connections / P2C)
+      group: serving
+      level: 2
+    - id: hedged-requests
+      title: Hedged Requests / Tail Latency
+      group: serving
+      level: 3
+    - id: autoscaler-policy
+      title: Autoscaler Policy Simulator
+      group: serving
+      level: 3
+    - id: rolling-canary-deploy
+      title: Rolling / Canary Deploy Simulator
+      group: serving
+      level: 3
+    - id: bpe-tokenizer
+      title: Byte-pair-encoding Tokenizer
+      group: llm-primitives
+      level: 3
+    - id: softmax-attention-stable
+      title: Numerically Stable Softmax + Attention
+      group: llm-primitives
+      level: 3
+    - id: top-p-top-k-sampling
+      title: Top-p / Top-k Sampling
+      group: llm-primitives
+      level: 2
+    - id: beam-search
+      title: Beam Search
+      group: llm-primitives
+      level: 3
+    - id: streaming-sse-assembler
+      title: Streaming SSE Chunk Assembler
+      group: llm-primitives
+      level: 2
+    - id: token-usage-metering
+      title: Sliding-window Token Usage Metering
+      group: llm-primitives
+      level: 2
+    - id: embedding-topk-cosine
+      title: Embedding Top-k (cosine) Search
+      group: llm-primitives
+      level: 2
+    - id: minhash-dedup
+      title: MinHash Near-duplicate Detection
+      group: llm-primitives
+      level: 3
+    - id: kv-store-ttl-backup-restore
+      title: KV Store with TTL, Backup/Restore
+      group: platform
+      level: 3
+    - id: in-memory-filesystem
+      title: In-memory File System
+      group: platform
+      level: 3
+    - id: provider-pool-failover
+      title: Provider Pool with Failover
+      group: platform
+      level: 3
+    - id: task-dependency-tracker
+      title: Task Dependency Tracker
+      group: platform
+      level: 3
+    - id: credit-tracker-expiring
+      title: Expiring Credit Tracker
+      group: platform
+      level: 3
+    - id: lru-cache
+      title: LRU Cache
+      group: platform
+      level: 3
+    - id: model-registry-versioning
+      title: Model Registry with Versioning
+      group: platform
+      level: 2
+    - id: health-checker-circuit
+      title: Health Checker + Circuit Breaker
+      group: platform
+      level: 3
+    - id: gpu-job-bin-packing
+      title: GPU Job Scheduler (bin packing)
+      group: platform
+      level: 3
+    - id: log-aggregator-bucketing
+      title: Metrics / Log Aggregator (time-bucketing)
+      group: platform
+      level: 2
+    - id: token-bucket
+      title: Token Bucket (LLM rate limit)
+      group: platform
+      level: 3
+    - id: sparse-matrix-multiply
+      title: Sparse Matrix Multiplication
+      group: llm-primitives
+      level: 2
+  ml:
+    label: ML / PyTorch basics
+    basis: 'curated: from-scratch exercises that map onto PyTorch concepts'
+    items:
+    - id: ml-tensor-broadcast
+      title: Tensor Broadcasting and Elementwise Ops
+      group: ml-from-scratch
+      level: 2
+    - id: ml-softmax-cross-entropy
+      title: Stable Softmax and Cross-Entropy
+      group: ml-from-scratch
+      level: 2
+    - id: ml-linear-regression-gd
+      title: Linear Regression by Gradient Descent
+      group: ml-from-scratch
+      level: 2
+    - id: ml-logistic-regression
+      title: Logistic Regression from Scratch
+      group: ml-from-scratch
+      level: 2
+    - id: ml-micrograd-autograd
+      title: Scalar Autograd Engine (micrograd)
+      group: ml-from-scratch
+      level: 3
+    - id: ml-mlp-backprop
+      title: Two-layer MLP with Manual Backprop
+      group: ml-from-scratch
+      level: 3
+    - id: ml-optimizers-sgd-adam
+      title: SGD, Momentum and Adam Updates
+      group: ml-from-scratch
+      level: 2
+    - id: ml-layernorm
+      title: LayerNorm Forward (and Backward)
+      group: ml-from-scratch
+      level: 2
+    - id: ml-attention-head
+      title: Single-head Scaled Dot-Product Attention
+      group: ml-from-scratch
+      level: 3
+    - id: ml-classification-metrics
+      title: Precision, Recall, F1 and ROC-AUC
+      group: ml-from-scratch
+      level: 2
+  cpp:
+    label: C++ (language track)
+    basis: 'curated: C++ for a Python-first candidate'
+    items:
+    - id: cpp-vector-from-scratch
+      title: Vector from Scratch (RAII, Rule of Five)
+      group: cpp
+      level: 2
+    - id: cpp-unique-ptr
+      title: unique_ptr from Scratch
+      group: cpp
+      level: 2
+    - id: cpp-shared-ptr-refcount
+      title: shared_ptr (Reference Counting) from Scratch
+      group: cpp
+      level: 3
+    - id: cpp-lru-cache
+      title: LRU Cache with unordered_map and std::list
+      group: cpp
+      level: 3
+    - id: cpp-spsc-ring-buffer
+      title: Lock-free SPSC Ring Buffer
+      group: cpp
+      level: 3
+    - id: cpp-arena-allocator
+      title: Arena (Bump) Allocator and Object Pool
+      group: cpp
+      level: 3
+    - id: cpp-thread-pool
+      title: Thread Pool with Futures
+      group: cpp
+      level: 3
+    - id: cpp-order-book
+      title: Limit Order Book (std::map price levels)
+      group: cpp
+      level: 3
+    - id: cpp-matrix-multiply-blocked
+      title: Cache-friendly Matrix Multiply
+      group: cpp
+      level: 2
+    - id: cpp-string-view-tokenizer
+      title: Zero-copy Tokenizer with string_view
+      group: cpp
+      level: 1
+    - id: cpp-generic-lower-bound
+      title: Generic lower_bound with Iterators and Templates
+      group: cpp
+      level: 2
+    - id: cpp-bit-flags
+      title: Bit Manipulation with uint64_t
+      group: cpp
+      level: 1
+    - id: cpp-scope-guard
+      title: ScopeGuard and Exception Safety
+      group: cpp
+      level: 1
+    - id: cpp-hashmap-open-addressing
+      title: Open-addressing Hash Map (templates)
+      group: cpp
+      level: 3
+    - id: cpp-spinlock-memory-order
+      title: Spinlock with std::atomic
+      group: cpp
+      level: 4
+    - id: cpp-move-semantics-fixit
+      title: 'Fix the Copies: Move Semantics Workout'
+      group: cpp
+      level: 2
+  rust:
+    label: Rust (language track)
+    basis: 'curated: Rust for a Python-first candidate'
+    items:
+    - id: rs-reverse-words-ownership
+      title: Reverse Words (Ownership and Slices)
+      group: rust
+      level: 1
+    - id: rs-generic-stack
+      title: Generic Stack<T>
+      group: rust
+      level: 1
+    - id: rs-linked-list-box
+      title: Singly Linked List with Box
+      group: rust
+      level: 2
+    - id: rs-lru-cache
+      title: LRU Cache (HashMap + index-based list)
+      group: rust
+      level: 3
+    - id: rs-expression-parser-result
+      title: Expression Parser with Result and Enums
+      group: rust
+      level: 2
+    - id: rs-iterator-adapter
+      title: Implement Iterator and Adapters
+      group: rust
+      level: 2
+    - id: rs-graph-bfs
+      title: Graph BFS and Shortest Path (indices)
+      group: rust
+      level: 2
+    - id: rs-thread-worker-pool
+      title: Worker Pool with Channels and Arc<Mutex>
+      group: rust
+      level: 3
+    - id: rs-order-book
+      title: Limit Order Book (BTreeMap)
+      group: rust
+      level: 3
+    - id: rs-ring-buffer
+      title: Fixed-capacity Ring Buffer<T>
+      group: rust
+      level: 2
+    - id: rs-trait-objects-shapes
+      title: 'Trait Objects: Box<dyn Shape>'
+      group: rust
+      level: 1
+    - id: rs-lifetimes-longest-prefix
+      title: 'Lifetimes: Longest Common Prefix and Splitters'
+      group: rust
+      level: 2
+    - id: rs-matrix-operators
+      title: Matrix with Operator Overloading
+      group: rust
+      level: 2
+    - id: rs-bank-ledger-result
+      title: Bank Ledger with Typed Errors
+      group: rust
+      level: 3

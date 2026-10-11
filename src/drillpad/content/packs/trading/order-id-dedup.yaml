@@ -1,0 +1,178 @@
+id: order-id-dedup
+title: Order ID Generator + Duplicate Detection
+bar_level: 2
+target_minutes: 20
+patterns:
+- dedup
+- hash-set
+- ttl-window
+- deque
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Build `OrderIds(prefix, ttl)`: a client order-id generator plus a bounded-memory duplicate filter for inbound messages
+  (think retries and replayed packets on an order-entry gateway).
+
+  **Generator.** `next_id() -> str` returns `"<prefix>-<n>"` where `n` counts 1, 2, 3, ... and is zero-padded to at
+  least 6 digits (`"ORD-000001"`). Ids are unique and strictly increasing per instance.
+
+  **Duplicate filter.** `accept(msg_id, ts) -> bool` returns True the first time an id is seen and False for repeats
+  within `ttl` time units of the FIRST acceptance. Specifically an id accepted at time `t0` is a duplicate for every
+  `ts < t0 + ttl`; at `ts >= t0 + ttl` it has expired and is accepted again (as a new first acceptance at `ts`).
+  Rejected duplicates do not extend the expiry. Timestamps (ints) never decrease across `accept` calls: raise `ValueError`
+  if one does. Memory must be bounded by the ids accepted inside the last `ttl` window: expired ids must actually be
+  removed, in O(1) amortized per call.
+
+  `size() -> int`: number of ids currently remembered (after the purge performed by the latest `accept`).
+  `ValueError` for an empty prefix or non-positive int ttl.
+starter: |
+  class OrderIds:
+      def __init__(self, prefix, ttl):
+          pass
+hints:
+- Keep a dict msg_id -> first-accepted ts for the O(1) membership test, plus a deque of (ts, msg_id) in
+  acceptance order for expiry.
+- Purge from the left of the deque while oldest_ts + ttl <= ts, deleting those ids from the dict, BEFORE
+  the membership test.
+- A repeat that is rejected must not touch the deque; otherwise you would extend the id lifetime.
+follow_ups:
+- How do you dedupe across multiple gateway instances?
+- How would a Bloom filter trade exactness for memory here, and what is the risk for orders?
+- How do sequence numbers (gap-free per session) change the design?
+tests:
+- name: generator format and uniqueness
+  code: |
+    g = OrderIds("ORD", 10)
+    assert g.next_id() == "ORD-000001"
+    assert g.next_id() == "ORD-000002"
+    ids = {g.next_id() for _ in range(1000)}
+    assert len(ids) == 1000 and "ORD-001002" in ids
+    g2 = OrderIds("X", 5)
+    assert g2.next_id() == "X-000001", "independent counters per instance"
+  hidden: false
+  tags:
+  - single
+  - ordering
+- name: duplicates rejected within ttl
+  code: |
+    f = OrderIds("A", 10)
+    assert f.accept("m1", 0) is True
+    assert f.accept("m1", 0) is False
+    assert f.accept("m1", 9) is False
+    assert f.accept("m2", 9) is True
+    assert f.size() == 2
+  hidden: false
+  tags:
+  - duplicate
+  - time
+- name: expiry boundary is inclusive of t0 + ttl
+  code: |
+    f = OrderIds("A", 10)
+    assert f.accept("m", 5)
+    assert f.accept("m", 14) is False
+    assert f.accept("m", 15) is True, "t0 + ttl has expired"
+    assert f.accept("m", 24) is False, "new first acceptance at 15, valid until 25"
+    assert f.accept("m", 25) is True
+  hidden: false
+  tags:
+  - boundary
+  - time
+- name: rejected duplicates do not extend the window
+  code: |
+    f = OrderIds("A", 10)
+    f.accept("m", 0)
+    for t in range(1, 10):
+        assert f.accept("m", t) is False
+    assert f.accept("m", 10) is True
+  hidden: false
+  tags:
+  - duplicate
+  - state-reuse
+- name: memory is bounded
+  code: |
+    f = OrderIds("A", 5)
+    for t in range(1000):
+        assert f.accept(f"id{t}", t)
+        assert f.size() <= 5
+    assert f.accept("id999", 1000) is False
+    assert f.accept("zzz", 2000) is True and f.size() == 1
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+- name: time must not go backwards; bad args
+  code: |
+    f = OrderIds("A", 5)
+    f.accept("x", 10)
+    try:
+        f.accept("y", 9)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("backwards time")
+    for args in [("", 5), ("A", 0), ("A", -1)]:
+        try:
+            OrderIds(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: 'scale: 300k messages with 50% replays'
+  code: |
+    f = OrderIds("A", 1000)
+    acc = 0
+    for i in range(300000):
+        mid = f"m{i // 2}"
+        acc += f.accept(mid, i)
+    assert acc == 150000
+    assert f.size() <= 1000
+  hidden: true
+  tags:
+  - scale
+  - duplicate
+complexity:
+- op: next_id
+  time: O(1)
+  space: O(1)
+- op: accept
+  time: O(1) amortized
+  space: O(W)
+extensions:
+- q: 'Level 2: make accept idempotent-aware: return the cached result of the first processing for duplicates.'
+  key_points:
+  - Store the first response with the id and return it on a replay within ttl
+  - Expiry removes both id and cached response
+  - A different payload for the same id should be flagged, not silently accepted
+  kind: code
+- q: 'Level 3: shard the filter by id hash across N workers with per-shard time order.'
+  key_points:
+  - Same id always hashes to the same shard so duplicates are detected
+  - Each shard keeps its own deque; timestamps only need to be monotonic per shard
+  - size() aggregates shards; per-shard purge stays O(1) amortized
+  kind: code
+- q: Why is accept O(1) amortized and what bounds memory?
+  key_points:
+  - Every id is inserted once and removed once
+  - Memory is O(ids accepted in the last ttl), proportional to rate * ttl
+  - Without the deque, finding expired ids would need an O(n) scan or a heap with O(log n)
+  kind: complexity
+- q: 'Design: id generation across restarts and exactly-once semantics.'
+  key_points:
+  - Persist the counter or embed a session/epoch in the prefix so ids never repeat after restart
+  - Dedup window must be at least the max client retry horizon, otherwise late retries slip through
+  - Exactly-once effect = at-least-once delivery + idempotent processing keyed by id
+  kind: design
+narration: []
+state_aloud:
+- An id is a duplicate for ts < t0 + ttl; at t0 + ttl it expires.
+- Rejected duplicates do not refresh expiry; timestamps never decrease.
+- Memory must shrink when ids expire; ids are zero-padded to 6 digits.
+walkthrough: |
+  Standard idempotency-key / dedup-window pattern. The dict gives O(1) lookup and the deque gives acceptance-ordered expiry. Source: standard formulation.
+categories:
+- trading

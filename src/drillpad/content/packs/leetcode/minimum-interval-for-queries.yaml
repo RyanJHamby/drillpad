@@ -1,0 +1,120 @@
+id: minimum-interval-for-queries
+title: Minimum Interval to Include Each Query
+bar_level: 3
+target_minutes: 40
+patterns:
+- intervals
+- heap-top-k
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  You get a list of closed intervals `[left, right]` and a list of integer `queries`. The size of an interval is `right - left + 1`. For each query `q`, find the size of the smallest interval that contains `q` (`left <= q <= right`), or `-1` if none does. Return the answers in the same order as the queries.
+
+  Example: `min_interval([[1,4],[2,4],[3,6],[4,4]], [2,3,4,5])` returns `[3,3,1,4]`.
+starter: |
+  def min_interval(intervals, queries):
+      pass
+hints:
+- Checking every interval for every query is O(n*q), too slow at 10^5 each. Can you answer queries offline in a different order?
+- Sort queries ascending (remember original positions) and intervals by left endpoint, then sweep.
+- Push every interval with left <= q onto a min-heap keyed by (size, right); pop while the top's right < q; the top is then the answer.
+follow_ups:
+- Answer queries online with a segment tree.
+- What if intervals can be deleted?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert min_interval([[1,4],[2,4],[3,6],[4,4]],[2,3,4,5]) == [3,3,1,4]
+- name: second classic
+  tags:
+  - ordering
+  code: |
+    assert min_interval([[2,3],[2,5],[1,8],[20,25]],[2,19,5,22]) == [2,-1,4,6]
+- name: no intervals
+  tags:
+  - empty
+  code: |
+    assert min_interval([],[1,2]) == [-1,-1]
+- name: no queries
+  tags:
+  - empty
+  code: |
+    assert min_interval([[1,2]],[]) == []
+- name: single point interval
+  tags:
+  - single
+  - boundary
+  code: |
+    assert min_interval([[5,5]],[5,4,6]) == [1,-1,-1]
+- name: duplicate queries keep original order
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    assert min_interval([[1,10],[3,4]],[9,3,9,4,0]) == [10,2,10,2,-1]
+- name: negative coordinates
+  tags:
+  - invalid
+  code: |
+    assert min_interval([[-5,-1],[-3,3]],[-4,0,-1,4]) == [5,7,5,-1]
+  hidden: true
+- name: stale intervals must be discarded
+  tags:
+  - boundary
+  code: |
+    assert min_interval([[1,2],[1,10]],[1,5]) == [2,10]
+    assert min_interval([[1,1],[1,100]],[2]) == [100]
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 100000
+    iv = [[i, i + 5] for i in range(n)]
+    qs = list(range(n - 1, -1, -1))
+    res = min_interval(iv, qs)
+    assert all(r == 6 for r in res)
+    iv2 = [[1, 10**7]] + [[i, i] for i in range(2, n)]
+    res = min_interval(iv2, [1, 5, 10**7 + 1, n + 7])
+    assert res == [10**7, 1, -1, 10**7]
+  hidden: true
+complexity:
+- op: overall
+  time: O((n + q) log (n + q))
+  space: O(n + q)
+extensions:
+- q: Why can intervals be discarded from the heap lazily?
+  kind: reasoning
+  key_points:
+  - Queries are processed in ascending order
+  - An interval with right < q can never contain a later, larger query
+  - Lazy deletion at the top is enough because only the minimum is read
+- q: Complexity breakdown.
+  kind: complexity
+  key_points:
+  - 'Sorting intervals and queries: O(n log n + q log q)'
+  - 'Each interval is pushed and popped at most once: O(n log n)'
+  - Space O(n + q) for the heap and answers
+- q: 'Alternative: offline sort by size plus union-find ''paint'' structure. How does it work?'
+  kind: design
+  key_points:
+  - Sort intervals by size ascending, queries sorted by value
+  - For each interval, assign its size to all unanswered queries in [left, right] found by binary search
+  - Union-find skips answered queries so each is answered once; O((n + q) log)
+- q: 'Online queries: what structure answers them without sorting by query?'
+  kind: design
+  key_points:
+  - Segment tree over coordinate-compressed endpoints storing the min interval size covering each elementary segment
+  - Range-chmin updates per interval, point query per query
+  - O(log n) per interval and per query, O(n) space
+narration: []
+state_aloud:
+- Preserve original query order in the output.
+- 'Closed intervals: endpoints are included.'
+- No covering interval gives -1.
+walkthrough: |
+  Process queries in ascending value order, remembering each query's original position. Keep intervals sorted by left endpoint; for each query push every interval whose left endpoint is not past the query onto a min-heap ordered by size. Pop from the heap while its smallest interval ends before the query, since it cannot help any larger query. The heap top is then the answer, or -1 if the heap is empty.

@@ -1,0 +1,119 @@
+id: kth-largest-in-stream
+title: Kth Largest Element in a Stream
+bar_level: 1
+target_minutes: 15
+patterns:
+- heap-top-k
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+- trading
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Kth Largest in Stream (LC 703)"
+statement: |
+  Implement a class `KthLargest(k, nums)` that tracks the k-th largest value (by sorted order, duplicates counted) of a growing stream. The constructor receives `k` and the initial values `nums`. `add(val)` inserts a value and returns the current k-th largest. At every call to `add`, the stream is guaranteed to hold at least `k` values afterwards.
+
+  Example: `k=3, nums=[4,5,8,2]`; `add(3)` returns 4, `add(5)` returns 5, `add(10)` returns 5, `add(9)` returns 8, `add(4)` returns 8.
+starter: |
+  class KthLargest:
+      def __init__(self, k, nums):
+          pass
+
+      def add(self, val):
+          pass
+hints:
+- You only ever need the k largest values seen so far.
+- 'Keep them in a min-heap of size k: the root is the k-th largest.'
+- When a new value arrives and the heap is full, it only matters if it beats the root.
+follow_ups:
+- What if you also need the k-th largest after deletions?
+- What if k changes between calls?
+tests:
+- name: classic sequence
+  tags:
+  - ordering
+  code: |
+    kl = KthLargest(3, [4,5,8,2])
+    assert [kl.add(x) for x in (3,5,10,9,4)] == [4,5,5,8,8]
+- name: k = 1 tracks the max
+  tags:
+  - zero-capacity
+  code: |
+    kl = KthLargest(1, [])
+    assert kl.add(-3) == -3
+    assert kl.add(5) == 5
+    assert kl.add(2) == 5
+- name: fewer than k initial values
+  tags:
+  - boundary
+  code: |
+    kl = KthLargest(2, [7])
+    assert kl.add(3) == 3
+    assert kl.add(10) == 7
+    assert kl.add(8) == 8
+- name: duplicates count separately
+  tags:
+  - duplicate
+  code: |
+    kl = KthLargest(2, [5,5])
+    assert kl.add(5) == 5
+    assert kl.add(6) == 5
+    assert kl.add(6) == 6
+- name: negatives
+  tags:
+  - invalid
+  code: |
+    kl = KthLargest(2, [-1,-5])
+    assert kl.add(-3) == -3
+    assert kl.add(-10) == -3
+- name: empty start
+  tags:
+  - empty
+  code: |
+    kl = KthLargest(3, [])
+    kl.add(1); kl.add(2)
+    assert kl.add(3) == 1
+    assert kl.add(0) == 1
+- name: long stream
+  hidden: true
+  tags:
+  - scale
+  code: |
+    kl = KthLargest(1000, list(range(1, 1000)))
+    for j in range(1, 200001):
+        assert kl.add(999 + j) == j
+complexity:
+- op: add
+  time: O(log k)
+  space: O(k)
+- op: constructor
+  time: O(n log k)
+  space: O(k)
+extensions:
+- q: Why a min-heap and not a max-heap?
+  kind: reasoning
+  key_points:
+  - The k-th largest is the smallest of the top k
+  - A min-heap exposes that value at its root
+  - A max-heap would give the maximum, not the k-th
+- q: Complexity versus keeping a sorted list?
+  kind: complexity
+  key_points:
+  - Heap add is O(log k) and memory O(k)
+  - Sorted insertion is O(n) per add and O(n) memory
+  - Sorting on every query is O(n log n) per add
+- q: Tick-by-tick market data with the k-th best bid; deletions?
+  kind: design
+  key_points:
+  - Heap cannot delete arbitrary items cheaply
+  - Use lazy deletion with a counter map or an order-statistic tree
+  - Keep the heap size bounded by cancelling stale entries as they surface
+narration: []
+state_aloud:
+- Fewer than k values initially.
+- k = 1 is the running maximum.
+- Duplicates count as separate entries.
+- Negative values.
+walkthrough: |
+  Keep a min-heap capped at k elements. Initial values go through the same `add` path. When the heap has fewer than k items, push the value; otherwise replace the root only if the new value is larger. The root is always the k-th largest, so `add` returns it in O(log k).

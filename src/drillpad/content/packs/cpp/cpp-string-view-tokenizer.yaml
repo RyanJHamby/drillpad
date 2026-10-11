@@ -1,0 +1,305 @@
+id: cpp-string-view-tokenizer
+title: Zero-copy Tokenizer with string_view
+language: cpp
+bar_level: 1
+target_minutes: 15
+patterns:
+- string-view
+- zero-copy
+- from-chars
+- parsing
+- lifetimes
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Write five small parsing helpers in C++20 that never copy characters: every returned `std::string_view` must
+  point into the caller's buffer (the tests compare pointers). No `std::string` temporaries, no `std::stringstream`,
+  no `std::stoi`. The tests replace global `operator new` to count heap allocations.
+
+  Functions:
+  - `std::string_view trim(std::string_view s)`: strip ASCII whitespace (space, `\t \n \r \f \v`) from both ends
+  - `std::vector<std::string_view> split(std::string_view s, char delim)`: split on each `delim`, keeping empty fields;
+    `split("")` is one empty field, like Python's `str.split(',')`
+  - `std::vector<std::string_view> split_ws(std::string_view s)`: split on runs of whitespace and drop empty fields,
+    like Python's `str.split()`
+  - `std::optional<std::int64_t> parse_int(std::string_view s)`: the whole view must be an optional `-` followed by
+    digits and fit in `int64_t`; empty input, `+5`, spaces, trailing junk and overflow give `nullopt`. Do not assume the
+    view is NUL-terminated (hint: `<charconv>`'s `std::from_chars` takes a pointer range).
+  - `std::optional<std::pair<std::string_view, std::string_view>> parse_kv(std::string_view line)`: split at the first `=`,
+    trim both sides; no `=` or an empty key gives `nullopt`; an empty value is fine.
+
+  Example:
+  ```cpp
+  std::string buf = "  a=1 ";
+  auto kv = parse_kv(buf);   // {"a", "1"}, both views point inside buf
+  ```
+starter: |
+  // All results are views into the input: never copy characters into a std::string.
+  // (You may #include <charconv> for std::from_chars.)
+
+  // Strip ASCII whitespace (space, \t, \n, \r, \f, \v) from both ends.
+  std::string_view trim(std::string_view s) { return {}; }
+
+  // Split on every occurrence of delim, keeping empty fields. split("") == {""} (like Python's str.split(',')).
+  std::vector<std::string_view> split(std::string_view s, char delim) { return {}; }
+
+  // Split on runs of whitespace, dropping empty fields (like Python's str.split()).
+  std::vector<std::string_view> split_ws(std::string_view s) { return {}; }
+
+  // Whole string must be an optionally '-'-prefixed run of digits that fits in int64_t. No whitespace, no '+'.
+  std::optional<std::int64_t> parse_int(std::string_view s) { return std::nullopt; }
+
+  // "key = value" -> {"key", "value"}: split at the FIRST '=', trim both sides. Empty key or no '=' -> nullopt.
+  std::optional<std::pair<std::string_view, std::string_view>> parse_kv(std::string_view line) {
+      return std::nullopt;
+  }
+prelude: |
+  // Allocation counter: the tests replace global operator new so they can assert "zero allocations".
+  static std::size_t g_allocs = 0;
+  void* operator new(std::size_t n) {
+      ++g_allocs;
+      if (void* p = std::malloc(n ? n : 1)) return p;
+      throw std::bad_alloc();
+  }
+  void operator delete(void* p) noexcept { std::free(p); }
+  void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+
+  static bool points_into(std::string_view part, std::string_view whole) {
+      return part.data() >= whole.data() && part.data() + part.size() <= whole.data() + whole.size();
+  }
+hints:
+- 'string_view is a (pointer, length) pair: remove_prefix / remove_suffix / substr just adjust it, so
+  trim needs no copying at all.'
+- 'For split use find(delim) in a loop: push s.substr(0, pos) then s.remove_prefix(pos + 1); when find
+  returns npos push what remains (that is how a trailing empty field appears).'
+- 'parse_int: std::from_chars(first, last, value) returns {ptr, ec}; success needs ec == std::errc{} AND
+  ptr == last (otherwise there was trailing junk). It handles ''-'' and overflow, and rejects ''+''.'
+follow_ups:
+- What are the lifetime rules, and what bug appears if you call trim() on a temporary std::string?
+- Why can't you pass a string_view to a C API expecting NUL termination?
+- How does std::from_chars compare with strtol/stoi (locale, exceptions, allocation, speed)?
+- How would you write split as a lazy range (C++20 views::split, or a generator) so it does no vector
+  allocation at all?
+tests:
+- name: trim returns a subview
+  tags:
+  - single
+  - boundary
+  code: |
+    std::string buf = "  \t hello world \n ";
+    std::string_view t = trim(buf);
+    CHECK_EQ(t, "hello world");
+    CHECK(t.data() == buf.data() + 4);
+    CHECK(points_into(t, buf));
+    CHECK_EQ(trim("x"), "x");
+    CHECK_EQ(trim("no-space"), "no-space");
+- name: trim empty and all-whitespace
+  tags:
+  - empty
+  - boundary
+  code: |
+    CHECK_EQ(trim("").size(), 0u);
+    CHECK_EQ(trim("   \t\n").size(), 0u);
+    CHECK_EQ(trim(" a").size(), 1u);
+    CHECK_EQ(trim("a ").size(), 1u);
+    CHECK_EQ(trim("\r\nline\r\n"), "line");
+- name: split keeps empty fields
+  tags:
+  - duplicate
+  - boundary
+  code: |
+    std::vector<std::string_view> a = split("a,b,,c,", ',');
+    std::vector<std::string_view> want = {"a", "b", "", "c", ""};
+    CHECK(a == want);
+    std::vector<std::string_view> b = split("single", ',');
+    std::vector<std::string_view> want1 = {"single"};
+    CHECK(b == want1);
+    std::vector<std::string_view> c = split(",", ',');
+    CHECK_EQ(c.size(), 2u);
+- name: split of empty input is one empty field
+  tags:
+  - empty
+  - single
+  code: |
+    auto v = split("", ',');
+    CHECK_EQ(v.size(), 1u);
+    CHECK_EQ(v[0].size(), 0u);
+    auto w = split("abc", 'x');
+    CHECK_EQ(w.size(), 1u);
+    CHECK_EQ(w[0], "abc");
+- name: views point into the original buffer
+  tags:
+  - single
+  - ordering
+  code: |
+    std::string buf = "alpha,beta,gamma";
+    auto parts = split(buf, ',');
+    CHECK_EQ(parts.size(), 3u);
+    CHECK(parts[0].data() == buf.data());
+    CHECK(parts[1].data() == buf.data() + 6);
+    CHECK(parts[2].data() == buf.data() + 11);
+    for (auto p : parts) CHECK(points_into(p, buf));
+    auto ws = split_ws(buf = "  one   two\tthree ");
+    CHECK_EQ(ws.size(), 3u);
+    for (auto p : ws) CHECK(points_into(p, buf));
+    CHECK_EQ(ws[2], "three");
+- name: split_ws drops empty fields
+  tags:
+  - empty
+  - duplicate
+  code: |
+    std::vector<std::string_view> v = split_ws("  a \t b\n");
+    std::vector<std::string_view> want = {"a", "b"};
+    CHECK(v == want);
+    CHECK(split_ws("").empty());
+    CHECK(split_ws(" \t \n").empty());
+    std::vector<std::string_view> one = split_ws("x");
+    CHECK_EQ(one.size(), 1u);
+- name: parse_int accepts and rejects
+  tags:
+  - invalid
+  - boundary
+  code: |
+    CHECK_EQ(*parse_int("0"), std::int64_t{0});
+    CHECK_EQ(*parse_int("42"), std::int64_t{42});
+    CHECK_EQ(*parse_int("-17"), std::int64_t{-17});
+    CHECK_EQ(*parse_int("00012"), std::int64_t{12});
+    CHECK(!parse_int("").has_value());
+    CHECK(!parse_int("-").has_value());
+    CHECK(!parse_int("12a").has_value());
+    CHECK(!parse_int("a12").has_value());
+    CHECK(!parse_int("+5").has_value());
+    CHECK(!parse_int(" 5").has_value());
+    CHECK(!parse_int("5 ").has_value());
+    CHECK(!parse_int("1.5").has_value());
+- name: parse_int limits
+  tags:
+  - boundary
+  - invalid
+  code: |
+    CHECK_EQ(*parse_int("9223372036854775807"), INT64_MAX);
+    CHECK_EQ(*parse_int("-9223372036854775808"), INT64_MIN);
+    CHECK(!parse_int("9223372036854775808").has_value());
+    CHECK(!parse_int("-9223372036854775809").has_value());
+    CHECK(!parse_int("99999999999999999999999").has_value());
+    // a view into the middle of a buffer must only look at its own characters
+    std::string buf = "12345";
+    CHECK_EQ(*parse_int(std::string_view(buf).substr(1, 2)), std::int64_t{23});
+- name: parse_kv
+  tags:
+  - boundary
+  - invalid
+  - duplicate
+  code: |
+    auto kv = parse_kv("  name = value with spaces  ");
+    CHECK(kv.has_value());
+    CHECK_EQ(kv->first, "name");
+    CHECK_EQ(kv->second, "value with spaces");
+    auto eq = parse_kv("a=b=c");
+    CHECK_EQ(eq->first, "a");
+    CHECK_EQ(eq->second, "b=c");
+    auto empty_val = parse_kv("k=");
+    CHECK(empty_val.has_value());
+    CHECK_EQ(empty_val->second.size(), 0u);
+    CHECK(!parse_kv("no equals here").has_value());
+    CHECK(!parse_kv("  = value").has_value());
+    CHECK(!parse_kv("").has_value());
+- name: zero allocations for trim, parse and kv
+  hidden: true
+  tags:
+  - scale
+  - single
+  code: |
+    std::string buf = "  key = 12345  ";
+    std::size_t before = g_allocs;
+    std::string_view t = trim(buf);
+    auto n = parse_int("123456789");
+    auto kv = parse_kv(buf);
+    std::size_t after = g_allocs;
+    CHECK_EQ(t, "key = 12345");
+    CHECK(n.has_value() && *n == 123456789);
+    CHECK(kv.has_value());
+    CHECK_EQ(kv->second, "12345");
+    CHECK_EQ(after - before, std::size_t{0});
+- name: split does not allocate per token
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    std::string big;
+    for (int i = 0; i < 2000; i++) { big += "a-token-longer-than-sso-"; big += std::to_string(i); big += ','; }
+    std::size_t before = g_allocs;
+    auto parts = split(big, ',');
+    auto ws = split_ws(big);
+    std::size_t after = g_allocs;
+    CHECK_EQ(parts.size(), 2001u);
+    CHECK_EQ(ws.size(), 1u);
+    CHECK(after - before <= 30);          // only the two vectors growing, not one string per token
+    CHECK_EQ(parts[1999], "a-token-longer-than-sso-1999");
+- name: tokenizing a CSV-like line end to end
+  hidden: true
+  tags:
+  - ordering
+  - single
+  code: |
+    std::string line = " 10 , -20,30 ,x, 40 ";
+    std::int64_t sum = 0;
+    int bad = 0;
+    for (std::string_view field : split(line, ',')) {
+        auto v = parse_int(trim(field));
+        if (v) sum += *v; else ++bad;
+    }
+    CHECK_EQ(sum, std::int64_t{60});
+    CHECK_EQ(bad, 1);
+complexity:
+- op: trim / parse_int / parse_kv
+  time: O(n)
+  space: O(1)
+- op: split / split_ws
+  time: O(n)
+  space: O(n)
+extensions:
+- q: What does zero-copy buy you and what is the catch?
+  kind: complexity
+  key_points:
+  - 'No allocation or character copying: each token is 16 bytes (pointer + length), and the vector is
+    the only allocation'
+  - Time is a single O(n) pass, which in a feed handler or log parser removes malloc from the hot path
+  - 'The catch is lifetime: every view dangles if the underlying buffer dies or is modified'
+- q: What can go wrong with string_view lifetimes?
+  kind: reasoning
+  key_points:
+  - 'A view of a temporary std::string dangles at the end of the full expression: `auto v = trim(make_string());`'
+  - Storing views in a struct or container that outlives the buffer is a use-after-free, and sanitizers
+    find it only when it runs
+  - 'string_view is not NUL-terminated: never pass .data() to strlen/printf %s or C APIs'
+- q: How would you design a tokenizer API safe to use in a hot parsing loop?
+  kind: design
+  key_points:
+  - Take the buffer by view and return views, documenting that results are valid only while the buffer
+    lives
+  - Offer an iterator/range or callback form (for_each_field) so the caller can avoid even the vector
+    allocation
+  - Reuse a caller-provided std::vector<string_view> (clear + push_back keeps capacity) to avoid per-line
+    allocations
+- q: Why does the safe integer parse use from_chars instead of stoi or atoi?
+  kind: reasoning
+  key_points:
+  - from_chars is locale independent, non-allocating and non-throwing; it reports overflow via errc::result_out_of_range
+  - atoi has no error reporting and UB on overflow; stoi throws exceptions and needs a std::string
+  - It is also much faster (no locale lookups), which matters when parsing millions of numbers per second
+narration: []
+state_aloud:
+- 'Lifetime: every view points into the caller''s buffer; state who owns the buffer.'
+- 'Edge cases: empty input, all-whitespace, trailing delimiter (empty last field), INT64_MIN/MAX and one
+  past.'
+- 'string_view is not NUL-terminated: use pointer ranges (from_chars), never strtol or .data() into C
+  APIs.'
+- from_chars success needs both no error code and ptr == end (no trailing junk).
+walkthrough: |
+  A `string_view` is just (pointer, length), so trimming and splitting only adjust those two fields: tokens are subranges of the original buffer, and the only allocation is the result vector. `parse_int` uses `std::from_chars` on the pointer range and checks both the error code and that the whole view was consumed. In Python every slice or `split()` creates new strings; in C++ you can borrow instead of copy, at the price of making buffer lifetime your problem.
+anki_queries: []
+categories:
+- leetcode

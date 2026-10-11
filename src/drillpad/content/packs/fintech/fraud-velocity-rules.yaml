@@ -1,0 +1,194 @@
+id: fraud-velocity-rules
+title: Fraud Velocity Rule Engine
+bar_level: 3
+target_minutes: 35
+patterns:
+- sliding-window
+- deque
+- counter
+- rule-engine
+firm_tags:
+- distsys
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `VelocityEngine`, a streaming fraud rule engine that flags bursts of activity. Money is integer
+  cents; timestamps are integer seconds.
+
+  `VelocityEngine(rules)` takes an ordered list of rule dicts:
+
+  ```
+  {"name": str, "field": str, "window": int,
+   "max_count": int | None, "max_amount": int | None,
+   "distinct": str | None, "max_distinct": int | None}      # last three optional
+  ```
+
+  `check(event)` takes an event dict with `ts`, `amount` and arbitrary other fields (e.g. `card`, `ip`) and
+  returns the list of names of rules that fire, in rule order, then records the event.
+
+  For each rule: if the event has no value for `rule["field"]` (or lacks the `distinct` field when the rule
+  has one) the rule is skipped and the event is not recorded for it. Otherwise look at all recorded events of
+  the SAME `field` value whose timestamp is in `(ts - window, ts]`, plus the current event:
+
+  * `max_count` fires when the count of those events is `> max_count`.
+  * `max_amount` fires when the sum of their amounts is `> max_amount`.
+  * `max_distinct` fires when the number of distinct values of the `distinct` field among them is
+    `> max_distinct`.
+
+  Every event is recorded even if it fires (velocity counts attempts, not approvals). Timestamps must be
+  non-decreasing across calls; a smaller `ts` than the previous event raises `ValueError` and records nothing.
+  Memory for events that have left the window must be released.
+starter: |
+  class VelocityEngine:
+      def __init__(self, rules):
+          pass
+
+      def check(self, event):
+          pass
+hints:
+- For each (rule, field value) keep a deque of (ts, amount, distinct_value) plus a running amount total
+  and a Counter of distinct values.
+- On each event first pop from the left while deque[0].ts <= ts - window, subtracting from the total and
+  decrementing the Counter (delete zero counts).
+- Evict before adding the current event, then evaluate thresholds against the post-add state.
+follow_ups:
+- How would the state be sharded and kept in Redis (sorted sets) in production?
+- How do you avoid unbounded memory for keys that never appear again?
+- What changes if events arrive out of order by up to 30 seconds?
+tests:
+- name: count rule with inclusive newest and exclusive oldest edge
+  tags:
+  - time
+  - boundary
+  code: |
+    e = VelocityEngine([{"name": "card_burst", "field": "card", "window": 60, "max_count": 3}])
+    ev = lambda ts, card="c1": {"ts": ts, "amount": 100, "card": card}
+    assert e.check(ev(0)) == [] and e.check(ev(10)) == [] and e.check(ev(20)) == []
+    assert e.check(ev(30)) == ["card_burst"], "4 events in 60s"
+    assert e.check(ev(60)) == ["card_burst"], "ts=0 leaves the window at exactly ts-window; 10,20,30,60 = 4"
+    assert e.check(ev(80)) == [], "window (20,80]: 30,60,80 = 3"
+    assert e.check(ev(80, card="c2")) == [], "other card has its own window"
+- name: amount rule sums inside the window
+  tags:
+  - time
+  - boundary
+  code: |
+    e = VelocityEngine([{"name": "spend", "field": "account", "window": 100, "max_amount": 1000}])
+    ev = lambda ts, amt: {"ts": ts, "amount": amt, "account": "a"}
+    assert e.check(ev(0, 600)) == []
+    assert e.check(ev(50, 400)) == [], "sum equals the limit: not above"
+    assert e.check(ev(60, 1)) == ["spend"]
+    assert e.check(ev(100, 1)) == [], "the 600 left the window; 400 + 1 + 1"
+    assert e.check(ev(151, 998)) == [], "window (51,151]: 1 + 1 + 998 = 1000"
+- name: distinct rule counts distinct values
+  tags:
+  - duplicate
+  - time
+  code: |
+    rules = [{"name": "ip_many_cards", "field": "ip", "window": 100, "distinct": "card", "max_distinct": 2}]
+    e = VelocityEngine(rules)
+    ev = lambda ts, card, ip="1.1.1.1": {"ts": ts, "amount": 1, "card": card, "ip": ip}
+    assert e.check(ev(0, "A")) == [] and e.check(ev(1, "B")) == [] and e.check(ev(2, "A")) == []
+    assert e.check(ev(3, "C")) == ["ip_many_cards"]
+    assert e.check(ev(4, "C", ip="9.9.9.9")) == []
+    assert e.check(ev(101, "C")) == [], "window (1,101]: A, C"
+    assert e.check(ev(102, "D")) == [], "window (2,102]: C, C, D"
+    assert e.check(ev(103, "E")) == ["ip_many_cards"], "C, D, E"
+- name: multiple rules fire in rule order
+  tags:
+  - ordering
+  - invalid
+  code: |
+    rules = [
+        {"name": "count", "field": "card", "window": 10, "max_count": 1},
+        {"name": "amount", "field": "card", "window": 10, "max_amount": 50},
+        {"name": "ip", "field": "ip", "window": 10, "max_count": 5},
+    ]
+    e = VelocityEngine(rules)
+    assert e.check({"ts": 0, "amount": 40, "card": "c", "ip": "i"}) == []
+    assert e.check({"ts": 1, "amount": 40, "card": "c", "ip": "i"}) == ["count", "amount"]
+    assert e.check({"ts": 2, "amount": 0, "card": "c"}) == ["count", "amount"], "event without ip skips the ip rule"
+- name: empty engine and out of order timestamps
+  tags:
+  - empty
+  - invalid
+  hidden: true
+  code: |
+    assert VelocityEngine([]).check({"ts": 5, "amount": 1}) == []
+    e = VelocityEngine([{"name": "n", "field": "card", "window": 10, "max_count": 1}])
+    e.check({"ts": 10, "amount": 1, "card": "c"})
+    try:
+        e.check({"ts": 9, "amount": 1, "card": "c"})
+        assert False
+    except ValueError:
+        pass
+    assert e.check({"ts": 10, "amount": 1, "card": "c"}) == ["n"], "equal ts is allowed; the rejected event was not recorded"
+    assert e.check({"ts": 20, "amount": 1, "card": "c"}) == []
+- name: zero and single event windows
+  tags:
+  - zero-capacity
+  - single
+  hidden: true
+  code: |
+    e = VelocityEngine([{"name": "n", "field": "card", "window": 1, "max_count": 0}])
+    assert e.check({"ts": 5, "amount": 1, "card": "c"}) == ["n"], "any event exceeds max_count=0"
+    f = VelocityEngine([{"name": "n", "field": "card", "window": 1, "max_count": 1}])
+    assert f.check({"ts": 5, "amount": 1, "card": "c"}) == []
+    assert f.check({"ts": 6, "amount": 1, "card": "c"}) == [], "window of 1 second holds only the current event"
+- name: long stream across many keys
+  tags:
+  - scale
+  hidden: true
+  code: |
+    rules = [
+        {"name": "c", "field": "card", "window": 1000, "max_count": 400},
+        {"name": "a", "field": "card", "window": 1000, "max_amount": 10**9},
+        {"name": "d", "field": "ip", "window": 1000, "distinct": "card", "max_distinct": 50},
+    ]
+    e = VelocityEngine(rules)
+    fired = 0
+    for i in range(300000):
+        r = e.check({"ts": i // 3, "amount": 5, "card": "c%d" % (i % 700), "ip": "ip%d" % (i % 9)})
+        fired += len(r)
+    assert fired > 0
+    assert e.check({"ts": 10**9, "amount": 5, "card": "cx", "ip": "ipx"}) == []
+complexity:
+- op: check
+  time: O(r) amortized
+  space: O(w)
+extensions:
+- q: 'Level 2: add a rule type ''ratio'' that fires when declined/total in the window exceeds a threshold.'
+  kind: code
+  key_points:
+  - Track decline counts next to total counts in the same per-key deque
+  - Require a minimum sample size so one decline out of one does not fire
+  - Use integer cross-multiplication (declined * den > num * total) instead of float division
+- q: 'Level 3: tolerate bounded out-of-order events (up to L seconds late).'
+  kind: code
+  key_points:
+  - Hold a watermark = max_ts - L and evict only below watermark - window
+  - Insert late events in sorted position (bisect) instead of appending
+  - Events older than the watermark are rejected or processed with a flag, not silently dropped
+- q: How would you run this at card-network scale with state in Redis?
+  kind: design
+  key_points:
+  - Sorted set per (rule, key) with ZADD, ZREMRANGEBYSCORE and ZCARD, plus a TTL equal to the window
+  - Shard by key so one key's events hit one node; make updates atomic with a Lua script
+  - 'Decision is a risk signal: route to review or step-up auth, with a shadow mode before blocking'
+- q: What are the time and memory costs and what drives them?
+  kind: complexity
+  key_points:
+  - Each event is appended once and evicted once per rule, so O(1) amortised per rule
+  - Space is O(events inside windows) summed over active keys, not total history
+  - A naive rescan of history per event is O(n) each and O(n^2) overall
+narration: []
+state_aloud:
+- Window is (ts - window, ts] including the current event; thresholds fire on strictly greater than.
+- Every event is recorded even when it fires, because velocity counts attempts.
+- Evict before adding so counts and sums always describe exactly the window.
+- Out-of-order timestamps would corrupt the deque invariant, so I reject them (or ask about a lateness
+  bound).
+- Distinct counts need a Counter with decrement-and-delete on eviction, not a set.
+walkthrough: |
+  State is a dict keyed by (rule index, field value) holding a deque of (ts, amount, distinct value), a running amount total and a Counter of distinct values. check pops expired entries from the left while ts <= event.ts - window, appends the new event, then compares count, total and number of Counter keys to the rule thresholds. Each event is pushed and popped once per rule, so cost per rule is O(1) amortised. Source: standard formulation.

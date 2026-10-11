@@ -1,0 +1,103 @@
+id: reverse-bits
+title: Reverse Bits
+bar_level: 1
+target_minutes: 15
+patterns:
+- bit-manipulation
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Reverse the bits of a 32-bit unsigned integer. `n` is in `[0, 2**32)` and bit 0 is the least significant bit; a negative input is interpreted as its 32-bit two's-complement pattern. Return the result as a non-negative integer below `2**32`.
+
+  Example: `reverse_bits(0b00000010100101000001111010011100)` returns `0b00111001011110000010100101000000` (964176192).
+starter: |
+  def reverse_bits(n):
+      pass
+hints:
+- 'Python ints are unbounded, so first mask: n &= 0xFFFFFFFF.'
+- 'Loop 32 times: shift the result left by one, append the lowest bit of n, shift n right.'
+- Always run all 32 iterations, even if n becomes 0, so leading zeros land on the high end.
+follow_ups:
+- Call this many times; how do you speed it up?
+- Reverse bits of a 64-bit value.
+tests:
+- name: example
+  tags:
+  - boundary
+  code: |
+    assert reverse_bits(43261596) == 964176192
+- name: zero
+  tags:
+  - zero-capacity
+  code: |
+    assert reverse_bits(0) == 0
+- name: one goes to the top
+  tags:
+  - single
+  - boundary
+  code: |
+    assert reverse_bits(1) == 2**31
+    assert reverse_bits(2**31) == 1
+- name: all ones
+  tags:
+  - boundary
+  code: |
+    assert reverse_bits(2**32 - 1) == 2**32 - 1
+- name: negative is masked
+  tags:
+  - invalid
+  code: |
+    assert reverse_bits(-1) == 2**32 - 1
+    assert reverse_bits(-2) == 2**32 - 1 - 2**31
+  hidden: true
+- name: palindromic pattern and involution
+  tags:
+  - duplicate
+  code: |
+    assert reverse_bits(0x80000001) == 0x80000001
+    assert reverse_bits(reverse_bits(0xDEADBEEF)) == 0xDEADBEEF
+  hidden: true
+- name: many calls
+  tags:
+  - scale
+  code: |
+    s = 0
+    for i in range(200000):
+        s += reverse_bits(i * 104729)
+    e = 0
+    for i in range(200000):
+        e += int(format((i * 104729) & 0xFFFFFFFF, '032b')[::-1], 2)
+    assert s == e
+  hidden: true
+complexity:
+- op: overall
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Why must you iterate exactly 32 times?
+  kind: reasoning
+  key_points:
+  - Leading zeros of the input become trailing zeros... positions matter within the fixed width
+  - Stopping when n hits 0 leaves the result under-shifted
+  - Width is part of the contract in a language with unbounded ints
+- q: Faster alternatives.
+  kind: complexity
+  key_points:
+  - 'Loop: 32 steps, O(w) which is O(1) for fixed width'
+  - Divide and conquer swaps halves with masks in log2(32) = 5 steps
+  - 'Byte lookup table: 4 lookups'
+- q: 'Design: reverse bits for many values (FFT bit-reversal permutation).'
+  kind: design
+  key_points:
+  - Precompute a 256-entry byte reversal table
+  - Combine the four byte results in swapped order
+  - For FFT the bit-reversal permutation can be built incrementally in O(n)
+narration: []
+state_aloud:
+- Fixed 32-bit width.
+- Mask negative inputs.
+- Result is unsigned.
+walkthrough: |
+  Mask n to 32 bits. Build the result by repeating 32 times: shift the result left, OR in the lowest bit of n, and shift n right. After exactly 32 steps the lowest bit of the original has become the highest bit of the result.

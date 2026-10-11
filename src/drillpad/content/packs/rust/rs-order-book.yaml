@@ -1,0 +1,339 @@
+title: Limit Order Book (BTreeMap)
+target_minutes: 40
+patterns:
+- order-book
+- btreemap-price-levels
+- fifo-vecdeque
+- price-time-priority
+- enum-side
+firm_tags:
+- quant-hft
+categories:
+- trading
+statement: |2
+
+  Implement a single-symbol limit order book with price-time priority. Prices and quantities are `u64` and must be
+  positive. These types are **already defined for you** (do not redefine them):
+
+  ```rust
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  enum Side { Buy, Sell }
+
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  struct Fill { order_id: u64, price: u64, qty: u64 }   // order_id is the RESTING order that was hit
+
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  enum BookError { ZeroPrice, ZeroQty }
+  ```
+
+  ```rust
+  struct OrderBook { /* ... */ }
+
+  impl OrderBook {
+      fn new() -> Self;
+      fn limit(&mut self, side: Side, price: u64, qty: u64) -> Result<(u64, Vec<Fill>), BookError>;
+      fn market(&mut self, side: Side, qty: u64) -> Result<Vec<Fill>, BookError>;
+      fn cancel(&mut self, order_id: u64) -> bool;
+      fn best_bid(&self) -> Option<u64>;
+      fn best_ask(&self) -> Option<u64>;
+      fn depth(&self, side: Side) -> Vec<(u64, u64)>;    // (price, total resting qty), best price first
+  }
+  ```
+
+  - `limit` returns `(order_id, fills)`. Ids are 1, 2, 3, ... in call order of **accepted** orders (a rejected call consumes
+    no id). The order first matches against the opposite side while it crosses (buy price >= best ask, sell price <= best
+    bid): best price first, FIFO within a price level. Every fill executes at the RESTING order's price. Any unfilled
+    remainder rests in the book; an order that does not cross just rests.
+  - `market` matches at any price and discards an unfilled remainder (it never rests and consumes no id).
+  - `cancel` returns true only if the order is currently resting (not unknown, not already cancelled, not fully filled).
+  - Validation: `price == 0` gives `Err(BookError::ZeroPrice)` and `qty == 0` gives `Err(BookError::ZeroQty)`; check price
+    first. A rejected call changes nothing. `market` only checks quantity.
+  - `depth` skips empty levels; bids are listed highest price first, asks lowest first.
+
+  Example: resting sell 5 @ 101, then `limit(Buy, 102, 3)` fills `Fill { order_id: 1, price: 101, qty: 3 }` (not at 102).
+prelude: |2
+
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  enum Side {
+      Buy,
+      Sell,
+  }
+
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  struct Fill {
+      order_id: u64,
+      price: u64,
+      qty: u64,
+  }
+
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  enum BookError {
+      ZeroPrice,
+      ZeroQty,
+  }
+starter: |2
+
+  use std::collections::{BTreeMap, HashMap, VecDeque};
+
+  struct OrderBook {
+      // price -> FIFO queue of (order_id, remaining_qty)
+      bids: BTreeMap<u64, VecDeque<(u64, u64)>>,
+      asks: BTreeMap<u64, VecDeque<(u64, u64)>>,
+      // resting order id -> (side, price), for cancel
+      orders: HashMap<u64, (Side, u64)>,
+      next_id: u64,
+  }
+
+  impl OrderBook {
+      fn new() -> Self {
+          todo!()
+      }
+
+      fn limit(&mut self, side: Side, price: u64, qty: u64) -> Result<(u64, Vec<Fill>), BookError> {
+          todo!()
+      }
+
+      fn market(&mut self, side: Side, qty: u64) -> Result<Vec<Fill>, BookError> {
+          todo!()
+      }
+
+      fn cancel(&mut self, order_id: u64) -> bool {
+          todo!()
+      }
+
+      fn best_bid(&self) -> Option<u64> {
+          todo!()
+      }
+
+      fn best_ask(&self) -> Option<u64> {
+          todo!()
+      }
+
+      fn depth(&self, side: Side) -> Vec<(u64, u64)> {
+          todo!()
+      }
+  }
+hints:
+- '`BTreeMap<u64, VecDeque<(id, qty)>>` per side gives sorted price levels with FIFO inside each. Best ask is `asks.keys().next()`; best bid is `bids.keys().next_back()` (or `iter().next_back()`). Write one private `match_against` helper used by both `limit` and `market`, taking `limit_price: Option<u64>`.'
+- 'Borrow-checker trap: do not hold a reference from `keys().next()` while mutating the map. Copy the price out (`let p = *self.asks.keys().next()?;`), then `get_mut(&p)`. Selecting the side with `let book = match side { Side::Buy => &mut self.asks, Side::Sell => &mut self.bids };` while also touching `self.orders` is fine because they are different fields.'
+- 'Remove a level from the map as soon as its queue becomes empty so `best_*` and `depth` never see empty levels; on a full fill also remove the id from `orders`. `cancel`: remove from `orders`, find the level, `retain` the queue without that id, and drop the level if empty.'
+follow_ups:
+- How do you make cancel O(1) instead of O(level size)?
+- 'What changes for modify/amend: does the order keep time priority?'
+- How would you add IOC / FOK / post-only order types?
+- How would you shard this across symbols and keep matching deterministic?
+tests:
+- name: resting orders and best prices
+  tags:
+  - empty
+  - single
+  code: |
+    let mut ob = OrderBook::new();
+    assert_eq!(ob.best_bid(), None);
+    assert_eq!(ob.best_ask(), None);
+    assert!(ob.depth(Side::Buy).is_empty());
+    assert_eq!(ob.limit(Side::Buy, 100, 10), Ok((1, vec![])));
+    assert_eq!(ob.limit(Side::Sell, 105, 4), Ok((2, vec![])));
+    assert_eq!(ob.limit(Side::Buy, 101, 1), Ok((3, vec![])));
+    assert_eq!(ob.best_bid(), Some(101));
+    assert_eq!(ob.best_ask(), Some(105));
+  hidden: false
+- name: crossing fills at the resting price
+  tags:
+  - ordering
+  - boundary
+  code: |
+    let mut ob = OrderBook::new();
+    ob.limit(Side::Sell, 101, 5).unwrap();
+    let (id, fills) = ob.limit(Side::Buy, 102, 3).unwrap();
+    assert_eq!(id, 2);
+    assert_eq!(fills, vec![Fill { order_id: 1, price: 101, qty: 3 }]);
+    assert_eq!(ob.depth(Side::Sell), vec![(101, 2)]);
+    assert_eq!(ob.best_bid(), None); // fully filled: nothing rests
+    let (_, fills) = ob.limit(Side::Buy, 101, 2).unwrap(); // boundary: equal price crosses
+    assert_eq!(fills, vec![Fill { order_id: 1, price: 101, qty: 2 }]);
+    assert_eq!(ob.best_ask(), None);
+  hidden: false
+- name: price priority then FIFO within a level
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    let mut ob = OrderBook::new();
+    ob.limit(Side::Sell, 102, 5).unwrap(); // id 1
+    ob.limit(Side::Sell, 101, 2).unwrap(); // id 2
+    ob.limit(Side::Sell, 101, 3).unwrap(); // id 3
+    let (id, fills) = ob.limit(Side::Buy, 102, 8).unwrap();
+    assert_eq!(id, 4);
+    assert_eq!(fills, vec![
+        Fill { order_id: 2, price: 101, qty: 2 },
+        Fill { order_id: 3, price: 101, qty: 3 },
+        Fill { order_id: 1, price: 102, qty: 3 },
+    ]);
+    assert_eq!(ob.depth(Side::Sell), vec![(102, 2)]);
+  hidden: false
+- name: partial fill rests the remainder
+  tags:
+  - state-reuse
+  - single
+  code: |
+    let mut ob = OrderBook::new();
+    ob.limit(Side::Buy, 50, 4).unwrap(); // id 1
+    let (id, fills) = ob.limit(Side::Sell, 50, 10).unwrap(); // id 2 hits 4, rests 6
+    assert_eq!(id, 2);
+    assert_eq!(fills, vec![Fill { order_id: 1, price: 50, qty: 4 }]);
+    assert_eq!(ob.best_bid(), None);
+    assert_eq!(ob.best_ask(), Some(50));
+    assert_eq!(ob.depth(Side::Sell), vec![(50, 6)]);
+    let fills = ob.market(Side::Buy, 2).unwrap();
+    assert_eq!(fills, vec![Fill { order_id: 2, price: 50, qty: 2 }]);
+    assert_eq!(ob.depth(Side::Sell), vec![(50, 4)]);
+  hidden: false
+- name: market orders never rest and consume no id
+  tags:
+  - boundary
+  - ordering
+  code: |
+    let mut ob = OrderBook::new();
+    assert_eq!(ob.market(Side::Buy, 5), Ok(vec![])); // empty book
+    ob.limit(Side::Sell, 10, 2).unwrap(); // id 1
+    ob.limit(Side::Sell, 11, 2).unwrap(); // id 2
+    let fills = ob.market(Side::Buy, 10).unwrap(); // remainder 6 is discarded
+    assert_eq!(fills, vec![
+        Fill { order_id: 1, price: 10, qty: 2 },
+        Fill { order_id: 2, price: 11, qty: 2 },
+    ]);
+    assert_eq!(ob.best_bid(), None);
+    assert_eq!(ob.best_ask(), None);
+    let (id, _) = ob.limit(Side::Buy, 1, 1).unwrap();
+    assert_eq!(id, 3, "market orders must not consume ids");
+  hidden: false
+- name: cancel
+  tags:
+  - state-reuse
+  - invalid
+  code: |
+    let mut ob = OrderBook::new();
+    ob.limit(Side::Buy, 100, 5).unwrap(); // 1
+    ob.limit(Side::Buy, 100, 6).unwrap(); // 2
+    ob.limit(Side::Buy, 99, 7).unwrap(); // 3
+    assert!(ob.cancel(1));
+    assert!(!ob.cancel(1)); // already cancelled
+    assert!(!ob.cancel(99)); // unknown
+    assert_eq!(ob.depth(Side::Buy), vec![(100, 6), (99, 7)]);
+    assert!(ob.cancel(2));
+    assert_eq!(ob.best_bid(), Some(99)); // emptied level disappears
+    let (_, fills) = ob.limit(Side::Sell, 99, 7).unwrap();
+    assert_eq!(fills, vec![Fill { order_id: 3, price: 99, qty: 7 }]);
+    assert!(!ob.cancel(3), "fully filled orders cannot be cancelled");
+    assert_eq!(ob.best_bid(), None);
+  hidden: false
+- name: validation rejects without side effects
+  tags:
+  - invalid
+  - zero-capacity
+  hidden: true
+  code: |
+    let mut ob = OrderBook::new();
+    assert_eq!(ob.limit(Side::Buy, 0, 5), Err(BookError::ZeroPrice));
+    assert_eq!(ob.limit(Side::Sell, 10, 0), Err(BookError::ZeroQty));
+    assert_eq!(ob.limit(Side::Sell, 0, 0), Err(BookError::ZeroPrice));
+    assert_eq!(ob.market(Side::Buy, 0), Err(BookError::ZeroQty));
+    assert_eq!(ob.limit(Side::Buy, 10, 1), Ok((1, vec![])), "rejected calls must not consume ids");
+    assert_eq!(ob.depth(Side::Buy), vec![(10, 1)]);
+- name: sell side walks bids best first and depth order
+  tags:
+  - ordering
+  - duplicate
+  hidden: true
+  code: |
+    let mut ob = OrderBook::new();
+    ob.limit(Side::Buy, 98, 1).unwrap(); // 1
+    ob.limit(Side::Buy, 100, 2).unwrap(); // 2
+    ob.limit(Side::Buy, 99, 3).unwrap(); // 3
+    ob.limit(Side::Buy, 100, 4).unwrap(); // 4
+    assert_eq!(ob.depth(Side::Buy), vec![(100, 6), (99, 3), (98, 1)]);
+    let (_, fills) = ob.limit(Side::Sell, 99, 10).unwrap();
+    assert_eq!(fills, vec![
+        Fill { order_id: 2, price: 100, qty: 2 },
+        Fill { order_id: 4, price: 100, qty: 4 },
+        Fill { order_id: 3, price: 99, qty: 3 },
+    ]);
+    assert_eq!(ob.depth(Side::Buy), vec![(98, 1)]);
+    assert_eq!(ob.depth(Side::Sell), vec![(99, 1)]);
+    ob.limit(Side::Sell, 105, 1).unwrap();
+    ob.limit(Side::Sell, 103, 1).unwrap();
+    assert_eq!(ob.depth(Side::Sell), vec![(99, 1), (103, 1), (105, 1)]);
+- name: many orders
+  tags:
+  - scale
+  hidden: true
+  code: |
+    let mut ob = OrderBook::new();
+    for i in 0..20_000u64 {
+        ob.limit(Side::Sell, 1000 + (i % 50), 1).unwrap();
+    }
+    let mut filled = 0u64;
+    for _ in 0..20_000u64 {
+        let fills = ob.market(Side::Buy, 1).unwrap();
+        filled += fills.iter().map(|f| f.qty).sum::<u64>();
+    }
+    assert_eq!(filled, 20_000);
+    assert_eq!(ob.best_ask(), None);
+    for i in 0..20_000u64 {
+        ob.limit(Side::Buy, 1 + (i % 100), 2).unwrap();
+    }
+    assert_eq!(ob.depth(Side::Buy).len(), 100);
+    assert_eq!(ob.depth(Side::Buy)[0], (100, 400));
+complexity:
+- op: limit / market (matching k fills)
+  time: O(k log n)
+  space: O(k)
+- op: cancel
+  time: O(L)
+  space: O(1)
+- op: best_bid / best_ask
+  time: O(log n)
+  space: O(1)
+- op: depth
+  time: O(n)
+  space: O(n)
+extensions:
+- q: How do you make cancel O(1), and what does Rust make awkward about it?
+  kind: design
+  key_points:
+  - Keep order_id -> slot in a slab and link orders in each level as a doubly linked list by index (no pointers, no unsafe), as in the arena LRU pattern
+  - 'Or lazy deletion: mark the order cancelled and skip it when it reaches the front of its queue'
+  - A Vec/VecDeque retain is O(level size); intrusive linked lists with references fight the borrow checker, so use indices
+- q: What are the time and space costs, and why BTreeMap instead of HashMap or a heap?
+  kind: complexity
+  key_points:
+  - 'BTreeMap gives ordered price levels: best price in O(log n) and range/depth iteration in order, which a HashMap cannot do'
+  - A BinaryHeap finds the best price but cannot delete a middle level on cancel without lazy cleanup
+  - Real books use a dense array of price ticks around the touch for O(1) access and cache locality
+- q: How would the book be used from a matching engine with many threads?
+  kind: design
+  key_points:
+  - 'Matching is inherently sequential per symbol: use a single-threaded owner per symbol fed by a channel (the actor model) rather than Arc<Mutex<OrderBook>>'
+  - Shard symbols across threads; each OrderBook is Send because all its fields are
+  - Deterministic replay needs sequence numbers on inputs and no wall clock inside matching
+- q: How would you add modify/amend and IOC/FOK/post-only orders?
+  kind: reasoning
+  key_points:
+  - Amend down keeps time priority; amend up or price change loses it (cancel and re-enter)
+  - 'IOC: match then discard the remainder (what market does with a limit price); FOK: pre-check available quantity before matching anything'
+  - 'Post-only: reject if it would cross instead of matching'
+state_aloud:
+- Fills execute at the resting order's price, not the incoming limit price.
+- 'Price-time priority: best price first, FIFO within a level.'
+- Market orders discard the remainder and consume no id; rejected calls change nothing and consume no id.
+- Remove empty levels immediately so best_bid/best_ask and depth never see them.
+- 'Do not hold a reference into the BTreeMap while mutating it: copy the price key out first.'
+walkthrough: |2
+
+  Each side is a `BTreeMap<price, VecDeque<(id, qty)>>`, so the best price is the first key for asks and the last key for bids and each level is FIFO, which gives price-time priority. A shared `match_against` loop copies the best price out, mutates the queue at that level, and removes emptied levels and filled order ids so nothing stale remains; fills use the resting price. Order sides, fills and errors are enums and structs rather than strings, so invalid sides are unrepresentable, unlike the Python version that raises `ValueError`.
+id: rs-order-book
+language: rust
+bar_level: 3
+narration: []
+anki_queries: []

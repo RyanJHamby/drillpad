@@ -1,0 +1,88 @@
+id: min-cost-climbing-stairs
+title: Min Cost Climbing Stairs
+bar_level: 1
+target_minutes: 12
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Min Cost Climbing Stairs (LC 746)"
+statement: |
+  `cost[i]` is the price you pay each time you step off stair `i`. You may begin on stair 0 or stair 1, and each move climbs 1 or 2 stairs. The top is the position just past the last stair (index `len(cost)`). Return the cheapest total price to reach the top. `cost` has at least 2 entries.
+
+  Example: `min_cost_climbing_stairs([10,15,20])` returns `15` (start at index 1, pay 15, jump to the top).
+starter: |
+  def min_cost_climbing_stairs(cost):
+      pass
+hints:
+- To stand at position i you came from i-1 or i-2 and paid the cost of the stair you left.
+- 'State: best[i] is the minimum price to be standing at position i, for i in 0..n.'
+- best[0] = best[1] = 0 because you may start on either; answer is best[n].
+follow_ups:
+- Return the actual stairs you step on.
+- What if you may jump up to k stairs?
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert min_cost_climbing_stairs([10,15,20])==15
+- name: longer
+  tags:
+  - ordering
+  code: |
+    assert min_cost_climbing_stairs([1,100,1,1,1,100,1,1,100,1])==6
+- name: two stairs
+  tags:
+  - boundary
+  code: |
+    assert min_cost_climbing_stairs([5,3])==3
+    assert min_cost_climbing_stairs([1,100])==1
+- name: all zeros
+  tags:
+  - duplicate
+  code: |
+    assert min_cost_climbing_stairs([0,0,0,0])==0
+- name: equal costs
+  tags:
+  - duplicate
+  code: |
+    assert min_cost_climbing_stairs([4,4,4])==4
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert min_cost_climbing_stairs([1]*100001)==50000
+    assert min_cost_climbing_stairs([1]*100000)==50000
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Complexity and space
+  kind: complexity
+  key_points:
+  - One pass over the stairs
+  - Two rolling values so O(1) extra space
+  - A table is O(n)
+- q: Return the chosen path
+  kind: code
+  key_points:
+  - Store the predecessor for each position
+  - Walk back from the top
+  - Reverse the collected stairs
+- q: Jumps of up to k stairs
+  kind: design
+  key_points:
+  - best[i] = min over j in 1..k of best[i-j] + cost[i-j]
+  - Naive is O(n*k)
+  - A monotonic deque or heap gives O(n)
+narration: []
+state_aloud:
+- Start from either stair 0 or 1.
+- The top is past the last index.
+- Cost is paid when leaving a stair, not arriving.
+walkthrough: Let `best[i]` be the cheapest price to be standing at position `i`, where position `n` is the top. You arrive from `i-1` (paying `cost[i-1]`) or `i-2` (paying `cost[i-2]`), so take the smaller. `best[0]` and `best[1]` are 0 since either start is free. Keeping only the last two values makes it O(n) time and O(1) space.

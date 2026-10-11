@@ -1,0 +1,237 @@
+id: gravity-letter-blocks
+title: 'Gravity: Letter Blocks Fall on a Grid'
+bar_level: 3
+target_minutes: 30
+patterns:
+- grid
+- simulation
+- in-place
+firm_tags: []
+categories:
+- leetcode
+statement: |
+  This is the follow-up to "Gravity: Letters Fall on a Grid", where a letter can now be a whole **block** instead of a single cell.
+
+  A `grid` is a list of rows, top row first. Each row is a **list** of one-character strings, and every row has the same length. Each cell is one of:
+
+  - `"."` an empty cell
+  - `"#"` an immovable obstacle
+  - a lowercase letter
+
+  All the cells that hold the same letter form **one block**. In the input a block is a single 4-connected island of any shape, and each letter names exactly one block, so there are at most 26 blocks. A block moves as one rigid piece: it never changes shape, rotates, or moves sideways.
+
+  Gravity pulls every block straight **down**. A block keeps falling until any one of its cells would hit the bottom edge, an obstacle, or a cell of a different block. A block resting on another block stays put until the one below it moves, and then it falls too. Obstacles never move.
+
+  Write `apply_gravity_blocks(grid)`. It must modify `grid` **in place** and return the same `grid` object, using **constant extra space**: no copy of the grid, no list of a block's cells, no per-block coordinates or labels. A few integers (including one integer used as a bitmask over the 26 letters) are fine. An empty grid (`[]`) or a grid whose rows are empty (`[[]]`) is returned unchanged.
+
+  Example (rows shown as strings for readability):
+  ```
+  ["aa..",        ["....",
+   "a.bb",         "aa..",
+   "...b",   ->    "a.bb",
+   "##.."]         "##.b"]
+  ```
+  Block `a` has a column of free space of 1 above the obstacles at its left, so it falls 1. Block `b` has 1 free cell below its lowest cell in column 3, so it falls 1. Neither falls further.
+starter: |
+  def apply_gravity_blocks(grid):
+      pass
+hints:
+- A block falls as far as its tightest column allows. For each column the block occupies, find the block's lowest cell and count the empty cells directly below it; the block's drop is the minimum over its columns.
+- To find a block's cells without storing them, scan the grid for its letter. The scan is cheap; storing coordinates is what costs space.
+- Move the block by walking rows from the bottom up, copying each of its cells down by the drop and blanking the old cell. Bottom first means a cell never lands on a cell of the same block that has not moved yet.
+- A block that was resting on another block can fall only after the one beneath it falls. Repeat the pass over the letters until a full pass moves nothing.
+follow_ups:
+- A letter can now appear in several separate islands that must fall independently. What breaks, and what extra memory does the fix need?
+- Two different blocks of the same letter touch after falling. Do they merge into one block? How would your answer change the algorithm?
+- Count how many passes the loop needs in the worst case. Can you order the blocks so one pass is enough?
+tests:
+- name: example from the statement
+  tags:
+  - ordering
+  code: |
+    g = [list(r) for r in ["aa..", "a.bb", "...b", "##.."]]
+    assert apply_gravity_blocks(g) is g
+    assert ["".join(r) for r in g] == ["....", "aa..", "a.bb", "##.b"]
+- name: block rests on another block
+  tags:
+  - boundary
+  code: |
+    g = [list(r) for r in ["aa", "..", "bb"]]
+    assert apply_gravity_blocks(g) is g
+    assert ["".join(r) for r in g] == ["..", "aa", "bb"]
+- name: upper block follows the one it rested on
+  tags:
+  - ordering
+  code: |
+    g = [list(r) for r in ["aa.", "...", "bb.", "..."]]
+    assert apply_gravity_blocks(g) is g
+    assert ["".join(r) for r in g] == ["...", "...", "aa.", "bb."]
+- name: hooked block cannot pass through a cell
+  tags:
+  - ordering
+  code: |
+    g = [list(r) for r in ["..", "..", "..", "..", "aa", "ba", ".a", ".."]]
+    # b sits under the hook of a; b falls 2, then a can fall 1 and no more
+    assert apply_gravity_blocks(g) is g
+    assert ["".join(r) for r in g] == ["..", "..", "..", "..", "..", "aa", ".a", "ba"]
+- name: obstacle under a block
+  tags:
+  - boundary
+  code: |
+    g = [list(r) for r in ["ab", ".b", "#."]]
+    assert apply_gravity_blocks(g) is g
+    assert ["".join(r) for r in g] == ["..", "ab", "#b"]
+- name: empty grid and nothing to move
+  tags:
+  - empty
+  code: |
+    g = []
+    assert apply_gravity_blocks(g) is g and g == []
+    h = [[]]
+    assert apply_gravity_blocks(h) is h and h == [[]]
+    k = [list(".#"), list("#.")]
+    assert apply_gravity_blocks(k) is k and ["".join(r) for r in k] == [".#", "#."]
+- name: single cell blocks behave like the plain problem
+  tags:
+  - single
+  code: |
+    g = [["a"], ["."], ["b"], ["."]]
+    assert apply_gravity_blocks(g) is g and g == [["."], ["."], ["a"], ["b"]]
+- name: in place, same row objects, idempotent
+  tags:
+  - state-reuse
+  code: |
+    g = [list(r) for r in ["aab", "a..", "...", "..c"]]
+    row_ids = [id(r) for r in g]
+    out = apply_gravity_blocks(g)
+    assert out is g and [id(r) for r in g] == row_ids, "must modify the given grid in place"
+    again = [list(r) for r in g]
+    assert apply_gravity_blocks(again) == g
+- name: random blocks match a brute force simulation
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import random
+    def simulate(g, letters):
+        R, C = len(g), len(g[0])
+        exp = [row[:] for row in g]
+        cells = {L: set((r, c) for r in range(R) for c in range(C) if exp[r][c] == L) for L in letters}
+        moved = True
+        while moved:
+            moved = False
+            for L in sorted(cells):
+                own = cells[L]
+                if all(r + 1 < R and (exp[r + 1][c] == "." or (r + 1, c) in own) for r, c in own):
+                    for r, c in own:
+                        exp[r][c] = "."
+                    cells[L] = set((r + 1, c) for r, c in own)
+                    for r, c in cells[L]:
+                        exp[r][c] = L
+                    moved = True
+        return exp
+    rnd = random.Random(7)
+    R, C = 60, 30
+    g = [["."] * C for _ in range(R)]
+    for _ in range(40):
+        g[rnd.randrange(R)][rnd.randrange(C)] = "#"
+    placed = {}
+    for letter in "abcdefghijklmn":
+        for _ in range(100):
+            r, c = rnd.randrange(R), rnd.randrange(C)
+            if g[r][c] == ".":
+                break
+        else:
+            continue
+        g[r][c] = letter
+        placed[letter] = [(r, c)]
+        for _ in range(rnd.randrange(2, 7)):
+            r, c = rnd.choice(placed[letter])
+            dr, dc = rnd.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < R and 0 <= nc < C and g[nr][nc] == ".":
+                g[nr][nc] = letter
+                placed[letter].append((nr, nc))
+    exp = simulate(g, placed)
+    out = apply_gravity_blocks(g)
+    assert out is g and g == exp
+- name: constant extra space with a large block
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import tracemalloc
+    def simulate(g, letters):
+        R, C = len(g), len(g[0])
+        exp = [row[:] for row in g]
+        cells = {L: set((r, c) for r in range(R) for c in range(C) if exp[r][c] == L) for L in letters}
+        moved = True
+        while moved:
+            moved = False
+            for L in sorted(cells):
+                own = cells[L]
+                if all(r + 1 < R and (exp[r + 1][c] == "." or (r + 1, c) in own) for r, c in own):
+                    for r, c in own:
+                        exp[r][c] = "."
+                    cells[L] = set((r + 1, c) for r, c in own)
+                    for r, c in cells[L]:
+                        exp[r][c] = L
+                    moved = True
+        return exp
+    R, C = 1000, 10
+    g = [["."] * C for _ in range(R)]
+    shapes = {"a": [(0, 0), (0, 1), (1, 0)], "b": [(0, 3), (1, 3), (1, 4), (2, 4)], "c": [(0, 6), (0, 7), (0, 8)],
+              "d": [(5, 0), (5, 1)], "e": [(9, 3), (10, 3), (10, 2)], "f": [(12, 6), (13, 6), (13, 7), (14, 7)],
+              "g": [(r, 5) for r in range(20, 320)]}
+    for letter, cs in shapes.items():
+        for r, c in cs:
+            g[r][c] = letter
+    for r in (400, 700):
+        g[r][9] = "#"
+    exp = simulate(g, shapes)
+    tracemalloc.start()
+    out = apply_gravity_blocks(g)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    assert out is g and g == exp
+    assert peak < 4096, f"used {peak} bytes of extra memory; constant extra space means no copy of a column, row, or grid, and no list of a block's cells"
+complexity:
+- op: overall
+  time: O(R*C)
+  accepted_time:
+  - O(L*P*R*C)
+  space: O(1)
+extensions:
+- q: Why is one pass over the letters not enough, and why does the repeat loop always terminate?
+  kind: complexity
+  key_points:
+  - A block can rest on another block that sits later in the letter order, so it moves only part of the way in the first pass
+  - Every pass that moves anything lowers the total height of all cells, which is a nonnegative integer, so the loop must stop
+  - The number of passes is at most the number of blocks in the longest support chain, so at most 26
+- q: Why is moving each cell down independently wrong for blocks?
+  kind: reasoning
+  key_points:
+  - A hooked block can have one column with plenty of free space while another column is blocked, and the whole block can fall only as far as its tightest column
+  - Independent cells would tear the block apart and change its shape
+  - The correct drop is the minimum of the free run below the block in every column it occupies
+- q: A letter can appear in several separate islands that fall independently. How does the problem change?
+  kind: design
+  key_points:
+  - Letters no longer identify blocks, so you need per-island identity, which normally means a label per island (extra memory proportional to the number of islands)
+  - Without labels, flood fill needs a visited mark or a stack; in place you can only mark by temporarily rewriting cells, and you must restore them
+  - If two islands of the same letter touch after falling you must decide whether they stay separate, because that changes which cells move together
+- q: Write a slow reference simulation you could use to test your solution.
+  kind: code
+  key_points:
+  - 'Repeat until nothing moves: for each block, if every cell has an empty cell or one of its own cells directly below, move it down by one'
+  - Unit steps make the physics obvious, so the answer is easy to trust even though it is slow
+  - Compare the fast solution to it on random grids with a fixed seed
+narration: []
+state_aloud:
+- Rows are lists of one-character strings, equal length; letters are lowercase.
+- One letter is one block, in the input a connected island of any shape.
+- Blocks are rigid; a block falls as far as its tightest column allows.
+- A block can rest on another block and must wait for it to fall.
+- In place, return the same object, constant extra space (no per-block lists).
+walkthrough: |
+  A block falls as one piece, so its drop is the smallest free run below it over every column it occupies. For one letter, scan each column from the bottom to find the block's lowest cell there, then count the empty cells directly under it; the minimum of those counts is how far the whole block can move. Move it by walking rows from the bottom up and copying each of its cells down by that amount, blanking the old cell. The only state is a few integers: the drop, loop indexes, and one integer used as a 26 bit mask of which letters occur, which also lets the solution skip absent letters. A block that was resting on another block may be able to fall once the one below has moved, so repeat the pass over the letters until a whole pass moves nothing. Each pass that moves something lowers the total height of all cells, so the loop ends, after at most as many passes as the longest chain of blocks resting on one another.

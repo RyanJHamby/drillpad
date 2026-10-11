@@ -1,0 +1,144 @@
+id: invert-binary-tree
+title: Invert Binary Tree
+bar_level: 1
+target_minutes: 10
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Invert Binary Tree (LC 226)"
+statement: |
+  Mirror a binary tree: swap the left and right child of every node. Return the root of the inverted tree. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter. `tree_to_list(root)` returns the level-order list for easy comparison.
+
+  Example: `[4,2,7,1,3,6,9]` becomes `[4,7,2,9,6,3,1]`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+
+  def tree_to_list(root):
+      """Level-order list with None for missing children (trailing Nones trimmed)."""
+      out, q = [], deque([root])
+      while q:
+          n = q.popleft()
+          if n is None:
+              out.append(None)
+              continue
+          out.append(n.val)
+          q.append(n.left)
+          q.append(n.right)
+      while out and out[-1] is None:
+          out.pop()
+      return out
+starter: |
+  def invert_tree(root):
+      pass
+hints:
+- If you invert each subtree, what is left to do at the current node?
+- Swap the two children; the recursion handles everything below.
+- The empty tree is the base case and should come back as None.
+follow_ups:
+- Do it iteratively with a stack or queue.
+- Why does the order of swap versus recurse not matter?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    r = invert_tree(build_tree([4,2,7,1,3,6,9]))
+    assert tree_to_list(r) == [4,7,2,9,6,3,1]
+- name: empty tree
+  tags:
+  - empty
+  code: |
+    assert invert_tree(None) is None
+    assert tree_to_list(invert_tree(build_tree([1,2]))) == [1,None,2]
+- name: single node
+  tags:
+  - single
+  code: |
+    r = invert_tree(build_tree([5]))
+    assert tree_to_list(r) == [5]
+    assert r is not None
+- name: one child only
+  tags:
+  - boundary
+  code: |
+    assert tree_to_list(invert_tree(build_tree([2,1]))) == [2,None,1]
+    assert tree_to_list(invert_tree(build_tree([2,None,3]))) == [2,3]
+- name: equal values
+  tags:
+  - duplicate
+  code: |
+    assert tree_to_list(invert_tree(build_tree([1,1,1,1,None]))) == [1,1,1,None,None,None,1]
+- name: negative values
+  tags:
+  - invalid
+  code: |
+    assert tree_to_list(invert_tree(build_tree([-1,-2,-3]))) == [-1,-3,-2]
+- name: big balanced tree
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 2**17 - 1
+    vals = list(range(1, n + 1))
+    r = invert_tree(build_tree(vals))
+    out = tree_to_list(r)
+    assert len(out) == n and out[0] == 1 and out[1:3] == [3, 2]
+    assert tree_to_list(invert_tree(r)) == vals
+complexity:
+- op: overall
+  time: O(n)
+  space: O(h)
+extensions:
+- q: Iterative version and its space?
+  kind: design
+  key_points:
+  - Use a stack or queue of nodes still to swap
+  - Swap children when a node is popped, push non-null children
+  - Space is O(h) for DFS stack, O(w) for BFS queue
+- q: Time and space of the recursion?
+  kind: complexity
+  key_points:
+  - Each node is visited once so O(n) time
+  - Stack depth is the tree height h
+  - h is log n if balanced and n if skewed
+- q: Does swap-then-recurse differ from recurse-then-swap?
+  kind: reasoning
+  key_points:
+  - Either order works because the two subtrees are independent
+  - Just make sure to swap exactly once per node
+  - Swapping twice would undo the work
+narration: []
+state_aloud:
+- Empty tree returns None.
+- Nodes with one child.
+- Recursion depth on skewed trees.
+- Whether to mutate in place or build a new tree.
+walkthrough: |
+  At each node, recursively invert the right subtree and the left subtree, then assign them to the left and right slots swapped. A `None` node is returned unchanged. Every node is touched exactly once, and the call stack is as deep as the tree is tall.

@@ -1,0 +1,220 @@
+id: priority-queue-preemption
+title: Priority Queue with Preemption
+bar_level: 3
+target_minutes: 35
+patterns:
+- priority-queue
+- preemption
+- two-heaps
+- scheduler
+- simulation
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  An inference cluster has `slots` execution slots shared by jobs of different priority (think
+  paid vs free tier). Implement a tick-based scheduler with preemption.
+
+  `PreemptiveScheduler(slots)` (`ValueError` if `slots < 1`):
+  - `submit(job_id, priority, work)`: smaller `priority` number = more urgent. `work >= 1` units of
+    work. `ValueError` for a duplicate id or `work < 1`. Each job gets a submission sequence number.
+  - Job order key is `(priority, submission sequence)`; smaller is better.
+  - `tick() -> list[job_id]`: one time unit.
+    1. SELECT: the running set becomes the `slots` best jobs by key among all unfinished jobs. A
+       running job that is displaced goes back to the waiting set (keeping its remaining work and its
+       original key) and its preemption count increases by 1.
+    2. RUN: every running job does one unit of work.
+    3. Jobs with 0 work left finish. Return their ids sorted by key.
+  - `running_ids()` / `waiting_ids()`: ids sorted by key (running reflects the state after the last
+    tick's selection minus jobs that finished in it).
+  - `preemptions(job_id) -> int`.
+
+  Equal priority never causes preemption of an earlier-submitted job: a newcomer has a worse key.
+  Per tick work must be proportional to slots and to heap operations, not to the number of waiting jobs.
+
+  Example: slots=1; submit a(priority 5, work 3); tick runs a. Submit b(priority 1, work 1); the next
+  tick preempts a, runs b and returns `["b"]`; a has 1 preemption and 2 units left.
+starter: |
+  class PreemptiveScheduler:
+      def __init__(self, slots):
+          pass
+
+      def submit(self, job_id, priority, work):
+          pass
+
+      def tick(self):
+          pass
+
+      def running_ids(self):
+          pass
+
+      def waiting_ids(self):
+          pass
+
+      def preemptions(self, job_id):
+          pass
+hints:
+- 'Two heaps: a min-heap of waiting jobs by key and a max-heap (negated key) of running jobs.'
+- 'Selection: fill free slots from waiting, then while the best waiting key is strictly better than the
+  worst running key, swap them and count a preemption.'
+- A job just moved into running in this selection can never be the swap-out target in the same selection,
+  so counting is safe.
+follow_ups:
+- Preemption cost (checkpoint or recompute) and a minimum run quantum to avoid thrashing.
+- Aging so low priority jobs eventually run.
+- Per-tenant quotas.
+tests:
+- name: urgent job preempts a running one
+  code: |
+    s = PreemptiveScheduler(1)
+    s.submit("a", 5, 3)
+    assert s.tick() == [] and s.running_ids() == ["a"]
+    s.submit("b", 1, 1)
+    assert s.tick() == ["b"], "b preempts a and finishes within the tick"
+    assert s.running_ids() == []
+    assert s.waiting_ids() == ["a"] and s.preemptions("a") == 1
+    assert s.tick() == [] and s.tick() == ["a"]
+  hidden: false
+  tags:
+  - ordering
+  - state-reuse
+- name: FIFO within equal priority and no preemption among equals
+  code: |
+    s = PreemptiveScheduler(1)
+    s.submit("x", 2, 2); s.submit("y", 2, 1)
+    assert s.tick() == []
+    s.submit("z", 2, 1)
+    assert s.tick() == ["x"]
+    assert s.tick() == ["y"] and s.tick() == ["z"]
+    assert s.preemptions("x") == 0
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: running set is always the best `slots` jobs
+  code: |
+    s = PreemptiveScheduler(2)
+    s.submit("a", 3, 10); s.submit("b", 2, 10); s.submit("c", 1, 10)
+    s.tick()
+    assert s.running_ids() == ["c", "b"] and s.waiting_ids() == ["a"]
+    s.submit("d", 0, 10)
+    s.tick()
+    assert s.running_ids() == ["d", "c"] and s.waiting_ids() == ["b", "a"]
+    assert s.preemptions("b") == 1 and s.preemptions("a") == 0
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: finished jobs are reported sorted by (priority, submit order)
+  code: |
+    s = PreemptiveScheduler(3)
+    s.submit("late", 5, 1); s.submit("hi", 1, 1); s.submit("mid", 3, 1)
+    assert s.tick() == ["hi", "mid", "late"]
+  hidden: true
+  tags:
+  - ordering
+- name: invalid submits and idle ticks
+  code: |
+    try:
+        PreemptiveScheduler(0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+    s = PreemptiveScheduler(2)
+    assert s.tick() == [] and s.running_ids() == [] and s.waiting_ids() == []
+    s.submit("a", 1, 1)
+    for args in [("a", 1, 1), ("b", 1, 0)]:
+        try:
+            s.submit(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+  hidden: true
+  tags:
+  - invalid
+  - empty
+  - zero-capacity
+- name: a preempted job keeps its remaining work and its place in line
+  code: |
+    s = PreemptiveScheduler(1)
+    s.submit("a", 4, 2); s.submit("b", 4, 2)
+    s.tick()                              # a runs: 1 left
+    s.submit("c", 1, 1)
+    assert s.tick() == ["c"]
+    assert s.waiting_ids() == ["a", "b"] and s.preemptions("a") == 1
+    assert s.tick() == ["a"], "a only needed one more unit"
+    assert s.tick() == [] and s.tick() == ["b"]
+  hidden: true
+  tags:
+  - state-reuse
+  - time
+- name: 100k jobs, 8 slots, priorities arriving over time
+  code: |
+    import random
+    rng = random.Random(3)
+    s = PreemptiveScheduler(8)
+    total = 0
+    n = 0
+    finished = 0
+    for t in range(6000):
+        for _ in range(17):
+            if n < 100000:
+                s.submit(n, rng.randrange(10), 1 + rng.randrange(3))
+                n += 1
+        finished += len(s.tick())
+    while finished < n:
+        finished += len(s.tick())
+    assert finished == 100000
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: tick
+  time: O((S + X) log N)
+  space: O(N)
+- op: submit
+  time: O(log N)
+  space: O(N)
+extensions:
+- q: 'Level 2: add aging: every 10 ticks a waiting job''s priority improves by 1 (down to 0).'
+  kind: code
+  key_points:
+  - 'Do not rewrite every waiting job each tick: store effective priority as base - (now - arrival) //
+    10 lazily'
+  - Because aging is monotone for all waiting jobs, the relative order of waiting jobs only changes across
+    a bucket boundary
+  - Cap at 0 and keep the (priority, seq) tie-break so ordering stays deterministic
+- q: Preemption is not free for LLM serving. What does it cost and how would you limit thrashing?
+  kind: design
+  key_points:
+  - Preempting a running sequence means dropping or swapping its KV cache and recomputing or reloading
+    it later
+  - Use a minimum quantum, a preemption budget per job, or only preempt for strictly better classes with
+    a margin
+  - Prefer non-preemptive admission of high-priority jobs when slots free up soon
+- q: How do you prevent starvation of low-priority work and still protect paid latency?
+  kind: design
+  key_points:
+  - Aging or weighted fair queueing instead of strict priority (see weighted-fair-queue)
+  - Reserve a fraction of slots for each class
+  - Expose queue-wait and preemption metrics per class so the policy is tunable
+- q: Cost of a tick and why two heaps beat sorting.
+  kind: complexity
+  key_points:
+  - Each swap is O(log N); at most `slots` swaps occur per tick in steady state, plus finishing jobs
+  - Sorting all jobs each tick would be O(N log N) per tick
+  - Space is O(N) for job records
+narration: []
+state_aloud:
+- Lower number = more urgent; ties broken by submission order.
+- Equal priority does not preempt.
+- A preempted job keeps remaining work and its original sequence number.
+- Several jobs finishing in one tick are returned sorted by key.
+- Ticks with nothing to do return [].
+walkthrough: |
+  Waiting jobs sit in a min-heap keyed (priority, seq); running jobs in a max-heap with negated key so the worst running job is on top. Selection fills free slots, then swaps while the best waiting key beats the worst running key, counting a preemption for each displaced job. The invariant is that the running set equals the top-`slots` unfinished jobs by key after every selection. Each tick then does one unit of work per running job and removes finished ones. The idea of priority admission plus preempting a low-priority in-flight sequence follows the user's note on continuous batching follow-ups (interview-prep/11-scheduling-batching.md, section 3); the two-heap formulation is standard.
+categories:
+- ai-infra

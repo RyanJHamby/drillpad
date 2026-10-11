@@ -1,0 +1,219 @@
+id: job-scheduler-cron
+title: Job Scheduler / Cron
+bar_level: 3
+target_minutes: 35
+patterns:
+- scheduler
+- min-heap
+- injectable-clock
+- lazy-deletion
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement `Scheduler(clock)` where `clock()` returns the current time in seconds (injected; tests use a fake). Nothing runs on its own: the caller invokes `run_pending()`.
+
+  - `schedule(job_id, fn, run_at)`: run `fn()` once at/after time `run_at`.
+  - `schedule_every(job_id, fn, interval, start=None)`: fixed-rate recurring job; first run at
+    `start` (default `clock() + interval`), then at `start + interval`, `start + 2*interval`, ...
+    (no drift: next time is computed from the scheduled time, not from when it actually ran).
+    `interval <= 0` raises `ValueError`.
+  - Re-using an existing `job_id` replaces the old job. `cancel(job_id)` -> `True` if a job was
+    removed, else `False`.
+  - `run_pending()` -> list of `job_id`s executed, in order of scheduled time (ties by insertion
+    order). A job is due when `run_at <= clock()`. Recurring jobs that missed several intervals
+    catch up: each missed occurrence runs, in order, within the same call.
+  - If `fn` raises, the exception is swallowed, the job id is still reported as run, and recurring
+    jobs stay scheduled.
+  - `next_run_time()` -> earliest scheduled time among live jobs, or `None`.
+
+  Example
+  ```python
+  s = Scheduler(clock); s.schedule("a", f, 5); s.schedule_every("b", g, 10, start=10)
+  clock -> 12: s.run_pending() == ["a", "b"]; s.next_run_time() == 20
+  ```
+starter: |
+  import heapq
+
+  class Scheduler:
+      def __init__(self, clock):
+          pass
+
+      def schedule(self, job_id, fn, run_at):
+          pass
+
+      def schedule_every(self, job_id, fn, interval, start=None):
+          pass
+
+      def cancel(self, job_id):
+          pass
+
+      def run_pending(self):
+          pass
+
+      def next_run_time(self):
+          pass
+hints:
+- Use a min-heap keyed by (run_at, insertion sequence, job_id).
+- 'Do lazy deletion: store the current sequence per job id and ignore heap rows that do not match.'
+- A recurring job re-enters the heap at its scheduled time + interval before running.
+follow_ups:
+- How would you parse cron expressions such as */5 * * * *?
+- How do you handle daylight saving time and time zones?
+tests:
+- name: one shot ordering
+  tags:
+  - ordering
+  - time
+  code: |
+    t = [0]
+    s = Scheduler(lambda: t[0])
+    log = []
+    s.schedule("late", lambda: log.append("late"), 10)
+    s.schedule("early", lambda: log.append("early"), 5)
+    s.schedule("tie", lambda: log.append("tie"), 5)
+    assert s.next_run_time() == 5
+    assert s.run_pending() == []
+    t[0] = 7
+    assert s.run_pending() == ["early", "tie"]
+    t[0] = 10
+    assert s.run_pending() == ["late"] and log == ["early", "tie", "late"]
+    assert s.run_pending() == [] and s.next_run_time() is None
+- name: recurring fixed rate without drift
+  tags:
+  - time
+  - state-reuse
+  code: |
+    t = [0]
+    s = Scheduler(lambda: t[0])
+    n = []
+    s.schedule_every("r", lambda: n.append(1), 10, start=10)
+    t[0] = 13
+    assert s.run_pending() == ["r"]
+    assert s.next_run_time() == 20          # anchored to schedule, not to run time 13
+    t[0] = 20
+    assert s.run_pending() == ["r"] and len(n) == 2
+- name: catch up missed occurrences
+  tags:
+  - time
+  - boundary
+  code: |
+    t = [0]
+    s = Scheduler(lambda: t[0])
+    s.schedule_every("r", lambda: None, 5)       # first run at 5
+    t[0] = 17
+    assert s.run_pending() == ["r", "r", "r"]      # 5, 10, 15
+    assert s.next_run_time() == 20
+- name: cancel and replace
+  tags:
+  - duplicate
+  - invalid
+  code: |
+    t = [0]
+    s = Scheduler(lambda: t[0])
+    log = []
+    s.schedule("a", lambda: log.append("old"), 5)
+    s.schedule("a", lambda: log.append("new"), 8)   # replaces
+    assert s.cancel("zzz") is False
+    t[0] = 6
+    assert s.run_pending() == []
+    t[0] = 9
+    assert s.run_pending() == ["a"] and log == ["new"]
+    s.schedule_every("b", lambda: None, 1)
+    assert s.cancel("b") is True and s.cancel("b") is False
+    t[0] = 100
+    assert s.run_pending() == []
+- name: exceptions do not stop others
+  hidden: true
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    t = [10]
+    s = Scheduler(lambda: t[0])
+    log = []
+    def boom(): raise RuntimeError()
+    s.schedule_every("bad", boom, 5, start=10)
+    s.schedule("ok", lambda: log.append(1), 10)
+    assert s.run_pending() == ["bad", "ok"] and log == [1]
+    t[0] = 15
+    assert s.run_pending() == ["bad"]
+- name: invalid interval and empty
+  hidden: true
+  tags:
+  - invalid
+  - empty
+  code: |
+    s = Scheduler(lambda: 0)
+    assert s.next_run_time() is None and s.run_pending() == []
+    for bad in (0, -1):
+        try:
+            s.schedule_every("x", lambda: None, bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+- name: many jobs
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    t = [0]
+    s = Scheduler(lambda: t[0])
+    for i in range(20000):
+        s.schedule("j%d" % i, lambda: None, (i * 7919) % 20000)
+    t[0] = 20000
+    ran = s.run_pending()
+    assert len(ran) == 20000
+    assert ran[0] == "j0"
+complexity:
+- op: schedule
+  time: O(log n)
+  space: O(n)
+- op: run_pending
+  time: O(k log n)
+  space: O(1)
+- op: cancel
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Costs of each operation with n scheduled jobs and k due jobs?
+  kind: complexity
+  key_points:
+  - schedule and each job dispatch are O(log n) heap operations; run_pending is O(k log n)
+  - cancel is O(1) because it uses lazy deletion; stale heap rows are skipped when they surface
+  - Space O(n) plus stale rows until popped
+- q: Turn it into a real background scheduler with a worker thread.
+  kind: design
+  key_points:
+  - A single thread waits on a Condition with timeout = next_run_time - now and is woken on earlier schedule/cancel
+  - Hand execution to a thread pool so a slow job does not delay others
+  - Shutdown flag plus join; use a monotonic clock for delays
+- q: Distribute it across machines without running jobs twice.
+  kind: design
+  key_points:
+  - Persist jobs in a database; claim due jobs with a lease (SELECT ... FOR UPDATE SKIP LOCKED or compare-and-set)
+  - Leader election or sharding job ids by hash
+  - Make jobs idempotent since at-least-once is the realistic guarantee
+- q: 'Fixed-rate vs fixed-delay recurrence and missed runs: what are the choices?'
+  kind: reasoning
+  key_points:
+  - Fixed-rate anchors to the schedule and can burst to catch up; fixed-delay measures from completion
+    and drifts
+  - 'Alternative: skip missed occurrences and run once'
+  - Cron-style expressions compute the next matching minute rather than adding an interval
+narration: []
+state_aloud:
+- Tie-breaking by insertion order for determinism.
+- Lazy deletion for cancel and replace.
+- Catch-up behaviour for a recurring job that fell behind.
+- Job exceptions must not kill the scheduler.
+walkthrough: A min-heap holds (run_at, sequence, job_id); a dict maps each live job id to its current
+  sequence, function and interval, so cancelled or replaced jobs leave stale heap rows that are skipped
+  when popped. run_pending pops every due row, re-queues recurring jobs at scheduled time plus interval
+  (fixed rate, with catch-up), runs the function in a try/except and records the id. Dispatch is O(log
+  n) per job.
+anki_queries: []
+categories:
+- systems-impl

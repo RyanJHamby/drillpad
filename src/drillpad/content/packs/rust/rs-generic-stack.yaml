@@ -1,0 +1,243 @@
+title: Generic Stack<T>
+target_minutes: 15
+patterns:
+- generics
+- option-return
+- into-iterator
+- vec-wrapper
+firm_tags: []
+categories:
+- systems-impl
+statement: |2
+
+  Implement a generic LIFO stack backed by a `Vec<T>`. It must work for non-`Copy`, non-`Clone` element types
+  (no `T: Clone` / `T: Copy` bounds anywhere).
+
+  ```rust
+  struct Stack<T> { /* your fields */ }
+
+  impl<T> Stack<T> {
+      fn new() -> Self;
+      fn push(&mut self, value: T);
+      fn pop(&mut self) -> Option<T>;               // None when empty
+      fn peek(&self) -> Option<&T>;                 // borrow the top, do not remove it
+      fn peek_mut(&mut self) -> Option<&mut T>;     // mutable borrow of the top
+      fn len(&self) -> usize;
+      fn is_empty(&self) -> bool;
+  }
+
+  impl<T> IntoIterator for Stack<T> { type Item = T; /* ... */ }   // consumes the stack, yields TOP FIRST
+  ```
+
+  Also implement `Default` for `Stack<T>` (an empty stack, again with no bound on `T`).
+
+  Example: after pushing 1, 2, 3, `peek()` is `Some(&3)`, and `for x in stack` yields 3, 2, 1.
+starter: |2
+
+  struct Stack<T> {
+      items: Vec<T>,
+  }
+
+  impl<T> Stack<T> {
+      fn new() -> Self {
+          todo!()
+      }
+
+      fn push(&mut self, value: T) {
+          todo!()
+      }
+
+      fn pop(&mut self) -> Option<T> {
+          todo!()
+      }
+
+      fn peek(&self) -> Option<&T> {
+          todo!()
+      }
+
+      fn peek_mut(&mut self) -> Option<&mut T> {
+          todo!()
+      }
+
+      fn len(&self) -> usize {
+          todo!()
+      }
+
+      fn is_empty(&self) -> bool {
+          todo!()
+      }
+  }
+
+  impl<T> Default for Stack<T> {
+      fn default() -> Self {
+          todo!()
+      }
+  }
+
+  impl<T> IntoIterator for Stack<T> {
+      type Item = T;
+      type IntoIter = std::vec::IntoIter<T>;
+
+      fn into_iter(self) -> Self::IntoIter {
+          todo!()
+      }
+  }
+hints:
+- '`Vec::pop`, `Vec::last` and `Vec::last_mut` already return `Option<T>`, `Option<&T>` and `Option<&mut T>`: your methods can be one-liners that forward them.'
+- '`#[derive(Default)]` would add a `T: Default` bound, which the tests forbid (they use a type without Default). Write the impl by hand.'
+- '`IntoIterator` takes `self` by value, so you may move the Vec out. The Item order must be top-first: reverse the Vec''s iterator. The associated `IntoIter` type must name what you return, e.g. `std::iter::Rev<std::vec::IntoIter<T>>`.'
+follow_ups:
+- Why does pop return Option<T> instead of raising or panicking like Python's list.pop()?
+- What is the difference between IntoIterator for Stack<T> and for &Stack<T>? Which would you add next?
+- Why does peek_mut borrow the whole stack mutably rather than just the top element?
+- How would you make this Stack bounded and return Result<(), T> from push?
+tests:
+- name: push pop peek basics
+  tags:
+  - single
+  - ordering
+  code: |
+    let mut s: Stack<i32> = Stack::new();
+    s.push(1);
+    s.push(2);
+    s.push(3);
+    assert_eq!(s.len(), 3);
+    assert_eq!(s.peek(), Some(&3));
+    assert_eq!(s.pop(), Some(3));
+    assert_eq!(s.pop(), Some(2));
+    assert_eq!(s.peek(), Some(&1));
+    assert_eq!(s.pop(), Some(1));
+    assert!(s.is_empty());
+  hidden: false
+- name: empty stack returns None
+  tags:
+  - empty
+  code: |
+    let mut s: Stack<String> = Stack::new();
+    assert!(s.is_empty());
+    assert_eq!(s.len(), 0);
+    assert_eq!(s.pop(), None);
+    assert_eq!(s.peek(), None);
+    assert!(s.peek_mut().is_none());
+    let d: Stack<u8> = Stack::default();
+    assert!(d.is_empty());
+  hidden: false
+- name: peek_mut edits the top in place
+  tags:
+  - single
+  - state-reuse
+  code: |
+    let mut s = Stack::new();
+    s.push(String::from("a"));
+    s.push(String::from("b"));
+    s.peek_mut().unwrap().push_str("!");
+    if let Some(top) = s.peek_mut() { top.push('?'); }
+    assert_eq!(s.peek().map(|x| x.as_str()), Some("b!?"));
+    assert_eq!(s.pop().as_deref(), Some("b!?"));
+    assert_eq!(s.pop().as_deref(), Some("a"));
+  hidden: false
+- name: works with non-Clone non-Copy types
+  tags:
+  - single
+  - invalid
+  hidden: false
+  code: |
+    struct Token(u32); // no Clone, no Copy, no Default, no Debug
+    let mut s = Stack::new();
+    s.push(Token(7));
+    s.push(Token(8));
+    assert_eq!(s.peek().unwrap().0, 8);
+    let t = s.pop().unwrap();
+    assert_eq!(t.0, 8);
+    let rest: Stack<Token> = Stack::default();
+    assert!(rest.is_empty());
+    assert_eq!(s.len(), 1);
+- name: into_iter consumes top first
+  tags:
+  - ordering
+  - state-reuse
+  hidden: true
+  code: |
+    let mut s = Stack::new();
+    for w in ["x", "y", "z"] { s.push(w.to_string()); }
+    let v: Vec<String> = s.into_iter().collect();
+    assert_eq!(v, vec!["z", "y", "x"]);
+    let mut s2 = Stack::new();
+    s2.push(10);
+    s2.push(20);
+    let mut total = 0;
+    for n in s2 { total = total * 100 + n; }
+    assert_eq!(total, 2010);
+    let e: Stack<i32> = Stack::new();
+    assert_eq!(e.into_iter().count(), 0);
+- name: ownership moves out and drops exactly once
+  tags:
+  - duplicate
+  - boundary
+  hidden: true
+  code: |
+    use std::rc::Rc;
+    let token = Rc::new(());
+    let mut s = Stack::new();
+    for _ in 0..3 { s.push(Rc::clone(&token)); }
+    assert_eq!(Rc::strong_count(&token), 4);
+    let popped = s.pop().unwrap();
+    assert_eq!(Rc::strong_count(&token), 4); // moved out, not cloned
+    drop(popped);
+    assert_eq!(Rc::strong_count(&token), 3);
+    drop(s);
+    assert_eq!(Rc::strong_count(&token), 1);
+- name: large stack
+  tags:
+  - scale
+  hidden: true
+  code: |
+    let mut s = Stack::new();
+    for i in 0..500_000u64 { s.push(i); }
+    assert_eq!(s.len(), 500_000);
+    let mut sum = 0u64;
+    while let Some(x) = s.pop() { sum += x; }
+    assert_eq!(sum, 499_999u64 * 500_000 / 2);
+    assert!(s.is_empty());
+complexity:
+- op: push
+  time: O(1) amortized
+  space: O(1)
+- op: pop / peek / peek_mut / len
+  time: O(1)
+  space: O(1)
+- op: into_iter
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why does pop return Option<T> and peek return Option<&T>? What does the borrow checker stop you from doing with that reference?
+  kind: design
+  key_points:
+  - Option makes emptiness a type-level case the caller must handle, instead of an exception (Python IndexError)
+  - 'peek returns a borrow tied to &self: while it is alive you cannot push or pop (mutable borrow conflict), which prevents dangling references into a reallocated Vec'
+  - 'peek_mut hands out exclusive access: only one &mut to the top at a time'
+- q: What are the costs of push and pop, and what causes push to be only amortized O(1)?
+  kind: complexity
+  key_points:
+  - Vec doubles capacity when full, so occasional O(n) copies average out to O(1) per push
+  - pop, peek and len are plain O(1) operations on the Vec
+  - Space is O(n); Vec::with_capacity or shrink_to_fit trade reallocations for memory
+- q: How would you also support `for x in &stack` and `for x in &mut stack`, and what trait bounds are needed on T?
+  kind: design
+  key_points:
+  - impl<'a, T> IntoIterator for &'a Stack<T> with Item = &'a T, and the same for &'a mut Stack<T> with Item = &'a mut T
+  - 'No bounds on T: references are always allowed; Clone is only needed if you want to copy elements out'
+  - 'Delegate to slice iterators: self.items.iter().rev() and iter_mut().rev()'
+state_aloud:
+- 'Empty stack: pop and peek return None, never panic.'
+- 'No Clone/Copy bound on T: values are moved in by push and moved out by pop.'
+- into_iter consumes the stack and yields top first, the pop order, not insertion order.
+- 'Do not derive Default blindly: it would require T: Default.'
+walkthrough: |2
+
+  The stack wraps a `Vec<T>` whose end is the top, so push, pop, peek and peek_mut forward to `Vec::push`, `pop`, `last` and `last_mut` and return `Option` instead of raising `IndexError` as Python's `list.pop()` would. Because values are moved rather than copied, no `Clone` bound is needed and each element is dropped exactly once. `IntoIterator` takes `self` by value and returns `items.into_iter().rev()` so iteration consumes the stack in pop order.
+id: rs-generic-stack
+language: rust
+bar_level: 1
+narration: []
+anki_queries: []

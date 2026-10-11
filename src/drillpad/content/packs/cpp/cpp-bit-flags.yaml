@@ -1,0 +1,270 @@
+id: cpp-bit-flags
+title: Bit Manipulation with uint64_t
+language: cpp
+bar_level: 1
+target_minutes: 15
+patterns:
+- bit-manipulation
+- constexpr
+- shift-ub
+- popcount
+- rotate
+firm_tags:
+- quant-hft
+statement: |
+  Write a small set of `constexpr` bit helpers over `std::uint64_t` (alias `u64`), C++20. Do not use `<bit>`
+  (`std::popcount`, `std::rotl`, ...) or compiler builtins: the point is to know the tricks. Indices count from bit 0
+  (least significant) to bit 63.
+
+  Functions:
+  - `set_bit`, `clear_bit`, `toggle_bit` `(u64 x, unsigned i)` return the new value; `test_bit(x, i)` returns bool.
+    An index `i >= 64` must be ignored (return `x` unchanged / `false`) rather than perform an undefined shift.
+    Remember `1 << 63` on an `int` literal is undefined behaviour: use a 64-bit one. UBSan is on in the tests.
+  - `popcount(x)` (as `int`), `lowest_set_bit(x)` (isolate it: `0b101000 -> 0b001000`, `0 -> 0`),
+    `clear_lowest_set_bit(x)`, `index_of_lowest_set_bit(x)` (`64` for `x == 0`), `is_power_of_two(x)` (false for 0)
+  - `rotl(x, n)` / `rotr(x, n)`: rotate by `n` modulo 64; `n == 0` or `n == 64` must not shift by 64
+  - `template <class F> void for_each_set_bit(u64 x, F f)`: call `f(index)` for each set bit, lowest first, in time
+    proportional to the number of set bits
+
+  Everything must be usable in constant expressions.
+
+  Example:
+  ```cpp
+  static_assert(popcount(0xF0F0) == 8);
+  for_each_set_bit(0b1010010, [](unsigned i){ /* 1, 4, 6 */ });
+  ```
+starter: |
+  // All functions are constexpr. Bit indices count from 0 (least significant) to 63.
+  using u64 = std::uint64_t;
+
+  constexpr u64 set_bit(u64 x, unsigned i) { return 0; }
+  constexpr u64 clear_bit(u64 x, unsigned i) { return 0; }
+  constexpr u64 toggle_bit(u64 x, unsigned i) { return 0; }
+  constexpr bool test_bit(u64 x, unsigned i) { return false; }
+  constexpr int popcount(u64 x) { return 0; }
+  constexpr u64 lowest_set_bit(u64 x) { return 0; }          // isolates it: 0b101000 -> 0b001000
+  constexpr u64 clear_lowest_set_bit(u64 x) { return 0; }
+  constexpr unsigned index_of_lowest_set_bit(u64 x) { return 0; }   // 64 for x == 0
+  constexpr bool is_power_of_two(u64 x) { return false; }
+  constexpr u64 rotl(u64 x, unsigned n) { return 0; }
+  constexpr u64 rotr(u64 x, unsigned n) { return 0; }
+
+  // Calls f(index) for every set bit, lowest index first.
+  template <class F>
+  void for_each_set_bit(u64 x, F f) {}
+hints:
+- 'Use u64{1} << i (never 1 << i) and guard i < 64: shifting by the width or more is undefined, even if
+  it ''works'' on x86.'
+- x & (x - 1) clears the lowest set bit; x & (~x + 1) isolates it (this is x & -x written without signed
+  negation). Looping with the first one gives popcount and set-bit iteration in O(set bits).
+- 'Rotation: mask the count with 63, special-case 0 (because x >> 64 is UB), then (x << n) | (x >> (64
+  - n)). For the index of the lowest bit use a branch ladder (32, 16, 8, ...) or a de Bruijn table.'
+follow_ups:
+- Which of these map to single instructions (POPCNT, TZCNT/BSF, ROL) and how do std::popcount / std::countr_zero
+  expose them?
+- What exactly is undefined about `1 << 63` for int, and what about shifting a negative number?
+- How do you represent a set of flags in a type-safe way (enum class + operator overloads, std::bitset)?
+- Where do bitmasks show up in low-latency systems (order-book level occupancy bitmaps, feature flags,
+  hash masks)?
+tests:
+- name: set clear toggle test
+  tags:
+  - single
+  - empty
+  code: |
+    u64 x = 0;
+    x = set_bit(x, 3);
+    CHECK_EQ(x, u64{8});
+    CHECK(test_bit(x, 3));
+    CHECK(!test_bit(x, 2));
+    x = set_bit(x, 0);
+    CHECK_EQ(x, u64{9});
+    x = clear_bit(x, 3);
+    CHECK_EQ(x, u64{1});
+    x = toggle_bit(x, 1);
+    CHECK_EQ(x, u64{3});
+    x = toggle_bit(x, 1);
+    CHECK_EQ(x, u64{1});
+- name: idempotence
+  tags:
+  - duplicate
+  code: |
+    u64 x = set_bit(set_bit(0, 5), 5);
+    CHECK_EQ(x, u64{32});
+    CHECK_EQ(clear_bit(clear_bit(x, 5), 5), u64{0});
+    CHECK_EQ(clear_bit(0, 9), u64{0});
+    CHECK(set_bit(0xFF, 3) == 0xFF);
+- name: bit 63 and the top of the word
+  tags:
+  - boundary
+  code: |
+    const u64 top = 0x8000000000000000ull;
+    CHECK_EQ(set_bit(0, 63), top);
+    CHECK(test_bit(top, 63));
+    CHECK(!test_bit(top, 62));
+    CHECK_EQ(clear_bit(~u64{0}, 63), 0x7FFFFFFFFFFFFFFFull);
+    CHECK_EQ(toggle_bit(top, 63), u64{0});
+    CHECK_EQ(popcount(~u64{0}), 64);
+- name: out-of-range indices are ignored
+  tags:
+  - invalid
+  - boundary
+  code: |
+    CHECK_EQ(set_bit(5, 64), u64{5});
+    CHECK_EQ(set_bit(5, 200), u64{5});
+    CHECK_EQ(clear_bit(5, 64), u64{5});
+    CHECK_EQ(toggle_bit(5, 1000), u64{5});
+    CHECK(!test_bit(~u64{0}, 64));
+    CHECK(!test_bit(~u64{0}, 4000000000u));
+    CHECK(test_bit(~u64{0}, 63));
+- name: popcount
+  tags:
+  - empty
+  - scale
+  code: |
+    CHECK_EQ(popcount(0), 0);
+    CHECK_EQ(popcount(1), 1);
+    CHECK_EQ(popcount(0xF0F0), 8);
+    CHECK_EQ(popcount(0x8000000000000001ull), 2);
+    int total = 0;
+    for (u64 i = 0; i < 1000; i++) total += popcount(i);
+    CHECK_EQ(total, 4932);
+- name: lowest set bit
+  tags:
+  - single
+  - empty
+  code: |
+    CHECK_EQ(lowest_set_bit(0b101000), u64{0b1000});
+    CHECK_EQ(lowest_set_bit(1), u64{1});
+    CHECK_EQ(lowest_set_bit(0), u64{0});
+    CHECK_EQ(lowest_set_bit(0x8000000000000000ull), 0x8000000000000000ull);
+    CHECK_EQ(clear_lowest_set_bit(0b101000), u64{0b100000});
+    CHECK_EQ(clear_lowest_set_bit(0), u64{0});
+    CHECK_EQ(index_of_lowest_set_bit(0b101000), 3u);
+    CHECK_EQ(index_of_lowest_set_bit(1), 0u);
+    CHECK_EQ(index_of_lowest_set_bit(0x8000000000000000ull), 63u);
+    CHECK_EQ(index_of_lowest_set_bit(0), 64u);
+- name: power of two
+  tags:
+  - boundary
+  - empty
+  code: |
+    CHECK(!is_power_of_two(0));
+    CHECK(is_power_of_two(1));
+    CHECK(is_power_of_two(2));
+    CHECK(!is_power_of_two(3));
+    CHECK(is_power_of_two(u64{1} << 63));
+    CHECK(!is_power_of_two((u64{1} << 63) + 1));
+    CHECK(!is_power_of_two(~u64{0}));
+- name: rotate
+  tags:
+  - boundary
+  - ordering
+  code: |
+    CHECK_EQ(rotl(1, 1), u64{2});
+    CHECK_EQ(rotl(0x8000000000000000ull, 1), u64{1});
+    CHECK_EQ(rotr(1, 1), 0x8000000000000000ull);
+    const u64 v = 0x0123456789ABCDEFull;
+    CHECK_EQ(rotl(v, 0), v);
+    CHECK_EQ(rotl(v, 64), v);
+    CHECK_EQ(rotl(v, 65), rotl(v, 1));
+    CHECK_EQ(rotr(rotl(v, 13), 13), v);
+    CHECK_EQ(rotl(v, 4), 0x123456789ABCDEF0ull);
+    CHECK_EQ(rotr(v, 0), v);
+    CHECK_EQ(rotr(v, 68), rotr(v, 4));
+- name: iterate set bits lowest first
+  hidden: true
+  tags:
+  - ordering
+  - empty
+  code: |
+    std::vector<unsigned> got;
+    for_each_set_bit(0b1010010, [&](unsigned i) { got.push_back(i); });
+    std::vector<unsigned> want = {1, 4, 6};
+    CHECK(got == want);
+    got.clear();
+    for_each_set_bit(0, [&](unsigned i) { got.push_back(i); });
+    CHECK(got.empty());
+    for_each_set_bit(0x8000000000000001ull, [&](unsigned i) { got.push_back(i); });
+    std::vector<unsigned> want2 = {0, 63};
+    CHECK(got == want2);
+- name: usable in constant expressions
+  hidden: true
+  tags:
+  - boundary
+  - single
+  code: |
+    constexpr u64 m = set_bit(set_bit(0, 0), 63);
+    constexpr int pc = popcount(m);
+    std::array<int, pc> arr{};
+    CHECK_EQ(arr.size(), 2u);
+    constexpr u64 r = rotl(m, 1);
+    CHECK_EQ(r, u64{3});
+    CHECK(test_bit(m, 63));
+- name: popcount of every bit pattern matches a naive count
+  hidden: true
+  tags:
+  - scale
+  - duplicate
+  code: |
+    CHECK_EQ(popcount(0xAAAAAAAAAAAAAAAAull), 32);
+    for (u64 x : {u64{0}, ~u64{0}, 0xAAAAAAAAAAAAAAAAull, 0x5555555555555555ull, 0x0123456789ABCDEFull, 0xFFFFFFFF00000000ull}) {
+        int naive = 0;
+        for (unsigned i = 0; i < 64; i++) naive += test_bit(x, i) ? 1 : 0;
+        CHECK_EQ(popcount(x), naive);
+        unsigned visited = 0;
+        for_each_set_bit(x, [&](unsigned) { ++visited; });
+        CHECK_EQ(static_cast<int>(visited), naive);
+    }
+complexity:
+- op: set / clear / toggle / test
+  time: O(1)
+  space: O(1)
+- op: popcount (Kernighan)
+  time: O(1)
+  space: O(1)
+- op: for_each_set_bit
+  time: O(n)
+  space: O(1)
+extensions:
+- q: What is the cost of popcount and iteration, and what is faster?
+  kind: complexity
+  key_points:
+  - Kernighan's loop is O(k) for k set bits, bounded by 64; SWAR (parallel bit counting) is a constant
+    12 or so ops
+  - 'The POPCNT instruction is one op: std::popcount compiles to it with -mpopcnt or -march=native'
+  - for_each_set_bit visiting k bits costs O(k), which beats scanning 64 positions for sparse masks
+- q: Where is the undefined behaviour hiding?
+  kind: reasoning
+  key_points:
+  - Shifting by >= the operand width is UB, and `1 << 31` on a 32-bit int overflows into the sign bit
+  - Right shift of negative signed values is implementation-defined; use unsigned types for bit work
+  - 'Integer promotion: uint8_t and uint16_t promote to int, so ~x and << behave surprisingly'
+- q: How do you make flag sets type-safe and ABI-stable?
+  kind: design
+  key_points:
+  - Use enum class with an underlying fixed-width type and define operator| & ~ via a small template,
+    or std::bitset<N>
+  - Fix the underlying type (uint64_t) so the layout is part of the ABI and does not change when you add
+    flags
+  - Keep helpers constexpr so masks can be computed at compile time and checked with static_assert
+- q: How would you use these to find the best price level in an order book quickly?
+  kind: design
+  key_points:
+  - Keep a bitmap with one bit per price level (or a two-level bitmap of 64-bit words) marking non-empty
+    levels
+  - 'Best ask = index of the lowest set bit (TZCNT), best bid = highest set bit (LZCNT): O(1) with no
+    map walk'
+  - Set the bit when a level becomes non-empty and clear it when the level empties; update is a single
+    OR/AND-NOT
+narration: []
+state_aloud:
+- 'Shifts: use a 64-bit one (`u64{1} << i`) and guard i < 64; shifting by the width is undefined.'
+- 'Edge values: x = 0, bit 63, all ones, and rotate counts 0, 64 and above.'
+- x & (x - 1) clears the lowest set bit; x & -x isolates it.
+- 'Work on unsigned types only: signed shifts and promotions hide UB.'
+walkthrough: |
+  Everything hangs off a few identities: `x & (x - 1)` clears the lowest set bit (popcount and iteration loop on it), `x & ~x + 1` isolates it, and shifts need a 64-bit `1` plus a guard because shifting by the width is undefined behaviour. Rotation masks its count and special-cases zero for the same reason. Python's integers are unbounded so `1 << 63` and `~x` just work and never overflow; C++ fixed-width integers give you speed and two's-complement tricks but make width and UB your responsibility.
+anki_queries: []
+categories:
+- trading

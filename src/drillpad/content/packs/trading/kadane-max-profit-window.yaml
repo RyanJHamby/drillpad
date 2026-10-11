@@ -1,0 +1,147 @@
+id: kadane-max-profit-window
+title: Maximum Subarray (Kadane) on Returns
+bar_level: 2
+target_minutes: 20
+patterns:
+- kadane
+- dynamic-programming
+- sliding-window
+- running-sum
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Given a list of int period returns (for example basis points per day), find the contiguous window with the **largest total
+  return** (Kadane's algorithm).
+
+  `max_subarray(returns) -> (total, start, end)` where `start` and `end` are inclusive indices of a NON-EMPTY window whose sum
+  is `total`. If several windows tie for the maximum, ANY of them is accepted (tests check that `sum(returns[start:end+1]) == total`
+  and that `total` is the true maximum). All-negative input returns its single largest (least negative) element.
+  `ValueError` for an empty list.
+
+  O(n) time, O(1) extra space; trying all windows is O(n^2) and will time out.
+starter: |
+  def max_subarray(returns):
+      pass
+hints:
+- 'Let cur be the best sum of a window ENDING at the current index: cur = max(x, cur + x).'
+- Equivalently restart the window when the running sum is negative (it can only hurt); track the start
+  index of the current window.
+- Initialise from the first element, not 0, so all-negative inputs return the largest element instead
+  of an empty window.
+follow_ups:
+- How would you find the worst drawdown instead?
+- What about the maximum circular subarray?
+- Relate this to the best-time-to-buy-and-sell-stock problem.
+tests:
+- name: classic
+  code: |
+    total, l, r = max_subarray([-2, 1, -3, 4, -1, 2, 1, -5, 4])
+    assert total == 6 and sum([-2, 1, -3, 4, -1, 2, 1, -5, 4][l:r + 1]) == 6
+    assert (l, r) == (3, 6)
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: all negative picks the largest element
+  code: |
+    r = [-8, -3, -6, -2, -5]
+    total, l, rr = max_subarray(r)
+    assert total == -2 and l == rr == 3
+  hidden: false
+  tags:
+  - boundary
+  - invalid
+- name: single and all positive
+  code: |
+    assert max_subarray([5]) == (5, 0, 0)
+    t, l, r = max_subarray([1, 2, 3, 4])
+    assert (t, l, r) == (10, 0, 3)
+  hidden: false
+  tags:
+  - single
+  - boundary
+- name: empty raises
+  code: |
+    try:
+        max_subarray([])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("empty")
+  hidden: false
+  tags:
+  - empty
+  - invalid
+- name: window can start after a deep loss and zeros are fine
+  code: |
+    d = [0, 0, -100, 3, 0, 4, -1, 0]
+    t, l, r = max_subarray(d)
+    assert t == 7 and sum(d[l:r + 1]) == 7
+    t, l, r = max_subarray([0, 0, 0])
+    assert t == 0 and sum([0, 0, 0][l:r + 1]) == 0
+  hidden: true
+  tags:
+  - duplicate
+  - boundary
+- name: matches brute force on pseudo-random data
+  code: |
+    for seed in range(1, 40):
+        d = [((i * 7919 + seed * 104729) % 41) - 20 for i in range(30)]
+        best = max(sum(d[a:b + 1]) for a in range(30) for b in range(a, 30))
+        t, l, r = max_subarray(d)
+        assert t == best and 0 <= l <= r < 30 and sum(d[l:r + 1]) == t, (seed, t, best)
+  hidden: true
+  tags:
+  - ordering
+- name: 'scale: 1M returns'
+  code: |
+    d = [((i * 7919) % 201) - 100 for i in range(1000000)]
+    t, l, r = max_subarray(d)
+    assert 0 <= l <= r < len(d) and t > 100
+    prefix = 0
+    for x in d[l:r + 1]:
+        prefix += x
+    assert prefix == t
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: max_subarray
+  time: O(n)
+  space: O(1)
+extensions:
+- q: 'Level 2: also return the maximum drawdown (largest peak-to-trough fall) of the cumulative return
+    series.'
+  key_points:
+  - Running peak of the cumulative sum and the largest peak - current
+  - One pass, O(1) memory
+  - Report indices of peak and trough if needed
+  kind: code
+- q: 'Level 3: maximum sum with at most one skipped element (delete one value).'
+  key_points:
+  - 'Keep two DP states: no deletion yet and one deletion used'
+  - dp1 = max(dp1 + x, dp0_prev) handles skipping x
+  - The answer must still be a non-empty window
+  kind: code
+- q: Complexity and what the brute force costs.
+  key_points:
+  - 'Kadane is a single pass: O(n) time and O(1) extra space'
+  - Brute force is O(n^2) with prefix sums or O(n^3) naively
+  - Divide and conquer is O(n log n) and useful when merging segment summaries (segment tree nodes)
+  kind: complexity
+- q: 'Design: what does the max-return window mean for strategy research?'
+  key_points:
+  - It is hindsight-optimal, an upper bound, not a signal; avoid selecting windows after seeing the data
+  - Returns should be net of costs and of consistent units (bps) before comparing windows
+  - Streaming variants keep only (best, cur) and are checkpointable
+  kind: design
+narration: []
+state_aloud:
+- Window is non-empty; all-negative input returns the largest single element.
+- 'Ties: any maximal window accepted; empty list is an error.'
+- Integer returns; O(n) time and O(1) space.
+walkthrough: |
+  Standard Kadane's algorithm (LeetCode 53) applied to a returns series, returning the window indices as well; same family as the single best buy/sell pair in best-time-buy-sell-stock. Source: standard formulation.
+categories:
+- trading

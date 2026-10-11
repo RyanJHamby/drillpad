@@ -1,0 +1,94 @@
+id: maximum-product-subarray
+title: Maximum Product Subarray
+bar_level: 2
+target_minutes: 22
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Maximum Product Subarray (LC 152)"
+statement: |
+  Return the largest product of any non-empty contiguous subarray of the integer list `nums` (at least one element). The values can be negative or zero.
+
+  Example: `max_product([2,3,-2,4])` returns `6` (subarray `[2,3]`).
+starter: |
+  def max_product(nums):
+      pass
+hints:
+- A negative number can turn the smallest product into the largest, so track both extremes.
+- 'State: hi[i] and lo[i] are the max and min product of subarrays ending exactly at i.'
+- hi = max(x, hi*x, lo*x), lo = min(x, hi*x, lo*x); a zero resets both naturally.
+follow_ups:
+- What if the array is circular?
+- Return the subarray bounds.
+tests:
+- name: positive prefix
+  tags:
+  - ordering
+  code: |
+    assert max_product([2,3,-2,4])==6
+- name: zero splits
+  tags:
+  - boundary
+  code: |
+    assert max_product([-2,0,-1])==0
+- name: single negative
+  tags:
+  - single
+  code: |
+    assert max_product([-2])==-2
+- name: two negatives
+  tags:
+  - boundary
+  code: |
+    assert max_product([-2,3,-4])==24
+    assert max_product([2,-5,-2,-4,3])==24
+- name: zero and positive
+  tags:
+  - boundary
+  code: |
+    assert max_product([0,2])==2
+- name: all negative
+  tags:
+  - duplicate
+  code: |
+    assert max_product([-1,-1,-1])==1
+    assert max_product([-3,-2])==6
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert max_product([1,-1]*100000)==1
+    assert max_product([2]*60)==2**60
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - One pass with constant work per element
+  - O(1) space for two running values
+  - Brute force over subarrays is O(n^2) or O(n^3)
+- q: Why both max and min
+  kind: design
+  key_points:
+  - Multiplying by a negative swaps ordering
+  - The current minimum can become the new maximum
+  - Zeros restart the run since x alone is a candidate
+- q: Prefix/suffix alternative
+  kind: code
+  key_points:
+  - Max is either a prefix product or suffix product of a zero-free segment
+  - Scan left to right and right to left, resetting at zero
+  - Same O(n) time, O(1) space
+narration: []
+state_aloud:
+- Single element returns itself even if negative.
+- Zeros reset the running product.
+- Two negatives make a positive.
+walkthrough: Track `hi` and `lo`, the largest and smallest product of subarrays ending at the current element. For `x`, candidates are `x`, `hi*x` and `lo*x`; take their max and min as the new `hi` and `lo`, because a negative `x` flips the roles. The answer is the best `hi` seen. One pass, O(n) time, O(1) space.

@@ -1,0 +1,167 @@
+id: token-bucket
+title: Token bucket rate limiter with lazy refill
+bar_level: 3
+target_minutes: 20
+patterns: [rate-limiting, token-bucket, lazy-refill, monotonic-clock]
+firm_tags: [ai-infra, distsys, quant-hft]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:17 - *"'
+statement: |
+  Implement `TokenBucket(capacity, refill_rate)` with `allow(cost=1.0) -> bool`.
+  The bucket starts full. Tokens refill at `refill_rate` per second, capped at `capacity`.
+  Refill lazily: compute elapsed time on each call (no background thread). `allow` consumes
+  `cost` tokens and returns True if enough are available, otherwise returns False and consumes
+  nothing. Support fractional tokens. Guard state with a lock. Call `time.monotonic()` for time
+  (as `time.monotonic()`, not imported by name).
+starter: |
+  class TokenBucket:
+      def __init__(self, capacity: float, refill_rate: float):
+          pass
+hints:
+  - Store tokens and last_refill; on each call add elapsed * refill_rate, then clamp to capacity.
+  - Use the monotonic clock; the wall clock can jump backwards.
+follow_ups:
+  - How do you rate-limit per user and globally at once (check both, consume only if both pass)?
+  - How do you evict stale per-key buckets (LRU/TTL)?
+  - What if cost varies per request?
+  - How does this generalize to a distributed setting (Redis, atomic refill+check)?
+tests:
+  - name: burst then deny
+    tags: [boundary, empty]
+    code: |
+      import time
+      clock = [100.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = TokenBucket(capacity=5, refill_rate=1)
+          assert [b.allow() for _ in range(5)] == [True] * 5
+          assert b.allow() is False
+      finally:
+          time.monotonic = real
+  - name: refills over time and caps at capacity
+    tags: [time, boundary, scale]
+    code: |
+      import time
+      clock = [100.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = TokenBucket(capacity=5, refill_rate=2)
+          for _ in range(5): b.allow()
+          clock[0] = 101.0
+          assert [b.allow() for _ in range(3)] == [True, True, False]
+          clock[0] = 100000.0
+          assert sum(b.allow() for _ in range(20)) == 5, "idle gap must not bank more than capacity"
+      finally:
+          time.monotonic = real
+  - name: variable cost
+    tags: [invalid, boundary]
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = TokenBucket(capacity=10, refill_rate=1)
+          assert b.allow(cost=7) is True
+          assert b.allow(cost=4) is False
+          assert b.allow(cost=3) is True, "a rejected request must not consume tokens"
+          assert b.allow(cost=11) is False
+      finally:
+          time.monotonic = real
+  - name: fractional refill
+    tags: [time, boundary]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = TokenBucket(capacity=1, refill_rate=1)
+          assert b.allow() is True and b.allow() is False
+          clock[0] = 0.5
+          assert b.allow() is False
+          clock[0] = 1.0
+          assert b.allow() is True
+      finally:
+          time.monotonic = real
+  - name: concurrent allows never over-spend
+    tags: [concurrency, scale]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          import threading
+          b = TokenBucket(capacity=100, refill_rate=0)
+          ok = []
+          def worker():
+              ok.append(sum(b.allow() for _ in range(50)))
+          ts = [threading.Thread(target=worker, daemon=True) for _ in range(8)]
+          for t in ts: t.start()
+          for t in ts: t.join(10)
+          assert not any(t.is_alive() for t in ts)
+          assert sum(ok) == 100, f"expected exactly 100 tokens spent, got {sum(ok)}"
+      finally:
+          time.monotonic = real
+  - name: capacity zero never allows
+    tags: [zero-capacity, boundary]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          b = TokenBucket(capacity=0, refill_rate=5)
+          assert b.allow() is False
+          clock[0] = 1000.0
+          assert b.allow() is False
+      finally:
+          time.monotonic = real
+complexity:
+- op: allow
+  time: O(1)
+  space: O(1)
+- op: storage across keys
+  time: O(1)
+  space: O(K)
+extensions:
+- q: How do you rate-limit per user and globally at once?
+  kind: design
+  key_points:
+  - Check both buckets
+  - Consume from both only if both pass (a rejected request must consume nothing)
+  - Avoid consuming from the first then failing the second
+- q: How do you evict stale per-key buckets?
+  kind: design
+  key_points:
+  - Buckets for keys that never return leak memory
+  - Wrap the bucket dict in an LRU or TTL cache keyed by client id
+  - Evicting a full bucket loses nothing since a fresh bucket starts full
+- q: What if cost varies per request?
+  kind: reasoning
+  key_points:
+  - Pass cost into allow and subtract it directly
+  - Bucket math is unchanged
+  - A cost above capacity can never succeed; decide to reject explicitly
+- q: How does this generalize to a distributed setting?
+  kind: design
+  key_points:
+  - State lives in Redis
+  - Refill plus check must be atomic (Lua script)
+  - Same math; Redis time or monotonic reasoning to avoid client clock skew
+- q: What does allow cost, and why a lazy refill instead of a background thread?
+  kind: complexity
+  key_points:
+  - O(1) time and O(1) space per bucket; O(K) for K keys
+  - 'Lazy: compute elapsed on each call, no thread per bucket'
+  - Ticker threads fire when idle and still need a lock
+  - Use the monotonic clock (wall clock can jump)
+narration:
+- I'll use a token bucket — capacity caps the burst, refill rate sets the steady-state throughput.
+- I'll do lazy refill instead of a background thread — compute elapsed time on each call, so there's no idle thread cost and no clock-jitter correctness issues.
+- Locking around the check-and-decrement since multiple threads could race on the same bucket.
+- 'Let me trace it: bucket starts full, drains under burst, then recovers at the refill rate once traffic slows.'
+- Edge case — using monotonic time, not wall clock, since wall clock can jump backward.
+state_aloud:
+- Clock skew / non-monotonic clocks — must use a monotonic clock source.
+- 'Fractional tokens: if `cost` and `refill_rate` aren''t integers, decide whether to floor tokens or allow fractional accounting (fractional is more accurate for smooth rates).'
+- 'Cold start: bucket starts full vs. empty — full is the common default (allows an initial burst), but some APIs deliberately start empty to force ramp-up.'
+- 'Long idle gaps: `elapsed` can be huge after inactivity; capping at `capacity` on refill prevents unbounded token accumulation.'
+- 'Per-key memory growth: buckets for keys that never come back leak memory — need TTL eviction (e.g., an LRU cache of buckets).'
+walkthrough: |
+  Capacity caps the burst size and the refill rate sets steady-state throughput. Refill is lazy: on each call compute the elapsed time, add tokens capped at capacity, then check and decrement, so there is no background thread and no idle cost. Elapsed time uses `time.monotonic()` because a wall clock that jumps backward would corrupt the bucket. The check-and-decrement is done under a lock to avoid racing threads. `allow()` is O(1) time and space per key, and the bucket starts full by default so an initial burst is allowed.
+categories: [systems-impl, ai-infra]

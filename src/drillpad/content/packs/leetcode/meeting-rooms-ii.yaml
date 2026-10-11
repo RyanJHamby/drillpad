@@ -1,0 +1,98 @@
+id: meeting-rooms-ii
+title: Meeting Rooms II
+bar_level: 2
+target_minutes: 25
+patterns:
+- intervals
+- heap-top-k
+firm_tags:
+- ai-infra
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Meeting Rooms II (LC 253)"
+statement: |
+  Given meeting time intervals `[start, end)` (a meeting ending at time t does not conflict with one starting at t), return the minimum number of rooms needed so that no two meetings in the same room overlap.
+
+  Example: `min_rooms([[0,30],[5,10],[15,20]])` returns `2`.
+starter: |
+  def min_rooms(intervals):
+      pass
+hints:
+- The answer is the maximum number of meetings simultaneously in progress.
+- Sort by start and keep a min-heap of end times for rooms in use.
+- Before assigning a meeting, free every room whose end time is <= the new start (or reuse the earliest-ending
+  room).
+follow_ups:
+- Do it with two sorted arrays (starts and ends).
+- Return the actual room assignment.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert min_rooms([[0,30],[5,10],[15,20]])==2
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert min_rooms([])==0
+- name: single meeting
+  tags:
+  - single
+  code: |
+    assert min_rooms([[1,2]])==1
+- name: back to back reuse the room
+  tags:
+  - boundary
+  code: |
+    assert min_rooms([[1,2],[2,3],[3,4]])==1
+- name: identical meetings
+  tags:
+  - duplicate
+  code: |
+    assert min_rooms([[1,5]]*7)==7
+- name: unsorted input
+  tags:
+  - ordering
+  code: |
+    assert min_rooms([[15,20],[0,30],[5,10]])==2
+- name: many meetings
+  tags:
+  - scale
+  hidden: true
+  code: |
+    a=[[i,i+3] for i in range(100000)]
+    assert min_rooms(a)==3
+complexity:
+- op: overall
+  time: O(n log n)
+  space: O(n)
+extensions:
+- q: Two-pointer sweep alternative
+  kind: code
+  key_points:
+  - Sort starts and ends separately
+  - Advance the end pointer when an end <= current start, else need a new room
+  - Track the max concurrent rooms
+- q: Complexity
+  kind: complexity
+  key_points:
+  - Sorting O(n log n)
+  - Heap operations O(log n) each, n times
+  - Heap size at most the answer, worst case n
+- q: 'Design: assign rooms and handle online requests'
+  kind: design
+  key_points:
+  - Keep the heap of (end, room_id)
+  - Pop the earliest-ending room if free, else allocate a new id
+  - Online arrivals must come in start order or you need an interval tree
+narration: []
+state_aloud:
+- Empty input.
+- Touching endpoints share a room.
+- Identical intervals each need a room.
+- Unsorted input.
+walkthrough: |
+  Sort meetings by start time and maintain a min-heap of the end times of rooms currently in use. For each meeting, if the earliest-ending room is free by the meeting's start, reuse it by popping that end time; then push this meeting's end. The heap's size when processing finishes is the number of rooms ever needed simultaneously.

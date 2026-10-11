@@ -1,0 +1,121 @@
+id: merge-k-sorted-lists
+title: Merge k Sorted Lists
+bar_level: 3
+target_minutes: 35
+patterns:
+- linked-list
+- heap-top-k
+firm_tags:
+- quant-hft
+- distsys
+categories:
+- leetcode
+- trading
+anki_queries: []
+statement: |
+  You are given a list of `k` sorted singly linked lists (some may be empty/None). Merge them into one sorted linked list and return its head. `ListNode`, `build_list` and `to_list` helpers are provided.
+
+  Example: merging `[1,4,5]`, `[1,3,4]`, `[2,6]` gives `[1,1,2,3,4,4,5,6]`.
+prelude: |
+  class ListNode:
+      def __init__(self, val=0, next=None):
+          self.val = val
+          self.next = next
+
+  def build_list(vals):
+      head = None
+      for v in reversed(vals):
+          head = ListNode(v, head)
+      return head
+
+  def to_list(head):
+      out = []
+      while head:
+          out.append(head.val)
+          head = head.next
+      return out
+starter: |
+  def merge_k(lists):
+      pass
+hints:
+- Merging two sorted lists is easy; repeatedly merging all k is too slow.
+- At any moment the next output node is the smallest head among k lists.
+- A min-heap of the current heads gives that in O(log k); break ties with an index since nodes are not
+  comparable.
+follow_ups:
+- Do it without a heap using divide and conquer.
+- How would this work for k sorted files that don't fit in memory?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    r=merge_k([build_list([1,4,5]),build_list([1,3,4]),build_list([2,6])])
+    assert to_list(r)==[1,1,2,3,4,4,5,6]
+- name: no lists
+  tags:
+  - empty
+  code: |
+    assert merge_k([]) is None
+    assert to_list(merge_k([None,build_list([1])]))==[1]
+- name: all empty lists
+  tags:
+  - empty
+  code: |
+    assert merge_k([None,None]) is None
+    assert to_list(merge_k([build_list([2]),None]))==[2]
+- name: one list
+  tags:
+  - single
+  code: |
+    assert to_list(merge_k([build_list([1,2,3])]))==[1,2,3]
+- name: mix of empty and equal values
+  tags:
+  - duplicate
+  code: |
+    r=merge_k([None,build_list([2,2]),build_list([2]),None])
+    assert to_list(r)==[2,2,2]
+- name: negatives and uneven lengths
+  tags:
+  - boundary
+  code: |
+    r=merge_k([build_list([-5,0]),build_list([-6,-4,-3,10,11])])
+    assert to_list(r)==[-6,-5,-4,-3,0,10,11]
+- name: many lists
+  tags:
+  - scale
+  hidden: true
+  code: |
+    ls=[build_list(list(range(i,20000,100))) for i in range(100)]
+    assert to_list(merge_k(ls))==list(range(20000))
+complexity:
+- op: overall
+  time: O(N log k)
+  space: O(k)
+extensions:
+- q: Heap vs divide and conquer
+  kind: complexity
+  key_points:
+  - Both are O(N log k) time
+  - Heap uses O(k) extra space
+  - Pairwise merging reuses nodes with O(1) extra aside from recursion
+- q: External k-way merge of huge files
+  kind: design
+  key_points:
+  - Keep one buffered block per file plus a heap of heads
+  - Refill a buffer when its head is consumed
+  - Stable ordering via (value, source index)
+- q: Why tuple with an index in the heap?
+  kind: reasoning
+  key_points:
+  - Ties compare the next tuple element
+  - ListNode has no ordering so comparing nodes raises TypeError
+  - Index also gives a deterministic stable merge
+narration: []
+state_aloud:
+- k = 0 or all lists empty.
+- Some lists empty.
+- Equal values across lists (heap tiebreak).
+- Reuse nodes rather than copying.
+walkthrough: |
+  Seed a min-heap with the head of each non-empty list, storing `(value, list_index, node)` so ties never compare nodes. Repeatedly pop the smallest, append it to the output tail, and push that node's successor. The heap never holds more than k entries, so each of the N nodes costs O(log k).

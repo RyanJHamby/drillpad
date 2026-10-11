@@ -1,0 +1,99 @@
+id: subarray-sum-equals-k
+title: Subarray Sum Equals K
+bar_level: 2
+target_minutes: 20
+patterns:
+- prefix-sum
+- hash-map
+firm_tags:
+- quant-hft
+categories:
+- leetcode
+- trading
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Subarray Sum Equals K (LC 560)"
+statement: |
+  Given a list of integers (which may include negatives and zeros) and an integer `k`, return how many contiguous, non-empty subarrays sum to exactly `k`.
+
+  Example: `subarray_sum([1,1,1], 2)` returns `2`.
+starter: |
+  def subarray_sum(nums, k):
+      pass
+hints:
+- With negatives, a sliding window does not work.
+- A subarray (i, j] sums to k exactly when prefix[j] - prefix[i] == k.
+- 'Keep a hash map of how many times each prefix sum has occurred; for each j add count[prefix - k]. Seed
+  the map with {0: 1}.'
+follow_ups:
+- Return the longest such subarray.
+- What if all numbers are positive? Can you do O(1) space?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert subarray_sum([1,1,1],2)==2
+- name: with negatives
+  tags:
+  - boundary
+  code: |
+    assert subarray_sum([1,-1,0],0)==3
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert subarray_sum([],0)==0
+- name: single element
+  tags:
+  - single
+  code: |
+    assert subarray_sum([5],5)==1
+    assert subarray_sum([5],4)==0
+- name: many zeros
+  tags:
+  - duplicate
+  code: |
+    assert subarray_sum([0,0,0],0)==6
+- name: subarray starting at index zero
+  tags:
+  - boundary
+  code: |
+    assert subarray_sum([3,4,7,2,-3,1,4,2],7)==4
+- name: large input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert subarray_sum([1]*100000,100)==99901
+    assert subarray_sum([0]*2000,0)==2000*2001//2
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: 'Why the {0: 1} seed?'
+  kind: reasoning
+  key_points:
+  - Counts subarrays starting at index 0
+  - An empty prefix has sum 0 once
+  - Without it you miss prefixes equal to k
+- q: Complexity and the positive-only case
+  kind: complexity
+  key_points:
+  - Hash approach O(n) time and O(n) space
+  - With positives a sliding window gives O(1) space
+  - Negatives break monotonic window growth
+- q: 'Design: streaming PnL windows'
+  kind: design
+  key_points:
+  - Maintain the running prefix and count map over a stream
+  - Evict old prefixes for a bounded window with a deque plus counts
+  - Answers 'how many windows hit target PnL'
+narration: []
+state_aloud:
+- Negative numbers and zeros.
+- Empty input.
+- Subarray starting at index 0.
+- Counting overlapping subarrays separately.
+walkthrough: |
+  Walk the array maintaining a running prefix sum and a counter of previous prefix sums, initialized with `{0: 1}` for the empty prefix. A subarray ending at the current index sums to k exactly when an earlier prefix equals `current - k`, so add that prefix's count to the answer, then record the current prefix. One pass and one dictionary give O(n) time and space.

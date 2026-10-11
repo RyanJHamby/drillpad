@@ -1,0 +1,102 @@
+id: evaluate-reverse-polish-notation
+title: Evaluate Reverse Polish Notation
+bar_level: 2
+target_minutes: 20
+patterns:
+- stack
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Evaluate RPN (LC 150)"
+statement: |
+  `tokens` is an expression in reverse Polish (postfix) notation: each token is an integer string or one of `+`, `-`, `*`, `/`. Evaluate it and return the integer result. Division truncates toward zero (so `-7 / 2` is `-3`). The expression is always valid and never divides by zero.
+
+  Example: `eval_rpn(["2","1","+","3","*"])` returns `9`, i.e. `(2 + 1) * 3`.
+starter: |
+  def eval_rpn(tokens):
+      pass
+hints:
+- Operands appear before their operator, so a stack fits naturally.
+- 'On an operator pop two operands: the first popped is the right operand.'
+- Python's `//` floors; use `int(a / b)` or handle signs to truncate toward zero.
+follow_ups:
+- Convert infix to postfix (shunting-yard).
+- How would you add unary minus or parentheses?
+tests:
+- name: simple
+  tags:
+  - ordering
+  code: |
+    assert eval_rpn(['2','1','+','3','*'])==9
+- name: non-commutative order
+  tags:
+  - boundary
+  code: |
+    assert eval_rpn(['4','13','5','/','+'])==6
+    assert eval_rpn(['3','1','-'])==2
+    assert eval_rpn(['1','3','-'])==-2
+- name: single number
+  tags:
+  - single
+  code: |
+    assert eval_rpn(['42'])==42
+    assert eval_rpn(['-7'])==-7
+- name: division truncates toward zero
+  tags:
+  - invalid
+  code: |
+    assert eval_rpn(['-7','2','/'])==-3
+    assert eval_rpn(['7','-2','/'])==-3
+    assert eval_rpn(['7','2','/'])==3
+- name: long mixed expression
+  tags:
+  - duplicate
+  code: |
+    t=['10','6','9','3','+','-11','*','/','*','17','+','5','+']
+    assert eval_rpn(t)==22
+- name: zero and negative operands
+  tags:
+  - empty
+  code: |
+    assert eval_rpn(['0','-3','*'])==0
+    assert eval_rpn(['-2','-3','*'])==6
+- name: very long chain
+  tags:
+  - scale
+  hidden: true
+  code: |
+    t=['1']
+    for _ in range(100000):
+        t+=['1','+']
+    assert eval_rpn(t)==100001
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Time and space.
+  kind: complexity
+  key_points:
+  - One pass over n tokens, O(1) per token
+  - Stack depth is at most the number of operands, O(n)
+  - Integer sizes may grow so arithmetic is not strictly O(1)
+- q: Extend to infix with precedence and parentheses.
+  kind: design
+  key_points:
+  - Shunting-yard with an operator stack
+  - Handle associativity and unary minus
+  - Emit RPN then reuse this evaluator
+- q: Why does popping order matter?
+  kind: reasoning
+  key_points:
+  - The first pop is the right operand
+  - Matters for - and /
+  - Swapping gives the wrong sign or quotient
+narration: []
+state_aloud:
+- Division truncates toward zero, not floor.
+- Right operand is popped first.
+- Negative number tokens are operands, not operators.
+walkthrough: |
+  Scan tokens left to right. Numbers are pushed. For an operator, pop `b` then `a`, compute `a op b` (using `int(a / b)` for truncating division) and push the result. After the scan the single remaining stack element is the answer. A token like `-7` is an operand because it is not exactly one of the four operator strings.

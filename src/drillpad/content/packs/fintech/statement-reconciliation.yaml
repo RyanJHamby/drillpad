@@ -1,0 +1,187 @@
+id: statement-reconciliation
+title: Bank Statement Reconciliation
+bar_level: 2
+target_minutes: 25
+patterns:
+- two-pointer
+- group-by
+- sorting
+- matching
+firm_tags: []
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Reconcile an internal ledger against a bank statement. Both are lists of dicts
+  `{"id": str, "date": int, "amount": int}` where `date` is an integer day number and `amount` is signed
+  integer cents (deposits positive, withdrawals negative). Ids are unique within each list (a repeated id
+  inside one list raises `ValueError`).
+
+  `reconcile(ledger, statement, tolerance_days=0)` pairs ledger entries with statement lines:
+
+  * A pair requires EQUAL amounts and `abs(ledger.date - statement.date) <= tolerance_days`. Bank posting
+    often lags by a few days, hence the tolerance. `tolerance_days < 0` raises `ValueError`.
+  * Each ledger entry and each statement line is used at most once, and the number of matched pairs must be
+    the maximum possible. To make the output unique, match deterministically: within each amount, sort the
+    ledger entries and the statement lines by `(date, position in input)` and sweep two pointers `i`, `j`:
+    if the dates are within tolerance, pair them and advance both; else if `ledger[i].date < statement[j].date`
+    the ledger entry is unmatched, advance `i`; otherwise the statement line is unmatched, advance `j`.
+    Leftovers after one list is exhausted are unmatched.
+
+  Return `{"matched": [(ledger_id, statement_id), ...], "unmatched_ledger": [ids], "unmatched_statement":
+  [ids]}`. `matched` is ordered by the ledger entry's position in the input; each unmatched list is in input
+  order. Inputs are not modified.
+
+  It must handle a hundred thousand lines sharing the same amount (e.g. one recurring fee).
+starter: |
+  def reconcile(ledger, statement, tolerance_days=0):
+      pass
+hints:
+- Group both sides by amount in a dict; an entry can only match inside its own amount group.
+- Within a group sort by (date, input index) and sweep with two pointers; no nested loops are needed.
+- Collect matched pairs, then re-order them by ledger input position, and derive the unmatched lists from
+  the set of used ids.
+follow_ups:
+- The bank may combine several ledger entries into one statement line (batch deposit). How do you detect
+  that?
+- How do you reconcile with multiple currencies and fees that change the amount slightly?
+- How would you make the reconciliation idempotent and auditable across daily runs?
+tests:
+- name: exact matches and leftovers
+  tags:
+  - boundary
+  - ordering
+  code: |
+    def L(i, d, a):
+        return {"id": i, "date": d, "amount": a}
+
+    ledger = [L("l1", 1, 500), L("l2", 2, -200), L("l3", 3, 900)]
+    stmt = [L("s1", 1, 500), L("s2", 2, -200), L("s9", 4, 77)]
+    out = reconcile(ledger, stmt)
+    assert out == {"matched": [("l1", "s1"), ("l2", "s2")], "unmatched_ledger": ["l3"], "unmatched_statement": ["s9"]}
+- name: tolerance window is inclusive
+  tags:
+  - boundary
+  - time
+  code: |
+    def L(i, d, a):
+        return {"id": i, "date": d, "amount": a}
+
+    ledger = [L("l1", 10, 100)]
+    assert reconcile(ledger, [L("s1", 12, 100)], 2)["matched"] == [("l1", "s1")]
+    assert reconcile(ledger, [L("s1", 13, 100)], 2)["matched"] == []
+    assert reconcile(ledger, [L("s1", 8, 100)], 2)["matched"] == [("l1", "s1")]
+    assert reconcile(ledger, [L("s1", 7, 100)], 2)["unmatched_ledger"] == ["l1"]
+    assert reconcile(ledger, [L("s1", 10, 101)], 5)["matched"] == [], "amount must be equal"
+- name: repeated amounts pair one to one
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    def L(i, d, a):
+        return {"id": i, "date": d, "amount": a}
+
+    ledger = [L("l1", 1, 500), L("l2", 2, 500), L("l3", 3, 500)]
+    stmt = [L("s1", 2, 500), L("s2", 3, 500)]
+    out = reconcile(ledger, stmt, 1)
+    assert out["matched"] == [("l1", "s1"), ("l2", "s2")]
+    assert out["unmatched_ledger"] == ["l3"] and out["unmatched_statement"] == []
+- name: empty inputs and no mutation
+  tags:
+  - empty
+  - state-reuse
+  code: |
+    def L(i, d, a):
+        return {"id": i, "date": d, "amount": a}
+
+    assert reconcile([], []) == {"matched": [], "unmatched_ledger": [], "unmatched_statement": []}
+    ledger = [L("b", 5, 1), L("a", 1, 1)]
+    stmt = [L("s", 1, 1)]
+    out = reconcile(ledger, stmt)
+    assert out["matched"] == [("a", "s")] and out["unmatched_ledger"] == ["b"]
+    assert [x["id"] for x in ledger] == ["b", "a"], "input order is preserved and untouched"
+    assert reconcile(ledger, []) == {"matched": [], "unmatched_ledger": ["b", "a"], "unmatched_statement": []}
+- name: invalid arguments
+  tags:
+  - invalid
+  - duplicate
+  hidden: true
+  code: |
+    def L(i, d, a):
+        return {"id": i, "date": d, "amount": a}
+
+    for call in (lambda: reconcile([L("a", 1, 1), L("a", 2, 1)], []),
+                 lambda: reconcile([], [L("a", 1, 1), L("a", 2, 1)]),
+                 lambda: reconcile([], [], -1)):
+        try:
+            call()
+            assert False
+        except ValueError:
+            pass
+    assert reconcile([L("a", 1, 1)], [L("a", 1, 1)])["matched"] == [("a", "a")], "ids may repeat across the two lists"
+- name: sweep picks the maximum matching
+  tags:
+  - ordering
+  - single
+  hidden: true
+  code: |
+    def L(i, d, a):
+        return {"id": i, "date": d, "amount": a}
+
+    ledger = [L("l1", 1, 10), L("l2", 4, 10)]
+    stmt = [L("s1", 3, 10), L("s2", 5, 10)]
+    out = reconcile(ledger, stmt, 2)
+    assert out["matched"] == [("l1", "s1"), ("l2", "s2")], "greedy-by-nearest would leave l1 unmatched"
+- name: one recurring amount at scale
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def L(i, d, a):
+        return {"id": i, "date": d, "amount": a}
+
+    n = 150000
+    ledger = [L("l%d" % i, i // 2, 500) for i in range(n)]
+    stmt = [L("s%d" % i, i // 2 + 1, 500) for i in range(n - 10)]
+    out = reconcile(ledger, stmt, 1)
+    assert len(out["matched"]) == n - 10 and len(out["unmatched_ledger"]) == 10
+    assert out["matched"][0] == ("l0", "s0") and out["unmatched_statement"] == []
+complexity:
+- op: reconcile
+  time: O((n + m) log(n + m))
+  space: O(n + m)
+extensions:
+- q: 'Level 2: also match a statement line to a SET of ledger entries on the same day whose amounts sum
+    to it (batch deposits).'
+  kind: code
+  key_points:
+  - Group ledger entries by date window and try subset sums only for unmatched leftovers
+  - Cap the subset size to keep it polynomial; report batch matches separately
+  - Run exact one-to-one matching first so batch search sees only leftovers
+- q: 'Level 3: add a description similarity tiebreak when several candidates have equal amount and date.'
+  kind: code
+  key_points:
+  - Normalise memos (case, digits, store numbers) before comparing
+  - Use similarity only as a tiebreaker, never to override the amount equality rule
+  - Keep the sweep deterministic for equal scores
+- q: How do you run reconciliation daily in production?
+  kind: design
+  key_points:
+  - Idempotent runs keyed by (account, statement date range) with persisted match records
+  - Unmatched items age into an exceptions queue for humans, with reasons (timing, missing, amount mismatch)
+  - Never mutate ledger entries to force a match; record the match as a separate link
+- q: What dominates the cost and what would the nested-loop version cost?
+  kind: complexity
+  key_points:
+  - 'Sorting within groups dominates: O((n + m) log(n + m)); the sweep itself is linear'
+  - Nested loops are O(n * m), which collapses when one amount repeats 100k times
+  - Space is O(n + m) for the groups and results
+narration: []
+state_aloud:
+- Integer cents with sign; amounts must be exactly equal, only dates are fuzzy.
+- 'One-to-one matching: each side used at most once, and I want the maximum number of matches.'
+- Group by amount so I only compare plausible pairs, then sort by date and sweep with two pointers.
+- Tolerance is inclusive; ties broken by input position to keep the output deterministic.
+- Reject duplicate ids inside a list, they would make the unmatched sets ambiguous.
+walkthrough: |
+  Bucket ledger entries and statement lines by amount (dicts of lists of (date, index)). For every amount present on both sides, sort both lists and run the two-pointer sweep from the statement: within tolerance means pair and advance both; otherwise the earlier-dated side can never match anything later and is skipped as unmatched. Pairs are sorted by the ledger index and the unmatched lists are rebuilt from used index sets in input order. This greedy sweep yields a maximum matching because both lists are sorted by date and the tolerance window is symmetric. Source: standard formulation.

@@ -1,0 +1,101 @@
+id: distinct-subsequences
+title: Distinct Subsequences
+bar_level: 3
+target_minutes: 38
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Distinct Subsequences (LC 115)"
+statement: |
+  Count how many different ways the string `t` appears as a subsequence of `s` (characters kept in order, not necessarily adjacent). Ways that use different index sets count separately even if they spell the same text. The empty `t` appears exactly once.
+
+  Example: `num_distinct("rabbbit", "rabbit")` returns `3`.
+starter: |
+  def num_distinct(s, t):
+      pass
+hints:
+- 'For the last character of s: either it is unused, or it matches the last character of t and is used.'
+- 'State: ways[i][j] = number of ways s[:i] contains t[:j] as a subsequence.'
+- ways[i][0] = 1 for all i (empty t); ways[0][j>0] = 0. ways[i][j] = ways[i-1][j] + (ways[i-1][j-1] if s[i-1]==t[j-1]).
+follow_ups:
+- Reduce to a single row.
+- Return the answer modulo 10^9+7.
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert num_distinct("rabbbit","rabbit")==3
+- name: example 2
+  tags:
+  - ordering
+  code: |
+    assert num_distinct("babgbag","bag")==5
+- name: single match
+  tags:
+  - single
+  code: |
+    assert num_distinct("a","a")==1
+    assert num_distinct("a","b")==0
+- name: empty target
+  tags:
+  - empty
+  code: |
+    assert num_distinct("abc","")==1
+    assert num_distinct("","")==1
+- name: empty source
+  tags:
+  - empty
+  code: |
+    assert num_distinct("","a")==0
+- name: target longer
+  tags:
+  - boundary
+  code: |
+    assert num_distinct("ab","abc")==0
+- name: repeats
+  tags:
+  - duplicate
+  code: |
+    assert num_distinct("aaa","aa")==3
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import math
+    assert num_distinct("a"*200,"a"*100)==math.comb(200,100)
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(n)
+  accepted_space:
+  - O(m * n)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - m*n states, O(1) per state
+  - Rolling 1D array gives O(n) space
+  - Brute force over subsets of s is 2^m
+- q: 1D space optimisation
+  kind: code
+  key_points:
+  - Iterate j downward so ways[j-1] still belongs to the previous row
+  - ways[j] += ways[j-1] when characters match
+  - Initialise ways[0] = 1
+- q: Counts overflow
+  kind: design
+  key_points:
+  - Counts grow exponentially in length
+  - Python ints are exact; other languages need a modulus
+  - Ask the interviewer which is expected
+narration: []
+state_aloud:
+- Empty t appears once.
+- Count index choices, not distinct strings.
+- If t is longer than s the answer is 0.
+walkthrough: Let `ways[i][j]` count subsequences of `s[:i]` equal to `t[:j]`. Either `s[i-1]` is skipped (`ways[i-1][j]`) or, if it equals `t[j-1]`, it is used to match (`ways[i-1][j-1]`). Base case `ways[i][0] = 1`. Updating one array with `j` descending yields O(m*n) time and O(n) space.

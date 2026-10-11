@@ -1,0 +1,167 @@
+id: gravity-letters-grid
+title: 'Gravity: Letters Fall on a Grid'
+bar_level: 2
+target_minutes: 22
+patterns:
+- grid
+- two-pointers
+- in-place
+firm_tags: []
+categories:
+- leetcode
+statement: |
+  A `grid` is a list of rows, top row first. Each row is a **list** of one-character strings (so it can be modified), and every row has the same length. Each cell is one of:
+
+  - `"."` an empty cell
+  - `"#"` an immovable obstacle
+  - a lowercase letter
+
+  Gravity pulls every letter straight **down** its column. A letter keeps falling until it rests on the bottom edge, on an obstacle, or on another letter that has already settled. Obstacles never move, and letters never pass through them. The relative order of letters inside a column segment is preserved.
+
+  Write `apply_gravity(grid)`. It must modify `grid` **in place** and return the same `grid` object. It must use **constant extra space**: do not build a new grid, copy a row or column, or keep a list of letters. Only a few integer variables are allowed.
+
+  Example (rows shown as strings for readability):
+  ```
+  ["ab.",        ["...",
+   "...",   ->    ".b.",
+   ".c."]          "ac."]
+  ```
+  Column 0 holds `a`, which drops to the bottom; column 1 holds `b` above `c`, so they stack with `c` at the bottom and `b` on top of it. An empty grid (`[]`) or a grid whose rows are empty (`[[]]`) is returned unchanged.
+starter: |
+  def apply_gravity(grid):
+      pass
+hints:
+- Columns are independent. Solve one column, then repeat for every column.
+- Scan a column from the bottom up with a write index at the lowest free cell. Move each letter you meet down to the write index, blank its old cell, then move the write index up by one.
+- An obstacle resets the write index to the cell just above the obstacle.
+- The write index never gets above the cell you are reading, so a move can never overwrite a letter you have not read yet. That is why no extra storage is needed.
+follow_ups:
+- Generalize to gravity in any of four directions without copying the grid. Can you reuse one routine by changing the scan order instead of rotating?
+- The rows arrive as immutable strings. What is the least extra space you can use, and why can't it be constant?
+- Letters can now be whole blocks that fall as rigid pieces and rest on each other (see the follow-up problem gravity-letter-blocks). Does your in-place scan still work, and what has to change?
+- Apply gravity, rotate the grid 90 degrees clockwise, apply gravity again, and so on. Return the grid after k rotations. What does each rotation cost in space?
+tests:
+- name: letters stack in columns
+  tags:
+  - ordering
+  code: |
+    g = [list(r) for r in ["ab.", "...", ".c."]]
+    assert apply_gravity(g) is g
+    assert ["".join(r) for r in g] == ["...", ".b.", "ac."]
+- name: obstacles block falling letters
+  tags:
+  - boundary
+  code: |
+    g = [list(r) for r in ["ab", "#.", "..", "c#"]]
+    assert apply_gravity(g) is g
+    assert ["".join(r) for r in g] == ["a.", "#.", ".b", "c#"]
+- name: single column
+  tags:
+  - single
+  code: |
+    g = [["a"], ["."], ["b"], ["."]]
+    assert apply_gravity(g) is g and g == [["."], ["."], ["a"], ["b"]]
+    h = [["a"]]
+    assert apply_gravity(h) is h and h == [["a"]]
+- name: empty grid
+  tags:
+  - empty
+  code: |
+    g = []
+    assert apply_gravity(g) is g and g == []
+    h = [[]]
+    assert apply_gravity(h) is h and h == [[]]
+- name: in place, same row objects, order kept, idempotent
+  tags:
+  - state-reuse
+  - ordering
+  code: |
+    g = [list(r) for r in ["a.", ".b", "c.", "..", "d."]]
+    row_ids = [id(r) for r in g]
+    out = apply_gravity(g)
+    assert out is g and [id(r) for r in g] == row_ids, "must modify the given grid in place"
+    assert [r[0] for r in g] == [".", ".", "a", "c", "d"]
+    assert [r[1] for r in g] == [".", ".", ".", ".", "b"]
+    again = [list(r) for r in g]
+    assert apply_gravity(again) == g
+- name: large grid with obstacles
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 1000
+    g = [[chr(97 + (r * 7 + c * 3) % 26) if (r + c) % 3 else "." for c in range(n)] for r in range(n)]
+    for r in range(0, n, 97):
+        g[r][r % n] = "#"
+    top = [list(row) for row in g]
+    out = apply_gravity(g)
+    assert out is g and len(g) == n and all(len(row) == n for row in g)
+    for c in range(0, n, 111):
+        col = "".join(row[c] for row in top)
+        want = "#".join(seg.replace(".", "").rjust(len(seg), ".") for seg in col.split("#"))
+        assert "".join(row[c] for row in g) == want
+    assert sum(row.count("#") for row in g) == sum(row.count("#") for row in top)
+- name: constant extra space
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import tracemalloc
+    R, C = 3000, 40
+    g = [["abcde"[(r + c) % 5] if (r * 7 + c * 13) % 5 else "#" if (r * 3 + c) % 41 == 0 else "." for c in range(C)] for r in range(R)]
+    expected = []
+    for c in range(C):
+        col = "".join(g[r][c] for r in range(R))
+        expected.append("#".join(seg.replace(".", "").rjust(len(seg), ".") for seg in col.split("#")))
+    tracemalloc.start()
+    out = apply_gravity(g)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    assert out is g
+    for c in range(C):
+        assert "".join(g[r][c] for r in range(R)) == expected[c]
+    assert peak < 4096, f"used {peak} bytes of extra memory; constant extra space means no copy of a column, row, or grid"
+complexity:
+- op: overall
+  time: O(R*C)
+  space: O(1)
+extensions:
+- q: Why is a repeated "move every floating letter down one step until nothing changes" simulation a bad idea?
+  kind: complexity
+  key_points:
+  - Each pass is O(R*C) and a letter can need up to R-1 steps, so the worst case is O(R^2 * C)
+  - The column scan with a write index touches each cell once, O(R*C) total
+  - Done in place, the only extra state is two or three integers, so extra space is O(1)
+- q: Why can the in-place scan never overwrite a letter it has not read yet?
+  kind: reasoning
+  key_points:
+  - The write index starts at the bottom and only moves up by one per letter placed, so it is always at or below the cell being read
+  - A letter is moved only into cells at or below its own position, and those cells are either empty or already read
+  - An obstacle resets the write index to just above itself, which is again at or below the next cell to read
+- q: How would you support gravity toward any of the four sides without writing four routines or copying the grid?
+  kind: design
+  key_points:
+  - Gravity is a per-line operation; pick the line direction (columns downward, rows leftward, ...) and parametrize the scan order
+  - Rotating the grid so the target direction becomes down needs a copy for a non-square grid, which breaks the constant-space requirement
+  - Parametrizing the scan keeps one tested code path and O(1) extra space
+- q: The rows arrive as immutable strings. What changes?
+  kind: reasoning
+  key_points:
+  - A string cannot be edited, so each row that changes must be rebuilt, which needs O(C) space per row at least
+  - Converting the whole grid to lists costs O(R*C), so constant space is only possible if the caller provides mutable rows
+  - State that constraint out loud instead of silently copying
+- q: Implement a clockwise 90 degree rotation of the grid.
+  kind: code
+  key_points:
+  - New grid has C rows and R columns
+  - Row i of the result is column i of the input read from bottom to top
+  - zip(*reversed(grid)) gives it in one line; O(R*C) time and space, so a non-square rotation cannot be in place
+narration: []
+state_aloud:
+- Rows are lists of one-character strings (mutable) and all the same length.
+- Empty grid or empty rows are returned unchanged.
+- Obstacles split a column into independent segments.
+- A letter already at rest must not move; running gravity twice changes nothing (idempotent).
+- In place, return the same object, constant extra space.
+walkthrough: |
+  Columns never interact, so settle each one on its own. Walk a column from the bottom row upward while keeping a write index at the lowest free cell of the current segment. When the scan meets a letter, it moves that letter to the write index (if it is not already there), blanks the old cell, and moves the write index up one. An obstacle stays where it is and resets the write index to the row just above it, because nothing may fall through it. The write index is always at or below the cell being read, so a move never overwrites a letter that has not been read yet, and no auxiliary list or output grid is needed. Every cell is read once and written at most once: O(R*C) time and O(1) extra space.

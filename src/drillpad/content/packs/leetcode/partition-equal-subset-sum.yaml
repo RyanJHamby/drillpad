@@ -1,0 +1,93 @@
+id: partition-equal-subset-sum
+title: Partition Equal Subset Sum
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Partition Equal Subset Sum (LC 416)"
+statement: |
+  Given a list `nums` of positive integers, decide whether it can be split into two groups with equal sums. Every element goes into exactly one group.
+
+  Example: `can_partition([1,5,11,5])` returns `True` (`11` versus `1+5+5`).
+starter: |
+  def can_partition(nums):
+      pass
+hints:
+- If the total is odd the answer is no; otherwise look for a subset summing to total/2.
+- 'State: reach[s] is True when some subset of the items seen so far sums to s.'
+- reach[0] = True; for each item update sums downward so each item is used once.
+follow_ups:
+- Count the number of equal partitions.
+- Minimise the difference between the two groups.
+tests:
+- name: 'yes'
+  tags:
+  - ordering
+  code: |
+    assert can_partition([1,5,11,5])==True
+- name: 'no'
+  tags:
+  - invalid
+  code: |
+    assert can_partition([1,2,3,5])==False
+- name: pair
+  tags:
+  - duplicate
+  code: |
+    assert can_partition([1,1])==True
+- name: single
+  tags:
+  - single
+  code: |
+    assert can_partition([2])==False
+- name: odd total
+  tags:
+  - boundary
+  code: |
+    assert can_partition([1,2,4])==False
+- name: even but unreachable
+  tags:
+  - boundary
+  code: |
+    assert can_partition([100,100,100])==False
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert can_partition([1]*200)==True
+    assert can_partition([100]*101)==False
+    assert can_partition([2]*99+[1]*2)==True
+complexity:
+- op: overall
+  time: O(n * S)
+  space: O(S)
+extensions:
+- q: Complexity and when it hurts
+  kind: complexity
+  key_points:
+  - n items times target S = total/2
+  - 'Pseudo-polynomial: exponential in the number of bits of S'
+  - O(S) space with a 1D array
+- q: Bitset trick
+  kind: code
+  key_points:
+  - Keep reachable sums as a Python int, bits |= bits << x
+  - Check bit total/2
+  - Word-level parallelism makes it much faster
+- q: Why iterate sums downward
+  kind: design
+  key_points:
+  - Going upward would reuse the same item several times
+  - Downward reads only values from before this item
+  - That turns unbounded knapsack into 0/1
+narration: []
+state_aloud:
+- Odd total can never split.
+- Each element used once.
+- A single element cannot split.
+walkthrough: If the sum is odd return False. Otherwise search for a subset with sum `half`. Let `reach[s]` mean some subset of the processed items sums to `s`; for each item `x`, update `reach[s] |= reach[s-x]` for `s` descending so the item is used at most once. The solution stores `reach` as a bitset integer, `bits |= bits << x`. O(n * S) time, O(S) space.

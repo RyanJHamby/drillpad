@@ -1,0 +1,196 @@
+id: streaming-sse-assembler
+title: Streaming SSE Chunk Assembler
+bar_level: 2
+target_minutes: 25
+patterns:
+- server-sent-events
+- streaming-parser
+- incremental-parsing
+- state-machine
+- llm-streaming
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  LLM APIs stream tokens as Server-Sent Events. Network chunks can split an event anywhere (even
+  between `\r` and `\n`). Write an incremental parser.
+
+  `SSEParser()`:
+  - `feed(chunk: str) -> list[dict]`: consume the next chunk and return the events completed by it,
+    each `{"event": str, "data": str, "id": str | None}`.
+    * Lines end with `\r\n`, `\n` or `\r`; a `\r` at the end of a chunk may be the first half of
+      `\r\n`, so it cannot be decided until the next chunk.
+    * A blank line dispatches the event being built. An event with no `data` line is not dispatched.
+    * Field lines are `name: value` (one optional space after the colon is removed; further spaces stay).
+      A line with no colon is a field name with an empty value. A line starting with `:` is a comment.
+    * `data`: multiple `data` lines are joined with `"\n"`. `event`: sets the type (default `"message"`).
+      `id`: sets the last event id, which persists across events until changed. Unknown fields are ignored.
+    * If a dispatched event's data is exactly `"[DONE]"` it is NOT returned; instead `parser.done`
+      becomes `True` and all later input is ignored (`feed` returns `[]`). (This is the convention of
+      this problem.)
+  - `close() -> []`: the stream ended; an event that was not terminated by a blank line is discarded.
+  - `done` attribute, initially `False`.
+
+  `assemble(chunks) -> str`: feed every chunk of a list through a fresh parser; each event's data is JSON
+  such as `{"delta": "Hel"}`; return the concatenation of the `delta` strings (missing key counts as `""`).
+
+  Parsing must be linear overall: do not re-scan the whole accumulated buffer on every chunk.
+starter: |
+  class SSEParser:
+      def __init__(self):
+          pass
+
+      def feed(self, chunk):
+          pass
+
+      def close(self):
+          pass
+
+
+  def assemble(chunks):
+      pass
+hints:
+- 'Keep only the unfinished tail between feeds: pending = leftover text after the last complete line.'
+- Split with a regex on \r\n|\r|\n, but if the buffer ends with \r hold it back until the next chunk shows
+  whether a \n follows.
+- Keep the event being built (event type and list of data lines) as parser state; reset it on every blank
+  line.
+follow_ups:
+- Reconnect with Last-Event-ID and the retry field.
+- Backpressure and a maximum line length to defend against a hostile stream.
+- Handle JSON deltas for tool calls with partial arguments.
+tests:
+- name: complete events in one chunk
+  code: |
+    p = SSEParser()
+    evs = p.feed('data: hello\n\nevent: ping\ndata: x\n\n')
+    assert evs == [{"event": "message", "data": "hello", "id": None},
+                   {"event": "ping", "data": "x", "id": None}]
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: events split at arbitrary chunk boundaries
+  code: |
+    stream = 'id: 7\nevent: tok\ndata: {"delta": "Hel"}\n\ndata: {"delta": "lo"}\n\n'
+    want = SSEParser().feed(stream)
+    assert len(want) == 2 and want[1]["id"] == "7", "id persists until changed"
+    for size in range(1, 12):
+        p = SSEParser()
+        got = []
+        for i in range(0, len(stream), size):
+            got += p.feed(stream[i:i + size])
+        assert got == want, size
+  hidden: false
+  tags:
+  - boundary
+  - state-reuse
+- name: multi-line data, comments, optional space after colon
+  code: |
+    p = SSEParser()
+    evs = p.feed(': keep-alive\ndata: line1\ndata:line2\ndata:  line3\n\n')
+    assert evs == [{"event": "message", "data": "line1\nline2\n line3", "id": None}]
+  hidden: false
+  tags:
+  - duplicate
+  - ordering
+- name: CRLF and bare CR line endings, even split across chunks
+  code: |
+    p = SSEParser()
+    assert p.feed("data: a\r\n\r\n") == [{"event": "message", "data": "a", "id": None}]
+    assert p.feed("data: b\r\r") == [], "the final \r is undecided until the next chunk"
+    assert p.feed("data: d\n\n") == [{"event": "message", "data": "b", "id": None},
+                                      {"event": "message", "data": "d", "id": None}]
+    q = SSEParser()
+    assert q.feed("data: c\r") == [] and q.feed("\n") == [] and q.feed("\r") == [] and \
+        q.feed("\n") == [{"event": "message", "data": "c", "id": None}], "\r then \n is ONE terminator"
+  hidden: true
+  tags:
+  - boundary
+  - invalid
+- name: '[DONE] sentinel ends the stream'
+  code: |
+    p = SSEParser()
+    evs = p.feed('data: one\n\ndata: [DONE]\n\ndata: ignored\n\n')
+    assert evs == [{"event": "message", "data": "one", "id": None}] and p.done
+    assert p.feed("data: more\n\n") == []
+  hidden: true
+  tags:
+  - state-reuse
+- name: incomplete trailing event is discarded; events without data are not dispatched
+  code: |
+    p = SSEParser()
+    assert p.feed("event: only-a-name\n\n") == []
+    assert p.feed("data: partial") == []
+    assert p.close() == []
+    assert p.feed("data\n\n") == [{"event": "message", "data": "", "id": None}], "a bare field name is an empty value"
+  hidden: true
+  tags:
+  - empty
+  - single
+- name: assemble joins JSON deltas from chunked text
+  code: |
+    chunks = ['data: {"delta": "He', 'llo, "}\n\nda', 'ta: {"delta": "world"}\n', '\ndata: [DONE]\n\n']
+    assert assemble(chunks) == "Hello, world"
+    assert assemble([]) == ""
+  hidden: true
+  tags:
+  - ordering
+- name: 500KB stream fed one character at a time
+  code: |
+    stream = "".join('data: {"delta": "tok%d "}\n\n' % i for i in range(20000))
+    p = SSEParser()
+    n = 0
+    for ch in stream:
+        n += len(p.feed(ch))
+    assert n == 20000 and len(stream) > 400000
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: feed
+  time: O(len(chunk) + tail)
+  space: O(tail)
+- op: assemble
+  time: O(total)
+  space: O(total)
+extensions:
+- q: 'Level 2: support the `retry:` field and expose `last_event_id` so a client can reconnect with it.
+    Also cap a single line at `max_line` characters and raise ValueError beyond it.'
+  kind: code
+  key_points:
+  - retry takes only digits; ignore otherwise; store as an int in a parser attribute
+  - The line-length check applies to the pending tail so a stream without newlines cannot grow memory
+    without bound
+  - last_event_id must be updated only when an event is dispatched or an id line is processed per the
+    spec, so decide and document it
+- q: How would you stream these tokens through a gateway to a browser while handling client disconnects?
+  kind: design
+  key_points:
+  - Propagate cancellation upstream when the client disconnects so GPU work for that request stops
+  - Flush each event immediately, disable proxy buffering, and send comment keep-alives during long prefill
+  - Count tokens as they are emitted for metering (see token-usage-metering) and keep an event id so clients
+    can resume
+- q: Why are chunk boundaries a correctness problem and how do you test for them?
+  kind: reasoning
+  key_points:
+  - TCP chunks do not respect event, line or even CRLF boundaries, so parsers must be incremental
+  - 'Property test: parse the whole stream at once and in every chunk size, results must be identical'
+  - Multi-byte UTF-8 characters can split across chunks, so decode incrementally on bytes
+- q: Total cost over a stream of N characters in C chunks.
+  kind: complexity
+  key_points:
+  - 'O(N) overall: each character is scanned once, plus O(C) call overhead'
+  - Re-splitting the accumulated buffer on every chunk is O(N * C) and fails the scale test
+  - Space is O(longest unfinished line + current event)
+narration: []
+state_aloud:
+- 'Ask: which line endings, are comments possible, what is the termination signal ([DONE]).'
+- A trailing \r is ambiguous; hold it until the next chunk.
+- Events without data are not dispatched; id persists across events.
+- An unterminated final event is discarded on close.
+- Never re-parse consumed text.
+walkthrough: |
+  The parser keeps three pieces of state: the unfinished tail text, the event type and data lines of the event in progress, and the last event id. Each feed appends the chunk to the tail, holds back a trailing carriage return, splits on CRLF, CR or LF, processes every complete line through a small field handler, and keeps the final partial line as the new tail. A blank line dispatches the event. Because only the tail is carried over, total work is linear in the stream length. Follows the standard SSE line grammar with this problem's [DONE] convention. No source note applies.
+categories:
+- ai-infra

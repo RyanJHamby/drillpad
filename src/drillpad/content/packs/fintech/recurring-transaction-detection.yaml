@@ -1,0 +1,133 @@
+id: recurring-transaction-detection
+title: Detect recurring transactions (same company, amount, interval)
+bar_level: 2
+target_minutes: 20
+patterns:
+- group-by
+- hash-set
+- arithmetic-progression
+firm_tags:
+- distsys
+anki_queries: []
+statement: |
+  Given `transactions`, a list of `(company, amount, day)` tuples (day is an int), return the
+  sorted list of companies that have a RECURRING payment.
+
+  A company is recurring if, for some amount, its transactions with exactly that amount fall on
+  three days `d`, `d + g`, `d + 2g` with a gap `g > 0` (days are exact; other transactions of
+  the company, on other days or with other amounts, are ignored and may fall in between).
+  Several transactions on the same day count as ONE day. Amounts must match exactly.
+  The input is unsorted and may be empty.
+starter: |
+  def find_recurring(transactions):
+      pass
+hints:
+- 'Group by (company, amount) into a SET of days: that removes same-day duplicates for free.'
+- 'Check for a 3-term arithmetic progression: for each pair (a, b) with a < b, is 2b - a present?'
+- Say which grouping key you chose and that you widen it in the fuzzy milestone.
+follow_ups:
+- 'Now allow ~20% tolerance on amount and interval: what is the grouping key now? (greedy chain vs globally
+  optimal)'
+- Should tolerance compound relative to the original or the previous transaction?
+- How would you scale to a stream of transactions per account?
+- How do you report the detected cadence (weekly, monthly)?
+tests:
+- name: weekly subscription is recurring
+  tags:
+  - single
+  - ordering
+  code: |
+    tx = [("netflix", 15, 1), ("netflix", 15, 8), ("netflix", 15, 15)]
+    assert find_recurring(tx) == ["netflix"]
+    assert find_recurring(tx[:2]) == [], "two transactions are not enough"
+- name: amount must match
+  tags:
+  - duplicate
+  - boundary
+  code: |
+    tx = [("gym", 30, 0), ("gym", 31, 30), ("gym", 30, 60), ("gym", 29, 90)]
+    assert find_recurring(tx) == []
+    tx += [("gym", 30, 30)]
+    assert find_recurring(tx) == ["gym"]
+- name: unsorted input and noise between occurrences
+  tags:
+  - ordering
+  code: |
+    tx = [("a", 5, 10), ("b", 7, 1), ("a", 5, 0), ("a", 5, 7), ("a", 5, 5), ("b", 7, 3)]
+    assert find_recurring(tx) == ["a"], "days 0, 5, 10 are evenly spaced even with 7 in between"
+- name: same-day repeats are not an interval
+  tags:
+  - duplicate
+  - boundary
+  code: |
+    assert find_recurring([("x", 9, 4), ("x", 9, 4), ("x", 9, 4)]) == []
+    assert find_recurring([("x", 9, 4), ("x", 9, 4), ("x", 9, 6)]) == []
+    assert find_recurring([("x", 9, 4), ("x", 9, 4), ("x", 9, 6), ("x", 9, 8)]) == ["x"]
+- name: empty input
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert find_recurring([]) == []
+    assert find_recurring([("a", 1, 1)]) == []
+- name: uneven gaps and multiple companies sorted
+  tags:
+  - boundary
+  - ordering
+  hidden: true
+  code: |
+    tx = [("z", 1, 0), ("z", 1, 5), ("z", 1, 11),
+          ("m", 2, 0), ("m", 2, 10), ("m", 2, 20),
+          ("b", 3, 100), ("b", 3, 130), ("b", 3, 160)]
+    assert find_recurring(tx) == ["b", "m"]
+- name: many companies
+  tags:
+  - scale
+  hidden: true
+  code: |
+    tx = []
+    for c in range(4000):
+        tx += [(f"c{c:05d}", 10, d) for d in (c % 7, c % 7 + 30, c % 7 + 60 + (c % 2))]
+    got = find_recurring(tx)
+    assert got == [f"c{c:05d}" for c in range(4000) if c % 2 == 0], len(got)
+complexity:
+- op: overall
+  time: O(n + D^2)
+  space: O(n)
+extensions:
+- q: 'Level 2: allow ~20% tolerance on both amount and interval (fuzzy recurrence).'
+  kind: code
+  key_points:
+  - Group by company only; sort by day and build chains greedily where amount is within tolerance of the
+    chain's reference
+  - State explicitly that greedy chain building is not globally optimal and what the exact search would
+    cost
+  - 'Surface the ambiguity: tolerance relative to the first, the previous, or the chain average'
+- q: 'Level 3: return the detected interval and the matching days, preferring the longest chain.'
+  kind: code
+  key_points:
+  - Return structured results (company, amount, gap, days) with deterministic ordering
+  - For several valid gaps pick the longest chain, then the smallest gap
+  - Extend the AP check to a chain walk so it finds length >= 3, not only exactly 3
+- q: How would this run on a live per-account transaction stream?
+  kind: design
+  key_points:
+  - Incremental state per (company, amount) keyed by last day and last gap instead of re-scanning history
+  - Bound state with a lookback window and expire old keys
+  - Handle late and duplicate events with idempotency keys
+- q: Cost of the exact AP check versus the fuzzy chain builder?
+  kind: complexity
+  key_points:
+  - 'Exact: group in O(n) then O(D^2) pair checks per group with a day set for O(1) membership'
+  - 'Fuzzy greedy chain: O(D^2) per company in the worst case, acceptable for one account'
+  - Sorting days is O(D log D) and dominated by the pair loop
+narration: []
+state_aloud:
+- Grouping key is (company, amount) because 'same amount' is explicit; I widen it for the fuzzy milestone.
+- 'Same-day duplicates are not a recurrence interval: gap must be > 0.'
+- Intervening transactions do not break a recurrence in my definition; confirm with the interviewer.
+- Complexity is O(D^2) per group; fine at account scale, I would say so.
+walkthrough: |
+  Transactions are grouped into a set of distinct days per (company, amount). For each group with at least three days, check whether any pair of days (a, b), a < b, has the progression's third term 2b - a in the set; if so the company is recurring. Using a set removes same-day duplicates and makes the third-term lookup O(1). The result is the sorted set of company names. Source: standard formulation.
+categories:
+- fintech

@@ -1,0 +1,111 @@
+id: sum-of-two-integers
+title: Sum of Two Integers
+bar_level: 2
+target_minutes: 20
+patterns:
+- bit-manipulation
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Compute `a + b` for two integers without using the `+` or `-` operators, using bitwise operations only. Use signed 32-bit two's-complement semantics: `a` and `b` are in `[-2**31, 2**31 - 1]`, and the result wraps to the signed 32-bit range (so `get_sum(2**31 - 1, 1)` returns `-2**31`).
+
+  Example: `get_sum(1, 2)` returns `3`; `get_sum(-2, -3)` returns `-5`.
+starter: |
+  def get_sum(a, b):
+      pass
+hints:
+- XOR adds bits without carry; AND shifted left by one is the carry.
+- 'Repeat: (a, b) = (a ^ b, (a & b) << 1) until the carry is zero.'
+- Python ints are unbounded, so mask to 32 bits each round and convert the final value back to signed if bit 31 is set.
+follow_ups:
+- Subtract two integers the same way.
+- Why does the loop terminate in at most 32 rounds?
+tests:
+- name: positive
+  tags:
+  - boundary
+  code: |
+    assert get_sum(1,2) == 3
+    assert get_sum(20,30) == 50
+- name: negative
+  tags:
+  - invalid
+  code: |
+    assert get_sum(-2,-3) == -5
+    assert get_sum(-1,1) == 0
+- name: zero
+  tags:
+  - zero-capacity
+  code: |
+    assert get_sum(0,0) == 0
+    assert get_sum(0,-7) == -7
+- name: mixed signs
+  tags:
+  - ordering
+  code: |
+    assert get_sum(-10,3) == -7
+    assert get_sum(10,-3) == 7
+- name: overflow wraps to signed 32-bit
+  tags:
+  - boundary
+  code: |
+    assert get_sum(2**31-1,1) == -2**31
+    assert get_sum(-2**31,-1) == 2**31-1
+  hidden: true
+- name: extremes without overflow
+  tags:
+  - boundary
+  code: |
+    assert get_sum(2**31-1,-2**31) == -1
+    assert get_sum(-2**31,0) == -2**31
+  hidden: true
+- name: carry chain
+  tags:
+  - duplicate
+  code: |
+    assert get_sum(0x7FFFFFFF >> 1, 1) == 2**30
+  hidden: true
+- name: many calls
+  tags:
+  - scale
+  code: |
+    import random
+    r = random.Random(3)
+    for _ in range(60000):
+        a = r.randint(-2**31, 2**31 - 1)
+        b = r.randint(-2**31, 2**31 - 1)
+        s = (a + b + 2**31) % 2**32 - 2**31
+        assert get_sum(a, b) == s
+  hidden: true
+complexity:
+- op: overall
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Explain why the XOR/AND-shift loop is a full adder.
+  kind: reasoning
+  key_points:
+  - a ^ b is the sum bit with no incoming carry
+  - (a & b) << 1 is the carry into the next column
+  - Repeating folds carries in until none remain
+- q: Bound the number of iterations.
+  kind: complexity
+  key_points:
+  - Each round the lowest carry bit moves up at least one position
+  - At most 32 rounds for 32-bit words
+  - O(w) time which is O(1) for fixed width
+- q: Handling negatives in Python vs C.
+  kind: design
+  key_points:
+  - C relies on fixed-width wrap; Python needs & 0xFFFFFFFF each step
+  - 'Convert back: if result > 0x7FFFFFFF, subtract 2**32 (use ~(x ^ mask))'
+  - Without masking the carry loop can run forever for negative inputs
+narration: []
+state_aloud:
+- State the 32-bit width and wrap semantics.
+- Mask each round so negatives terminate.
+- Convert the final value back to signed.
+walkthrough: |
+  Mask both inputs to 32 bits. While the carry (a & b) << 1 is non-zero, replace a with a ^ b (sum without carry) and b with the masked carry. When the carry vanishes, a holds the 32-bit result; if its top bit is set convert it to a negative number by flipping through the mask.

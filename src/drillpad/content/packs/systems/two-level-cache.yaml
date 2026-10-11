@@ -1,0 +1,197 @@
+id: two-level-cache
+title: Two-level (L1/L2) Cache
+bar_level: 3
+target_minutes: 35
+patterns:
+- multi-tier-cache
+- lru
+- read-through
+- promotion
+firm_tags:
+- ai-infra
+- distsys
+statement: |
+  Implement `TwoLevelCache(l1_capacity, l2_capacity, loader)`: a small fast L1 in front of a larger
+  L2, in front of a slow `loader(key)` (the source of truth; it returns the value, or `None` if the
+  key does not exist). Both levels are LRU caches and the hierarchy is *inclusive*: values loaded
+  or put are stored in both levels, but each level evicts independently.
+
+  API
+  - `get(key)`: L1 hit -> return it. L1 miss, L2 hit -> promote the value into L1 and return it.
+    Both miss -> call `loader(key)`; if it returns a non-`None` value store it in L2 and L1 and
+    return it; if it returns `None` return `None` and cache nothing (no negative caching).
+    Every hit or insert marks the key most recent in the level(s) it touches.
+  - `put(key, value)`: write the value into both levels (the loader is not called).
+  - `invalidate(key)`: remove the key from both levels (no error if absent).
+  - `stats()`: dict `{"l1_hits": int, "l2_hits": int, "misses": int}`; a miss is a loader call.
+
+  Example
+  ```python
+  c = TwoLevelCache(1, 3, loader=lambda k: k.upper())
+  c.get("a")   # miss -> "A", now in L1 and L2
+  c.get("b")   # miss -> "B"; L1 holds only "b", L2 holds a and b
+  c.get("a")   # L2 hit, promoted to L1
+  c.stats() == {"l1_hits": 0, "l2_hits": 1, "misses": 2}
+  ```
+starter: |
+  class TwoLevelCache:
+      def __init__(self, l1_capacity, l2_capacity, loader):
+          pass
+
+      def get(self, key):
+          pass
+
+      def put(self, key, value):
+          pass
+
+      def invalidate(self, key):
+          pass
+
+      def stats(self):
+          pass
+hints:
+- Write a tiny LRU helper class once and instantiate it twice.
+- On an L2 hit, put the value into L1 (promotion) before returning it.
+- Do not cache a None from the loader; and invalidate has to touch both levels.
+follow_ups:
+- How would you add write-through to the backing store?
+- How do you size L1 vs L2 given a hit-ratio target?
+- What does a distributed L2 change about failure handling?
+tests:
+- name: miss then l1 hit
+  tags:
+  - state-reuse
+  - single
+  code: |
+    calls = []
+    def loader(k):
+        calls.append(k); return k.upper()
+    c = TwoLevelCache(2, 4, loader)
+    assert c.get("a") == "A"
+    assert c.get("a") == "A"
+    assert calls == ["a"]
+    assert c.stats() == {"l1_hits": 1, "l2_hits": 0, "misses": 1}
+- name: l2 hit promotes to l1
+  tags:
+  - ordering
+  - boundary
+  code: |
+    calls = []
+    def loader(k):
+        calls.append(k); return k.upper()
+    c = TwoLevelCache(1, 3, loader)
+    c.get("a"); c.get("b")           # L1 now holds only b
+    assert c.get("a") == "A"          # L2 hit, promoted
+    assert c.get("a") == "A"          # now an L1 hit
+    assert calls == ["a", "b"]
+    assert c.stats() == {"l1_hits": 1, "l2_hits": 1, "misses": 2}
+- name: missing key is not cached
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    calls = []
+    def loader(k):
+        calls.append(k); return None
+    c = TwoLevelCache(2, 2, loader)
+    assert c.get("x") is None and c.get("x") is None
+    assert calls == ["x", "x"]
+    assert c.stats()["misses"] == 2
+    c.put("x", 1)
+    assert c.get("x") == 1
+- name: l2 eviction forces reload
+  tags:
+  - boundary
+  - ordering
+  code: |
+    calls = []
+    def loader(k):
+        calls.append(k); return k * 2
+    c = TwoLevelCache(1, 2, loader)
+    c.get(1); c.get(2); c.get(3)       # L2 keeps 2,3 ; 1 was evicted from both
+    assert c.get(1) == 2
+    assert calls == [1, 2, 3, 1]
+- name: invalidate clears both levels
+  hidden: true
+  tags:
+  - state-reuse
+  - duplicate
+  code: |
+    vals = {"k": 1}
+    c = TwoLevelCache(2, 2, lambda k: vals.get(k))
+    assert c.get("k") == 1
+    vals["k"] = 2
+    assert c.get("k") == 1             # stale, still cached
+    c.invalidate("k"); c.invalidate("never-there")
+    assert c.get("k") == 2
+- name: zero capacity l1
+  hidden: true
+  tags:
+  - zero-capacity
+  code: |
+    calls = []
+    def loader(k):
+        calls.append(k); return k
+    c = TwoLevelCache(0, 2, loader)
+    assert c.get(5) == 5
+    assert c.get(5) == 5
+    assert calls == [5]
+    assert c.stats() == {"l1_hits": 0, "l2_hits": 1, "misses": 1}
+- name: put writes both levels
+  hidden: true
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    c = TwoLevelCache(1, 3, lambda k: None)
+    c.put("a", 1); c.put("b", 2)
+    assert c.get("b") == 2 and c.get("a") == 1
+    assert c.stats() == {"l1_hits": 1, "l2_hits": 1, "misses": 0}
+complexity:
+- op: get
+  time: O(1)
+  space: O(n)
+- op: put
+  time: O(1)
+  space: O(n)
+- op: invalidate
+  time: O(1)
+  space: O(n)
+extensions:
+- q: What is the cost of a get at each outcome, and what is the expected cost model?
+  kind: complexity
+  key_points:
+  - L1 hit O(1) in-process, L2 hit O(1) plus promotion, miss O(1) plus loader latency
+  - Expected latency = h1*t1 + (1-h1)*(h2*t2 + (1-h2)*t_loader), so loader latency dominates
+  - Space is O(l1_capacity + l2_capacity) with values duplicated across levels because of inclusion
+- q: 'Inclusive vs exclusive hierarchy: which would you pick and what changes?'
+  kind: design
+  key_points:
+  - Inclusive wastes capacity on duplicates but makes L1 eviction free and invalidation simple
+  - Exclusive moves a value up on hit and demotes L1 victims to L2, giving more distinct entries
+  - Invalidation must touch every level either way
+- q: L2 is a remote shared cache with many L1 instances. How do you keep L1s coherent?
+  kind: design
+  key_points:
+  - Short L1 ttls bound staleness cheaply
+  - Pub/sub invalidation messages on write, with version numbers to ignore reordered messages
+  - Accept bounded staleness, or route a key to a single owner (consistent hashing) to avoid copies
+- q: What goes wrong when many threads miss the same hot key at once?
+  kind: reasoning
+  key_points:
+  - 'Thundering herd: all call the loader concurrently'
+  - 'Single-flight per key: one loader call, others wait on its result'
+  - Add negative caching with short ttl for missing keys to protect the source
+narration: []
+state_aloud:
+- 'Loader returning None means missing: do not cache it, and say you are choosing not to negative-cache.'
+- Capacity 0 level must behave as pass-through.
+- Promotion on L2 hit, and what stats count as a hit or miss.
+- 'Inclusive design: L1 eviction does not remove from L2.'
+walkthrough: Two LRU levels (OrderedDict-backed) sit in front of the loader. get checks L1, then L2 (promoting
+  into L1), then calls the loader and fills both levels unless it returned None. put writes both levels,
+  invalidate removes from both, and stats counts L1 hits, L2 hits and loader calls. Every operation is
+  O(1) apart from the loader itself.
+anki_queries: []
+categories:
+- systems-impl

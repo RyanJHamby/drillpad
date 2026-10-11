@@ -1,0 +1,179 @@
+id: bank-ledger-transfers
+title: In-memory bank with double-entry ledger and idempotent transfers
+bar_level: 2
+target_minutes: 25
+patterns:
+- double-entry
+- idempotency-key
+- atomic-update
+- in-memory-service
+firm_tags:
+- distsys
+anki_queries: []
+statement: |
+  Implement `Bank`. Amounts are positive ints (minor units, e.g. cents).
+
+  - `create_account(account_id) -> bool`: False if it already exists.
+  - `deposit(account_id, amount) -> new_balance | None`: None for an unknown account or a
+    non-positive amount (nothing changes).
+  - `transfer(src, dst, amount, txn_id=None) -> str`: returns `"ok"`, `"insufficient_funds"`
+    (balance < amount; transferring the exact balance is fine) or `"invalid"` (unknown account,
+    src == dst, non-positive amount). A failed transfer changes nothing and records nothing.
+    If `txn_id` is given and was seen before, return the STORED status of the first attempt
+    without doing anything (idempotent retry); every status, including failures, is stored.
+  - `balance(account_id) -> int | None`.
+  - `history(account_id) -> [(delta, counterparty), ...]` in order: a deposit is
+    `(+amount, None)`, a transfer is `(-amount, dst)` on the source and `(+amount, src)` on the
+    destination (double entry: both legs are written together).
+  - `total() -> int`: the sum of all balances (must equal the sum of all deposits).
+starter: |
+  class Bank:
+      def __init__(self):
+          pass
+hints:
+- Use ints for money, never floats.
+- Validate everything first, then mutate both balances and both ledger legs together so there is no half-applied
+  state.
+- Store txn_id -> status in a dict and consult it before validating.
+follow_ups:
+- How do you make transfer atomic under concurrent callers (lock ordering to avoid deadlock)?
+- What if txn_id is reused with different parameters?
+- How would you persist this (append-only journal, replay)?
+- How do you expire old idempotency keys?
+tests:
+- name: accounts and deposits
+  tags:
+  - empty
+  - single
+  - invalid
+  code: |
+    b = Bank()
+    assert b.total() == 0 and b.balance("a") is None
+    assert b.create_account("a") is True and b.create_account("a") is False
+    assert b.balance("a") == 0 and b.history("a") == []
+    assert b.deposit("a", 500) == 500 and b.deposit("a", 25) == 525
+    assert b.deposit("nope", 5) is None and b.deposit("a", 0) is None and b.deposit("a", -3) is None
+    assert b.balance("a") == 525 and b.history("a") == [(500, None), (25, None)]
+- name: transfer moves money and records both legs
+  tags:
+  - ordering
+  - boundary
+  code: |
+    b = Bank()
+    b.create_account("a"); b.create_account("b")
+    b.deposit("a", 100)
+    assert b.transfer("a", "b", 40) == "ok"
+    assert (b.balance("a"), b.balance("b")) == (60, 40)
+    assert b.history("a") == [(100, None), (-40, "b")]
+    assert b.history("b") == [(40, "a")]
+    assert b.transfer("a", "b", 60) == "ok", "transferring the exact balance is allowed"
+    assert b.balance("a") == 0 and b.balance("b") == 100 and b.total() == 100
+- name: insufficient funds changes nothing
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    b = Bank()
+    b.create_account("a"); b.create_account("b")
+    b.deposit("a", 10)
+    assert b.transfer("a", "b", 11) == "insufficient_funds"
+    assert (b.balance("a"), b.balance("b")) == (10, 0)
+    assert b.history("a") == [(10, None)] and b.history("b") == []
+    assert b.transfer("a", "b", 10) == "ok"
+- name: invalid transfers
+  tags:
+  - invalid
+  - zero-capacity
+  code: |
+    b = Bank()
+    b.create_account("a"); b.create_account("b"); b.deposit("a", 10)
+    for args in [("a", "a", 5), ("a", "zzz", 5), ("zzz", "a", 5), ("a", "b", 0), ("a", "b", -1)]:
+        assert b.transfer(*args) == "invalid", args
+    assert b.balance("a") == 10 and b.total() == 10
+- name: idempotency key replays the original result
+  tags:
+  - duplicate
+  - state-reuse
+  hidden: true
+  code: |
+    b = Bank()
+    b.create_account("a"); b.create_account("b"); b.deposit("a", 100)
+    assert b.transfer("a", "b", 30, txn_id="t1") == "ok"
+    assert b.transfer("a", "b", 30, txn_id="t1") == "ok", "retry returns the stored result"
+    assert b.balance("a") == 70 and b.balance("b") == 30, "retry must not move money twice"
+    assert len(b.history("b")) == 1
+    assert b.transfer("a", "b", 500, txn_id="t2") == "insufficient_funds"
+    b.deposit("a", 1000)
+    assert b.transfer("a", "b", 500, txn_id="t2") == "insufficient_funds", "stored outcome, even though it would succeed now"
+    assert b.transfer("a", "b", 500, txn_id="t3") == "ok"
+- name: money is conserved over many transfers
+  tags:
+  - scale
+  - ordering
+  hidden: true
+  code: |
+    import random
+    b = Bank()
+    ids = [f"acc{i}" for i in range(50)]
+    for a in ids:
+        b.create_account(a); b.deposit(a, 1000)
+    rng = random.Random(1)
+    for i in range(20000):
+        s, d = rng.sample(ids, 2)
+        b.transfer(s, d, rng.randint(1, 700), txn_id=i)
+    assert b.total() == 50 * 1000
+    assert all(b.balance(a) >= 0 for a in ids)
+    assert sum(d for a in ids for d, _ in b.history(a)) == 50 * 1000
+complexity:
+- op: create/deposit/balance
+  time: O(1)
+  space: O(A)
+- op: transfer
+  time: O(1)
+  space: O(T)
+- op: history
+  time: O(H)
+  space: O(H)
+extensions:
+- q: 'Level 2: add top_spenders(n) and a per-account transaction summary.'
+  kind: code
+  key_points:
+  - Spend is the sum of outgoing transfer amounts per account; deposits do not count
+  - Order by spend descending with a deterministic tie-break (account id ascending)
+  - Compute from the ledger or maintain a running total; heapq.nlargest for O(A log n)
+- q: 'Level 3: add schedule_transfer(at, src, dst, amount) / cancel and process_due(now).'
+  kind: code
+  key_points:
+  - Scheduled items live in a min-heap keyed by time; process_due pops everything <= now in order
+  - Funds are checked when the transfer executes, not when it is scheduled; failures are reported not
+    retried
+  - Cancel marks the item dead (lazy deletion) and returns False if already executed
+- q: 'Level 4: add rollback(txn_id) that reverses a transfer.'
+  kind: code
+  key_points:
+  - Append compensating entries rather than deleting history
+  - Reject rollback of unknown, failed, or already-rolled-back transfers
+  - Check the destination still has the funds, otherwise reject
+- q: What does each operation cost, and what grows without bound?
+  kind: complexity
+  key_points:
+  - deposit, transfer, balance are O(1) hash lookups; history is O(H) for H entries
+  - 'Ledger and idempotency table grow forever: O(T) space, so they need compaction or TTL'
+  - top_spenders via a full scan is O(A log n) with heapq.nlargest
+- q: How would you make this safe under concurrency and crashes?
+  kind: design
+  key_points:
+  - Lock accounts in a global order (e.g. sorted id) to avoid deadlock, or use one lock per shard
+  - Write the idempotency key and both ledger legs in a single atomic commit (database transaction)
+  - 'Balance can be derived from the ledger; keep invariants: sum of entries is zero across transfers'
+narration: []
+state_aloud:
+- Money is integer minor units; floats are a bug here.
+- 'Validate first, then mutate: a failed transfer must leave no trace.'
+- Idempotent replay returns the stored status, and failures are stored too.
+- Exact-balance transfer is allowed; same-account transfer is invalid.
+walkthrough: |
+  Balances and per-account ledgers live in dicts. Transfer first checks the idempotency table, then validates, then (only on success) updates both balances and appends both ledger legs together so the books can never be half-written. The outcome is recorded under txn_id so a retried request returns the original status without moving money twice. total() lets you assert the conservation invariant. Source: standard formulation.
+categories:
+- fintech
+- systems-impl

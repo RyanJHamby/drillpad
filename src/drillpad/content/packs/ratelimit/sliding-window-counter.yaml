@@ -1,0 +1,166 @@
+id: sliding-window-counter
+title: Sliding window counter rate limiter
+bar_level: 3
+target_minutes: 25
+patterns: [rate-limiting, sliding-window, weighted-counters, approximation]
+firm_tags: [ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:29 - *"'
+statement: |
+  Implement `SlidingWindowCounter(limit, window_sec)` with `allow() -> bool`, the weighted
+  hybrid: keep a count for the current fixed window (aligned to multiples of `window_sec`) and
+  for the previous one. The estimated load is
+  `prev_count * (1 - elapsed_in_current_window / window_sec) + curr_count`.
+  Allow (and count) a request only if the estimate is strictly below `limit`.
+  When time moves into a new fixed window, the old current count becomes the previous count only
+  if exactly one window elapsed; after a longer idle gap, previous is 0. O(1) space.
+  Lock around state; `time.monotonic()` for time (not imported by name).
+starter: |
+  class SlidingWindowCounter:
+      def __init__(self, limit: int, window_sec: float):
+          pass
+hints:
+  - Window start = floor(now / window_sec) * window_sec.
+  - Detect skipped windows when rolling over; do not reuse a stale previous count.
+follow_ups:
+  - Why not use the sliding window log everywhere?
+  - How accurate is the hybrid versus the log?
+  - How would you change window size dynamically?
+  - How does this compare to token bucket for burst tolerance?
+tests:
+  - name: limit within one window
+    tags: [boundary, empty]
+    code: |
+      import time
+      clock = [100.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          w = SlidingWindowCounter(limit=5, window_sec=10)
+          assert [w.allow() for _ in range(6)] == [True] * 5 + [False]
+      finally:
+          time.monotonic = real
+  - name: previous window decays linearly
+    tags: [time, boundary, ordering]
+    code: |
+      import time
+      clock = [100.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          w = SlidingWindowCounter(limit=5, window_sec=10)
+          for _ in range(5): w.allow()
+          clock[0] = 110.0
+          assert w.allow() is False, "previous window still fully weighted"
+          clock[0] = 115.0   # weight 0.5: estimates 2.5, 3.5, 4.5, then 5.5
+          assert [w.allow() for _ in range(4)] == [True, True, True, False]
+      finally:
+          time.monotonic = real
+  - name: idle gap resets previous count
+    tags: [time, state-reuse]
+    code: |
+      import time
+      clock = [100.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          w = SlidingWindowCounter(limit=5, window_sec=10)
+          for _ in range(5): w.allow()
+          clock[0] = 130.0   # two full windows skipped
+          assert [w.allow() for _ in range(6)] == [True] * 5 + [False]
+      finally:
+          time.monotonic = real
+  - name: boundary burst is smoothed
+    tags: [time, boundary, scale]
+    hidden: true
+    code: |
+      import time
+      clock = [105.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          w = SlidingWindowCounter(limit=5, window_sec=10)
+          clock[0] = 109.5
+          before = sum(w.allow() for _ in range(5))
+          clock[0] = 110.5
+          after = sum(w.allow() for _ in range(5))
+          assert before == 5
+          assert after <= 1, f"fixed-window would allow 5 here; got {after}"
+      finally:
+          time.monotonic = real
+  - name: concurrent allows never exceed the limit
+    tags: [concurrency, scale]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          import threading
+          w = SlidingWindowCounter(limit=100, window_sec=10)
+          ok = []
+          def worker():
+              ok.append(sum(w.allow() for _ in range(50)))
+          ts = [threading.Thread(target=worker, daemon=True) for _ in range(8)]
+          for t in ts: t.start()
+          for t in ts: t.join(10)
+          assert not any(t.is_alive() for t in ts)
+          assert sum(ok) == 100, f"expected exactly 100 allowed, got {sum(ok)}"
+      finally:
+          time.monotonic = real
+  - name: limit zero allows nothing
+    tags: [zero-capacity, boundary]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          w = SlidingWindowCounter(limit=0, window_sec=10)
+          assert [w.allow() for _ in range(3)] == [False, False, False]
+          clock[0] = 25.0
+          assert w.allow() is False
+      finally:
+          time.monotonic = real
+complexity:
+- op: allow
+  time: O(1)
+  space: O(1)
+- op: sliding window log (contrast)
+  time: O(1) amortized
+  space: O(n)
+extensions:
+- q: Why not use the sliding window log everywhere?
+  kind: reasoning
+  key_points:
+  - 'Log is exact but stores a timestamp per request: O(N) memory per key'
+  - Hybrid gives near-equivalent smoothing at O(1) space
+  - Matters at scale with many keys
+- q: How accurate is the hybrid versus the log?
+  kind: reasoning
+  key_points:
+  - Assumes uniform distribution of requests within the previous window
+  - Error is bounded but nonzero when the prior window was itself bursty
+  - Acceptable for rate limiting, not for billing-grade exactness
+- q: How would you change the window size dynamically?
+  kind: design
+  key_points:
+  - Store window_sec as mutable state read under the lock
+  - Changing it requires resetting curr/prev counts to avoid stale-weight artifacts
+  - Keep window alignment (floor to window_sec) consistent everywhere
+- q: How does this compare to a token bucket for burst tolerance?
+  kind: reasoning
+  key_points:
+  - Token bucket deliberately allows a burst up to capacity
+  - Sliding window counter tries to prevent boundary bursts that fixed windows allow (up to 2x)
+  - Choose by whether bursts are a feature or a bug
+- q: What is the cost per key, and what edge case must the rollover handle?
+  kind: complexity
+  key_points:
+  - O(1) time and O(1) space per key (two counters and a window start)
+  - On idle gap of more than one window, previous count must reset to 0
+  - Reusing a stale previous count would wrongly throttle after idle
+narration:
+- Fixed window has an edge-burst problem — up to 2x the limit right at a window boundary. Sliding window log fixes that exactly but costs O(N) memory per key.
+- 'I''ll implement the counter hybrid — a middle ground: keep the previous window''s count and weight it by how much it still overlaps the current sliding view.'
+- The core trick is this overlap_weight calculation — it's an approximation, not exact, and I'll say that up front.
+- 'Let me trace a boundary crossing: request count carries over as prev_count, weighted down as time moves through the current window.'
+- 'Edge case: idle keys skipping multiple windows — need to detect that and zero out prev_count instead of reusing a stale count.'
+state_aloud:
+- 'Idle-then-burst: if a key is idle for multiple windows, must detect `windows_elapsed > 1` and zero `prev_count` rather than reusing a stale value.'
+- The hybrid is an *approximation* — it assumes uniform request distribution within the previous window, which can under- or over-count if traffic was itself bursty within that window.
+- Boundary math must use the same window alignment (floor to window_sec) everywhere, or clients near a boundary get inconsistent results between requests.
+- 'Thundering herd: many keys sharing the same window boundary (e.g., all reset at top-of-minute) can cause synchronized retry storms right after reset — consider jittering window offsets per key if this matters.'
+walkthrough: |
+  A fixed window allows up to 2x the limit across a boundary, and a sliding-window log fixes that exactly but costs O(N) memory per key. The counter hybrid keeps the current and previous window counts and weights the previous count by how much of that window still overlaps the sliding view. This gives O(1) time and space per key, at the cost of being an approximation that assumes uniform traffic within the previous window. Window boundaries must be aligned by flooring to the window size everywhere. If a key is idle for more than one window, `prev_count` must be zeroed rather than reused.
+categories: [systems-impl]

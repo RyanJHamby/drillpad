@@ -1,0 +1,167 @@
+id: serialize-deserialize-binary-tree
+title: Serialize and Deserialize Binary Tree
+bar_level: 3
+target_minutes: 38
+patterns:
+- tree-dfs
+- tree-bfs
+firm_tags:
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Serialize Deserialize Tree (LC 297)"
+statement: |
+  Design a `Codec` with `serialize(root) -> str` and `deserialize(data) -> root` such that deserializing the serialized form of any binary tree rebuilds an equal tree (same shape and values). Values are integers, possibly negative or repeated. The string format is entirely up to you, and your own state must not be required to deserialize (a fresh `Codec()` must be able to read what another instance wrote). `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter. `tree_to_list(root)` returns the level-order list for comparison.
+
+  Example: `Codec().deserialize(Codec().serialize(t))` has the same `tree_to_list` as `t`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+
+  def tree_to_list(root):
+      """Level-order list with None for missing children (trailing Nones trimmed)."""
+      out, q = [], deque([root])
+      while q:
+          n = q.popleft()
+          if n is None:
+              out.append(None)
+              continue
+          out.append(n.val)
+          q.append(n.left)
+          q.append(n.right)
+      while out and out[-1] is None:
+          out.pop()
+      return out
+starter: |
+  class Codec:
+      def serialize(self, root):
+          pass
+
+      def deserialize(self, data):
+          pass
+hints:
+- Choose a traversal that records enough to rebuild the shape, such as preorder with explicit markers
+  for missing children.
+- Pick delimiters that cannot collide with values (negative numbers have a minus sign; use a comma and
+  a marker like "#").
+- Deserialize by consuming tokens in the same order with a shared iterator or index.
+follow_ups:
+- Make the format compact for sparse trees.
+- How would you version the format so old data stays readable?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    c = Codec()
+    t = build_tree([1,2,3,None,None,4,5])
+    s = c.serialize(t)
+    assert isinstance(s, str)
+    assert tree_to_list(Codec().deserialize(s)) == [1,2,3,None,None,4,5]
+- name: empty tree
+  tags:
+  - empty
+  code: |
+    c = Codec()
+    s = c.serialize(None)
+    assert isinstance(s, str)
+    assert Codec().deserialize(s) is None
+- name: single node
+  tags:
+  - single
+  code: |
+    c = Codec()
+    s = c.serialize(build_tree([42]))
+    assert isinstance(s, str)
+    assert tree_to_list(Codec().deserialize(s)) == [42]
+- name: negative and multi-digit values
+  tags:
+  - invalid
+  code: |
+    vals = [-100, 20, -3, None, 4000, -5]
+    s = Codec().serialize(build_tree(vals))
+    assert isinstance(s, str)
+    assert tree_to_list(Codec().deserialize(s)) == vals
+- name: repeated values and one-sided shape
+  tags:
+  - duplicate
+  code: |
+    vals = [1,1,None,1,None,1]
+    s = Codec().serialize(build_tree(vals))
+    assert isinstance(s, str)
+    assert tree_to_list(Codec().deserialize(s)) == vals
+- name: fresh instance can read it
+  tags:
+  - state-reuse
+  code: |
+    a = Codec().serialize(build_tree([5,3,8]))
+    b = Codec().serialize(build_tree([9]))
+    assert isinstance(a, str) and isinstance(b, str)
+    reader = Codec()
+    assert tree_to_list(reader.deserialize(b)) == [9]
+    assert tree_to_list(reader.deserialize(a)) == [5,3,8]
+- name: big balanced tree
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 2**15 - 1
+    vals = list(range(1, n + 1))
+    s = Codec().serialize(build_tree(vals))
+    assert isinstance(s, str)
+    assert tree_to_list(Codec().deserialize(s)) == vals
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why do you need null markers?
+  kind: reasoning
+  key_points:
+  - A traversal of values alone does not fix the shape
+  - Markers make preorder uniquely decodable
+  - Without them many trees share the same sequence
+- q: Complexity and string size?
+  kind: complexity
+  key_points:
+  - Linear time to write and to parse
+  - Output has n values plus n + 1 markers
+  - Parsing needs O(h) stack or O(n) for BFS
+- q: Design this as a wire format between services.
+  kind: design
+  key_points:
+  - Version byte, length prefixes or a schema such as protobuf
+  - Avoid delimiter collisions and unbounded recursion on untrusted input
+  - Compact encodings (bitmap of structure plus value array) for sparse trees
+narration: []
+state_aloud:
+- Empty tree must round-trip.
+- Negative and multi-digit numbers need delimiters.
+- Repeated values are fine; shape comes from the markers.
+- Decoder must not rely on encoder instance state.
+walkthrough: |
+  Serialize with a preorder walk, writing each value and a `#` for every missing child, joined by commas. Deserialize by splitting on commas and consuming tokens in the same order with an iterator: a `#` yields `None`, otherwise create a node and recursively build its left then right child. Preorder with explicit nulls determines the tree uniquely, and both directions are linear.

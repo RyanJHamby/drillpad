@@ -1,0 +1,103 @@
+id: word-search
+title: Word Search
+bar_level: 2
+target_minutes: 25
+patterns:
+- backtracking
+- graph-bfs-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Word Search (LC 79)"
+statement: |
+  Given a grid of single-character strings and a `word`, return `True` if the word can be spelled by a path of horizontally or vertically adjacent cells, using each cell at most once in that path.
+
+  Example: with `board = [["A","B","C","E"],["S","F","C","S"],["A","D","E","E"]]`, `exist(board, "ABCCED")` is `True` and `exist(board, "ABCB")` is `False`.
+starter: |
+  def exist(board, word):
+      pass
+hints:
+- Try every cell as a starting point and explore with DFS.
+- Mark the current cell as used, recurse into 4 neighbors for the next letter, then unmark (backtrack).
+- Prune early on a letter mismatch.
+follow_ups:
+- Find all words from a dictionary at once (Word Search II with a trie).
+- How would you speed up when letter frequencies are skewed?
+tests:
+- name: found
+  tags:
+  - ordering
+  code: |
+    b=[['A','B','C','E'],['S','F','C','S'],['A','D','E','E']]
+    assert exist(b,'ABCCED') is True
+    assert exist(b,'SEE') is True
+- name: cell reuse not allowed
+  tags:
+  - invalid
+  code: |
+    b=[['A','B','C','E'],['S','F','C','S'],['A','D','E','E']]
+    assert exist(b,'ABCB') is False
+- name: single cell
+  tags:
+  - single
+  code: |
+    assert exist([['a']],'a') is True
+    assert exist([['a']],'b') is False
+- name: path must not revisit even for repeated letters
+  tags:
+  - duplicate
+  code: |
+    assert exist([['a','a']],'aaa') is False
+    assert exist([['a','a']],'aa') is True
+- name: empty word or board
+  tags:
+  - empty
+  code: |
+    assert exist([],'a') is False
+    assert exist([['a']],'') is True
+- name: path along boundary
+  tags:
+  - boundary
+  code: |
+    assert exist([['a','b'],['d','c']],'abcd') is True
+    assert exist([['a','b'],['d','c']],'acbd') is False
+- name: exhaustive search on repeated letters
+  tags:
+  - scale
+  hidden: true
+  code: |
+    b=[['a']*4 for _ in range(3)]
+    assert exist(b,'a'*11+'b') is False
+    assert exist(b,'a'*12) is True
+complexity:
+- op: overall
+  time: O(r * c * 3^L)
+  space: O(L)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - Each start explores up to 3 branches per step after the first
+  - O(r*c*3^L) worst case for word length L
+  - Space is the recursion depth O(L) plus the visited marks
+- q: Many words at once
+  kind: design
+  key_points:
+  - Insert the dictionary into a trie
+  - DFS the board once, walking the trie
+  - Prune dead trie branches to speed up (Word Search II)
+- q: Pruning tricks
+  kind: reasoning
+  key_points:
+  - Reject early if the board lacks enough of each letter
+  - Search from the rarer end of the word
+  - Early return the moment a path completes
+narration: []
+state_aloud:
+- Empty word.
+- Same cell reused.
+- Board with a single cell.
+- Restore the cell on backtrack so other paths see it.
+walkthrough: |
+  For every cell matching the first letter, run a DFS that marks the cell as visited, tries each neighbor for the next letter, and then unmarks the cell on the way back so alternative paths can reuse it. The search succeeds as soon as the index passes the last letter. Mismatches and out-of-bounds moves prune branches immediately.

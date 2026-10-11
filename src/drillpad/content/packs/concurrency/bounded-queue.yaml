@@ -1,0 +1,146 @@
+id: bounded-queue
+title: Bounded blocking producer-consumer queue
+bar_level: 4
+target_minutes: 25
+patterns: [condition-variable, producer-consumer, backpressure, predicate-loop]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:13 - *"'
+statement: |
+  Implement `BoundedQueue(capacity)`: a FIFO where `put(item)` blocks while the queue is full
+  and `get()` blocks while it is empty. Use `threading.Condition` (no polling, no sleep loops,
+  no queue.Queue). Wait inside a `while` loop on the predicate, share one lock between your two
+  conditions, and keep FIFO order.
+starter: |
+  class BoundedQueue:
+      def __init__(self, capacity):
+          pass
+hints:
+  - Two Conditions (not_full, not_empty) built on the same Lock.
+  - Loop on the predicate; a bare `if` breaks on spurious wakeups and multi-waiter races.
+  - put notifies not_empty; get notifies not_full.
+follow_ups:
+  - Is notify_all everywhere still correct? What does it cost?
+  - How would you add close() semantics without deadlocking blocked threads?
+  - Why while and not if around the wait?
+  - Why bound the queue at all (backpressure)?
+tests:
+  - name: fifo single thread
+    tags: [ordering]
+    code: |
+      q = BoundedQueue(3)
+      for i in range(3): q.put(i)
+      assert [q.get(), q.get(), q.get()] == [0, 1, 2]
+  - name: put blocks when full then resumes
+    tags: [concurrency, boundary]
+    code: |
+      import threading, time
+      q = BoundedQueue(2)
+      q.put(1); q.put(2)
+      finished = threading.Event()
+      def producer(): q.put(3); finished.set()
+      t = threading.Thread(target=producer, daemon=True); t.start()
+      time.sleep(0.15)
+      assert not finished.is_set(), "put on a full queue must block"
+      assert q.get() == 1
+      assert finished.wait(3), "put did not resume after a slot freed"
+      assert [q.get(), q.get()] == [2, 3]
+  - name: get blocks when empty then resumes
+    tags: [concurrency, empty]
+    code: |
+      import threading, time
+      q = BoundedQueue(2)
+      got = []
+      def consumer(): got.append(q.get())
+      t = threading.Thread(target=consumer, daemon=True); t.start()
+      time.sleep(0.15)
+      assert got == [] and t.is_alive(), "get on an empty queue must block"
+      q.put("x")
+      t.join(3)
+      assert got == ["x"]
+  - name: many producers and consumers capacity 3
+    tags: [concurrency, scale]
+    hidden: true
+    code: |
+      import threading
+      q = BoundedQueue(3)
+      P, C, N = 4, 4, 250
+      lock = threading.Lock(); seen = []
+      def prod(p):
+          for i in range(N): q.put(p * 1000 + i)
+      def cons():
+          for _ in range(P * N // C):
+              v = q.get()
+              with lock: seen.append(v)
+      ts = [threading.Thread(target=prod, args=(p,), daemon=True) for p in range(P)]
+      ts += [threading.Thread(target=cons, daemon=True) for _ in range(C)]
+      for t in ts: t.start()
+      for t in ts: t.join(15)
+      assert not any(t.is_alive() for t in ts), "deadlock or lost wakeup"
+      assert sorted(seen) == sorted(p * 1000 + i for p in range(P) for i in range(N))
+  - name: capacity one ping pong
+    tags: [zero-capacity, concurrency, ordering]
+    hidden: true
+    code: |
+      import threading
+      q = BoundedQueue(1)
+      out = []
+      def prod():
+          for i in range(500): q.put(i)
+      def cons():
+          for _ in range(500): out.append(q.get())
+      a = threading.Thread(target=prod, daemon=True); b = threading.Thread(target=cons, daemon=True)
+      a.start(); b.start(); a.join(10); b.join(10)
+      assert not a.is_alive() and not b.is_alive(), "deadlock at capacity 1"
+      assert out == list(range(500))
+complexity:
+- op: put/get
+  time: O(1)
+  space: O(capacity)
+extensions:
+- q: Why while and not if around the wait?
+  kind: reasoning
+  key_points:
+  - Spurious wakeups are permitted
+  - 'Multi-waiter races: the condition can be false again by the time the thread reacquires the lock'
+  - Only a predicate loop is safe
+- q: Is notify_all everywhere still correct? What does it cost?
+  kind: design
+  key_points:
+  - Correct because of the predicate re-check
+  - 'Thundering herd: every waiter wakes, all but one go back to sleep'
+  - Extra context switches under contention
+  - Prefer notify on the specific condition
+- q: How would you add close() semantics without deadlocking blocked threads?
+  kind: design
+  key_points:
+  - Add a closed flag included in the wait predicate
+  - notify_all on close so every waiter wakes and observes it
+  - put after close raises; get drains remaining items then signals end
+- q: Why bound the queue at all?
+  kind: reasoning
+  key_points:
+  - 'Backpressure: unbounded queue lets a fast producer exhaust memory'
+  - Bounding makes overload visible and blocks the producer
+  - Capacity 0 or 1 must still not deadlock
+- q: What is the cost of put/get and the space, and what correctness properties must you name?
+  kind: complexity
+  key_points:
+  - O(1) per op ignoring wait time; space O(capacity)
+  - No missed wakeup, no busy-wait, no torn state, FIFO preserved
+  - One lock shared by both conditions
+narration:
+- I need two directions of blocking — producers wait when full, consumers wait when empty — so I'll use two condition variables sharing one mutex.
+- 'The key correctness point: I loop on the predicate inside `wait`, not a bare `if`, to handle spurious wakeups.'
+- Put appends and notifies a waiting consumer; get pops and notifies a waiting producer.
+- Let me trace capacity=1 with one producer and one consumer to make sure it doesn't deadlock.
+- If I needed shutdown, I'd add a closed flag into the predicate and notify_all on close.
+state_aloud:
+- Spurious wakeup — a thread can wake from `wait()` with no corresponding `notify`; the `while`/predicate-lambda re-check handles this, a bare `if` does not.
+- Capacity 0 or 1 — degenerate but must still not deadlock (every put has a matching get to unblock it).
+- '`notify_one` vs `notify_all` — using `notify_all` when only one slot opened wakes every waiter (thundering herd); all but one re-check the predicate, fail, and go back to sleep — correct but wasteful under contention.'
+- Shutdown/drain — need a way to unblock all waiters on teardown (e.g. a `closed_` flag checked in the predicate) or threads hang forever waiting on a queue that will never receive more items.
+- Same lock must guard both conditions (Python) or the single mutex must protect both cv waits (C++) — separate locks for "full" and "empty" state on the same buffer is a data race.
+walkthrough: |
+  A fixed-capacity buffer is guarded by one lock with two condition variables, not-full for producers and not-empty for consumers, which must share that same lock. Waits sit in a `while` loop that re-checks the predicate under the lock, which handles spurious wakeups and avoids missed wakeups. `put` and `get` are O(1) excluding wait time, space is O(capacity), and FIFO order is preserved. All size and index mutations happen under the lock. Put notifies a waiting consumer and get notifies a waiting producer; shutdown adds a closed flag to the predicate and calls `notify_all`.
+categories: [systems-impl]

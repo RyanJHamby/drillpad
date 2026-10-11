@@ -1,0 +1,207 @@
+id: rolling-canary-deploy
+title: Rolling / Canary Deploy Simulator
+bar_level: 3
+target_minutes: 35
+patterns:
+- canary
+- progressive-delivery
+- state-machine
+- hash-bucketing
+- rollback
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Implement the decision logic of a canary rollout for a new model version: traffic moves through
+  stages (for example 1% -> 10% -> 50% -> 100%), the controller compares the canary's error rate with
+  the stable version's, and it promotes, holds or rolls back.
+
+  `CanaryRollout(stages, min_requests, tolerance)`:
+  - `stages`: strictly increasing percentages in `(0, 100]`, non-empty. `min_requests >= 1`,
+    `tolerance >= 0` (absolute error-rate margin). Otherwise `ValueError`.
+  - Starts in state `"running"` at stage 0.
+  - `weight() -> int`: current canary traffic percentage (`0` after a rollback).
+  - `state() -> "running" | "rolled_back" | "complete"`.
+  - `report(canary_reqs, canary_errs, base_reqs, base_errs) -> str`: counts observed during the current
+    stage (the caller passes fresh counts each stage).
+    `ValueError` for negative counts or errors greater than requests. `RuntimeError` if the rollout
+    already finished.
+    * `canary_reqs < min_requests` -> `"hold"` (not enough evidence; nothing changes).
+    * canary rate = errs/reqs; baseline rate = base_errs/base_reqs, or `0.0` when `base_reqs == 0`.
+      If `canary_rate > baseline_rate + tolerance` -> state `"rolled_back"`, return `"rollback"`.
+    * otherwise at the last stage -> state `"complete"`, return `"complete"`; else advance one stage and
+      return `"promote"`.
+  - `route(key) -> "canary" | "stable"`: `bucket = int(md5(key.encode()).hexdigest()[:8], 16) % 100`;
+    canary iff `bucket < weight()`. The same key always lands on the same side and a key that is canary at
+    some weight stays canary at every higher weight.
+
+  Example: stages `[10, 50, 100]`, `min_requests=100`: `report(200, 1, 1800, 18)` promotes to 50.
+starter: |
+  class CanaryRollout:
+      def __init__(self, stages, min_requests, tolerance):
+          pass
+
+      def weight(self):
+          pass
+
+      def state(self):
+          pass
+
+      def report(self, canary_reqs, canary_errs, base_reqs, base_errs):
+          pass
+
+      def route(self, key):
+          pass
+hints:
+- 'A tiny state machine: stage index plus a terminal state; report() is the only transition.'
+- Check the evidence threshold before the error comparison, otherwise 3 errors out of 3 requests rolls
+  back on noise.
+- 'Hash bucketing gives stickiness and monotonicity for free: a larger weight just raises the cutoff.'
+follow_ups:
+- Statistical test instead of a fixed tolerance (compare confidence intervals).
+- Rolling update with maxSurge/maxUnavailable for the replica fleet.
+- Automatic rollback triggered by latency and quality metrics as well as errors.
+tests:
+- name: healthy canary is promoted through every stage
+  code: |
+    c = CanaryRollout([10, 50, 100], min_requests=100, tolerance=0.01)
+    assert c.weight() == 10 and c.state() == "running"
+    assert c.report(200, 1, 1800, 18) == "promote" and c.weight() == 50
+    assert c.report(500, 5, 500, 5) == "promote" and c.weight() == 100
+    assert c.report(1000, 10, 0, 0) == "complete"
+    assert c.state() == "complete" and c.weight() == 100
+  hidden: false
+  tags:
+  - ordering
+  - state-reuse
+- name: not enough traffic holds the stage
+  code: |
+    c = CanaryRollout([10, 100], min_requests=100, tolerance=0.0)
+    assert c.report(99, 99, 1000, 0) == "hold", "too few requests to judge, even if all failed"
+    assert c.weight() == 10 and c.state() == "running"
+    assert c.report(100, 0, 1000, 0) == "promote"
+  hidden: false
+  tags:
+  - boundary
+  - time
+- name: regression beyond tolerance rolls back to zero weight
+  code: |
+    c = CanaryRollout([5, 50, 100], 10, 0.02)
+    assert c.report(100, 2, 1000, 10) == "promote", "0.02 vs 0.01 + 0.02: within tolerance"
+    assert c.report(100, 5, 1000, 10) == "rollback", "0.05 > 0.03"
+    assert c.weight() == 0 and c.state() == "rolled_back"
+    try:
+        c.report(100, 0, 100, 0)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("finished rollout must reject reports")
+  hidden: false
+  tags:
+  - boundary
+  - invalid
+- name: routing is sticky and monotone as the weight grows
+  code: |
+    c = CanaryRollout([10, 50, 100], 1, 1.0)
+    keys = [f"user-{i}" for i in range(20000)]
+    at10 = {k for k in keys if c.route(k) == "canary"}
+    assert 0.08 * len(keys) < len(at10) < 0.12 * len(keys)
+    assert {k for k in keys if c.route(k) == "canary"} == at10, "same key, same side"
+    c.report(1, 0, 1, 0)
+    at50 = {k for k in keys if c.route(k) == "canary"}
+    assert at10 <= at50 and 0.47 * len(keys) < len(at50) < 0.53 * len(keys)
+    c.report(1, 0, 1, 0)
+    assert all(c.route(k) == "canary" for k in keys[:2000])
+  hidden: true
+  tags:
+  - ordering
+  - state-reuse
+  - scale
+- name: rolled back traffic is all stable; zero baseline traffic
+  code: |
+    c = CanaryRollout([20, 100], 5, 0.0)
+    assert c.report(10, 1, 0, 0) == "rollback", "baseline error rate is treated as 0 with no baseline traffic"
+    assert all(c.route(f"k{i}") == "stable" for i in range(500))
+  hidden: true
+  tags:
+  - zero-capacity
+  - empty
+- name: invalid configuration and counts
+  code: |
+    for args in [([], 1, 0.0), ([50, 10], 1, 0.0), ([0, 10], 1, 0.0), ([10, 101], 1, 0.0), ([10], 0, 0.0), ([10], 1, -0.1)]:
+        try:
+            CanaryRollout(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    c = CanaryRollout([10], 1, 0.0)
+    for bad in [(5, 6, 1, 0), (-1, 0, 1, 0), (5, 0, 1, 2)]:
+        try:
+            c.report(*bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+  hidden: true
+  tags:
+  - invalid
+- name: single-stage rollout completes in one report
+  code: |
+    c = CanaryRollout([100], 1, 0.0)
+    assert c.report(5, 0, 0, 0) == "complete"
+  hidden: true
+  tags:
+  - single
+  - boundary
+complexity:
+- op: report
+  time: O(1)
+  space: O(S)
+- op: route
+  time: O(1)
+  space: O(S)
+extensions:
+- q: 'Level 2: add a rolling replica update plan. Given `total`, `max_surge`, `max_unavailable`, return
+    the list of (old, new) replica counts per step, assuming new replicas become ready one step after
+    creation.'
+  kind: code
+  key_points:
+  - Each step may create up to total + max_surge - (old + new) new replicas and remove old ones while
+    ready >= total - max_unavailable
+  - Track not-ready new replicas separately from ready ones, since only ready ones count toward availability
+  - Terminate when old == 0 and new == total; guard against max_surge == max_unavailable == 0 which cannot
+    make progress
+- q: Error rate alone is not enough for an LLM model rollout. What else would gate promotion?
+  kind: design
+  key_points:
+  - Latency percentiles (time to first token and per-token), cost per request and refusal/format-failure
+    rates
+  - Offline eval and shadow traffic before any live percentage, plus quality metrics sampled by an online
+    judge
+  - 'Guard against noisy comparisons: minimum sample size, paired traffic split, and a pre-agreed rollback
+    rule'
+- q: How do canary routing and a stateful workload (KV caches, sessions) interact?
+  kind: design
+  key_points:
+  - Bucket on a session or user id, not per request, so a conversation stays on one version
+  - A shift in weight moves keys and cold-starts their prefix caches (see request-router-consistent-hash)
+  - Keep stable replicas warm so rollback is instant
+- q: Cost and state of the controller and how decisions scale with many simultaneous rollouts.
+  kind: complexity
+  key_points:
+  - report and route are O(1) with O(S) state for S stages
+  - The metrics aggregation feeding report() dominates the cost (see log-aggregator-bucketing)
+  - Independent per-deployment controllers shard trivially
+narration: []
+state_aloud:
+- Insufficient evidence means hold, not promote or roll back.
+- Error comparison is strict >, with an absolute tolerance on top of the baseline rate.
+- 'No baseline traffic: baseline rate is 0.'
+- Rollback is terminal and sets weight to 0; completed rollouts reject further reports.
+- Routing must be deterministic and monotone in the weight.
+walkthrough: |
+  A stage index and a terminal state form the whole state machine. report() first gates on min_requests, then compares canary and baseline error rates with an absolute tolerance, and either rolls back (terminal, weight 0), promotes, or completes at the last stage. route() hashes the key into a 0-99 bucket and compares it with the weight, which makes assignment sticky and monotone as the weight rises. Standard progressive-delivery logic; the rule set is defined by this problem rather than taken from a particular system. No source note applies.
+categories:
+- ai-infra

@@ -1,0 +1,126 @@
+id: word-search-ii
+title: Word Search II
+bar_level: 3
+target_minutes: 40
+patterns:
+- trie
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Word Search II (LC 212)"
+statement: |
+  Given an m x n grid of lowercase letters and a list of words, return every word from the list that can be formed by a path of horizontally or vertically adjacent cells, using each cell at most once per word. Return each found word once, in any order.
+
+  Example: for board `[["o","a","a","n"],["e","t","a","e"],["i","h","k","r"],["i","f","l","v"]]` and words `["oath","pea","eat","rain"]` the result is `["eat","oath"]` in any order.
+starter: |
+  def find_words(board, words):
+      pass
+hints:
+- Running a separate DFS for every word repeats shared prefixes many times.
+- Put all words in a trie and run one DFS from each cell, following trie edges only.
+- 'Prune: when a trie branch has no words left (after you record a word), delete it so the search stops
+  early.'
+follow_ups:
+- Why must visited cells be restored after the DFS?
+- What if the board is huge but the word list is small?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    b = [["o","a","a","n"],["e","t","a","e"],["i","h","k","r"],["i","f","l","v"]]
+    assert sorted(find_words(b, ["oath","pea","eat","rain"])) == ["eat","oath"]
+- name: no words
+  tags:
+  - empty
+  code: |
+    b = [["o","a","a","n"],["e","t","a","e"],["i","h","k","r"],["i","f","l","v"]]
+    assert find_words(b, []) == []
+    assert find_words([["a"]], ["a"]) == ["a"]
+- name: single cell
+  tags:
+  - single
+  code: |
+    assert find_words([["a"]], ["a"]) == ["a"]
+    assert find_words([["a"]], ["b"]) == []
+- name: cell cannot be reused
+  tags:
+  - boundary
+  code: |
+    assert find_words([["a"]], ["aa"]) == []
+    assert find_words([["a","b"]], ["aba"]) == []
+    assert sorted(find_words([["a","b"],["c","d"]], ["abdc","abcd"])) == ["abdc"]
+- name: prefix words and duplicates in the list
+  tags:
+  - duplicate
+  code: |
+    b = [["o","a","a","n"],["e","t","a","e"],["i","h","k","r"],["i","f","l","v"]]
+    assert sorted(find_words(b, ["oa","oaa","oath","oath"])) == ["oa","oaa","oath"]
+- name: board is left unchanged
+  tags:
+  - state-reuse
+  code: |
+    b = [["o","a","a","n"],["e","t","a","e"],["i","h","k","r"],["i","f","l","v"]]
+    copy = [row[:] for row in b]
+    find_words(b, ["oath","eat"])
+    assert b == copy
+    assert sorted(find_words(b, ["oath","eat"])) == ["eat","oath"]
+- name: big random board and word list
+  hidden: true
+  tags:
+  - scale
+  code: |
+    import random
+    rng = random.Random(11)
+    R = C = 12
+    board = [[rng.choice("ab") for _ in range(C)] for _ in range(R)]
+    words, planted = set(), set()
+    while len(words) < 2500:
+        words.add("".join(rng.choice("ab") for _ in range(rng.randint(8, 11))))
+    for _ in range(20):
+        r, c = rng.randrange(R), rng.randrange(C)
+        seen, w = {(r, c)}, board[r][c]
+        for _ in range(7):
+            opts = [(r+dr, c+dc) for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)) if 0 <= r+dr < R and 0 <= c+dc < C and (r+dr, c+dc) not in seen]
+            if not opts:
+                break
+            r, c = rng.choice(opts)
+            seen.add((r, c)); w += board[r][c]
+        planted.add(w)
+    words |= planted
+    res = find_words(board, sorted(words))
+    assert len(res) == len(set(res))
+    assert planted <= set(res) and set(res) <= words
+complexity:
+- op: overall
+  time: O(m * n * 3^L)
+  space: O(W * L)
+extensions:
+- q: Why a trie instead of one DFS per word?
+  kind: complexity
+  key_points:
+  - Words sharing prefixes share DFS work
+  - Per-word search multiplies cost by the number of words
+  - The trie bounds each path by the longest word length L
+- q: How does pruning help?
+  kind: design
+  key_points:
+  - Remove a word from the trie node once found
+  - Delete childless nodes on the way back up
+  - Dead branches stop being explored, which also avoids duplicate results
+- q: Why mark visited cells and unmark afterwards?
+  kind: reasoning
+  key_points:
+  - A cell may be used once per path, not once globally
+  - Backtracking restores it for other paths
+  - Mutating the board is fast but must be undone
+narration: []
+state_aloud:
+- Empty word list.
+- Word longer than the number of cells.
+- 'Same word in the list twice: return once.'
+- Do not reuse a cell within one path.
+walkthrough: |
+  Insert every word into a trie, storing the full word at its end node. Run a DFS from each board cell that follows trie children matching the letter, temporarily marking the cell as used. When a node holds a word, record it and clear that marker so it is reported once. After exploring, restore the cell and delete exhausted trie nodes so later searches skip dead branches.

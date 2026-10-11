@@ -1,0 +1,252 @@
+id: model-registry-versioning
+title: Model Registry with Versioning
+bar_level: 2
+target_minutes: 25
+patterns:
+- model-registry
+- versioning
+- stage-promotion
+- rollback
+- defensive-copy
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Implement a small model registry like the one ML teams use to track which trained artifact is serving.
+
+  `ModelRegistry()`:
+  - `register(name, uri, metadata=None) -> int`: add a new version of model `name`; versions are
+    `1, 2, 3, ...` per model. The record is `{"name", "version", "uri", "stage", "metadata"}` with stage
+    `"none"` and metadata (a deep copy of the argument, `{}` if None). `ValueError` for an empty `uri`.
+  - `get(name, version=None) -> dict`: that version, or the highest version when `None`. Returns a COPY
+    (mutating it never changes the registry). `KeyError` for an unknown name or version.
+  - `list_versions(name) -> list[dict]`: copies, ascending by version.
+  - `promote(name, version, stage)`: stages are `"none"`, `"staging"`, `"production"`, `"archived"`
+    (`ValueError` otherwise, `KeyError` for unknown name/version). At most one version holds `"staging"`
+    and at most one holds `"production"`: promoting another version into one of those stages moves the
+    previous holder to `"archived"`. Moving a version out of a stage frees that stage. Promoting to its
+    current stage is a no-op.
+  - `get_stage(name, stage) -> dict | None`: the version holding `"staging"` or `"production"` (copy),
+    or `None`; `ValueError` for other stage names.
+  - `rollback(name) -> int`: make the previous production version production again. Production versions
+    form a history in promotion order; rollback archives the current one, restores the one before it
+    and returns that version number. `ValueError` if there is no current production version or no
+    earlier one. Repeated rollbacks keep walking back.
+
+  `get_stage`, `get` and `promote` must be O(1) in the number of versions (no scanning).
+starter: |
+  class ModelRegistry:
+      def __init__(self):
+          pass
+
+      def register(self, name, uri, metadata=None):
+          pass
+
+      def get(self, name, version=None):
+          pass
+
+      def list_versions(self, name):
+          pass
+
+      def get_stage(self, name, stage):
+          pass
+
+      def promote(self, name, version, stage):
+          pass
+
+      def rollback(self, name):
+          pass
+hints:
+- Store versions in a list so version v is index v-1; keep a dict stage -> version holding that stage
+  per model.
+- 'Promotion updates three things: the old holder''s stage, the holder map, and the version''s own stage
+  field.'
+- Return copy.deepcopy of records so callers cannot corrupt registry state.
+follow_ups:
+- Immutable artifacts with a content hash and signature check.
+- Aliases such as 'champion' and 'challenger' that point at versions.
+- Audit log of who promoted what and when, with approvals.
+tests:
+- name: versions auto-increment per model
+  code: |
+    r = ModelRegistry()
+    assert r.register("bert", "s3://a") == 1 and r.register("bert", "s3://b") == 2
+    assert r.register("gpt", "s3://c") == 1
+    assert r.get("bert")["version"] == 2 and r.get("bert", 1)["uri"] == "s3://a"
+    g = r.get("bert", 1)
+    assert g == {"name": "bert", "version": 1, "uri": "s3://a", "stage": "none", "metadata": {}}
+    assert [v["version"] for v in r.list_versions("bert")] == [1, 2]
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: unknown names and versions
+  code: |
+    r = ModelRegistry()
+    for fn in [lambda: r.get("nope"), lambda: r.list_versions("nope"), lambda: r.promote("nope", 1, "staging")]:
+        try:
+            fn()
+        except KeyError:
+            pass
+        else:
+            raise AssertionError
+    r.register("m", "u")
+    for v in [0, 2, -1]:
+        try:
+            r.get("m", v)
+        except KeyError:
+            pass
+        else:
+            raise AssertionError(v)
+    try:
+        r.promote("m", 1, "gold")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+    try:
+        r.register("m", "")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+  hidden: false
+  tags:
+  - invalid
+  - empty
+- name: 'only one production version: the previous one is archived'
+  code: |
+    r = ModelRegistry()
+    for i in range(3):
+        r.register("m", f"u{i}")
+    r.promote("m", 1, "production")
+    assert r.get_stage("m", "production")["version"] == 1
+    r.promote("m", 2, "production")
+    assert r.get("m", 1)["stage"] == "archived" and r.get("m", 2)["stage"] == "production"
+    assert r.get_stage("m", "production")["version"] == 2
+    assert r.get_stage("m", "staging") is None
+    r.promote("m", 3, "staging")
+    assert r.get_stage("m", "staging")["version"] == 3
+    r.promote("m", 3, "none")
+    assert r.get_stage("m", "staging") is None
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: returned records are copies; metadata is copied on register
+  code: |
+    r = ModelRegistry()
+    meta = {"metrics": {"acc": 0.9}}
+    r.register("m", "u", meta)
+    meta["metrics"]["acc"] = 0.0
+    got = r.get("m")
+    assert got["metadata"] == {"metrics": {"acc": 0.9}}
+    got["stage"] = "production"; got["metadata"]["x"] = 1
+    assert r.get("m")["stage"] == "none" and "x" not in r.get("m")["metadata"]
+  hidden: false
+  tags:
+  - state-reuse
+  - duplicate
+- name: rollback restores the previous production version
+  code: |
+    r = ModelRegistry()
+    for i in range(3):
+        r.register("m", f"u{i}")
+    for v in (1, 2, 3):
+        r.promote("m", v, "production")
+    assert r.rollback("m") == 2
+    assert r.get_stage("m", "production")["version"] == 2 and r.get("m", 3)["stage"] == "archived"
+    assert r.rollback("m") == 1
+    for _ in range(1):
+        try:
+            r.rollback("m")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("no earlier production version")
+  hidden: true
+  tags:
+  - state-reuse
+  - boundary
+- name: rollback with nothing in production
+  code: |
+    r = ModelRegistry()
+    r.register("m", "u")
+    try:
+        r.rollback("m")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+    r.promote("m", 1, "production")
+    try:
+        r.rollback("m")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("only one production version so far")
+  hidden: true
+  tags:
+  - invalid
+  - single
+- name: 30k versions of one model, promoted one by one
+  code: |
+    r = ModelRegistry()
+    for i in range(30000):
+        v = r.register("big", f"s3://m/{i}", {"i": i})
+        r.promote("big", v, "production")
+        assert r.get_stage("big", "production")["version"] == v
+    assert r.get("big")["version"] == 30000
+    assert r.get("big", 29999)["stage"] == "archived"
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: register
+  time: O(1)
+  space: O(V)
+- op: get
+  time: O(1)
+  space: O(1)
+- op: promote
+  time: O(1)
+  space: O(1)
+extensions:
+- q: 'Level 2: add an append-only audit log (who, action, version, previous stage) and make `rollback`
+    record its own entry. How do you keep it consistent with promote?'
+  kind: code
+  key_points:
+  - Funnel all stage changes through one internal method that mutates state and appends the log entry
+    together
+  - Log entries are immutable records with a monotone sequence number
+  - rollback is expressed as two stage changes so the log replays to the same state
+- q: What would a production model registry need beyond this in-memory version?
+  kind: design
+  key_points:
+  - Durable storage with transactions so promotion (archive old, promote new) is atomic
+  - Immutable artifacts addressed by content hash, lineage to training data/code, and access control with
+    approvals for production
+  - 'Serving integration: deployments reference (name, stage) and roll out the change gradually (see rolling-canary-deploy)'
+- q: Why return copies and deep-copy metadata at registration?
+  kind: reasoning
+  key_points:
+  - Shared mutable dicts let callers change a 'registered' version after the fact, breaking reproducibility
+  - Immutability of a version is the point of a registry; only its stage changes
+  - Copy cost is small compared to the correctness risk, or use frozen mappings
+- q: Cost of each operation and what scanning would cost.
+  kind: complexity
+  key_points:
+  - register, get, promote, get_stage are O(1) plus the copy size of the record
+  - Scanning all versions for the production holder is O(V) per promote, O(V^2) for V sequential promotions
+  - Space is O(V) records plus O(1) holders per model
+narration: []
+state_aloud:
+- Versions are per model, start at 1, never reused.
+- At most one production and one staging version; the displaced one becomes archived.
+- Return copies; deep-copy metadata.
+- rollback needs a history of production versions.
+- Unknown name/version is KeyError; bad stage name is ValueError.
+walkthrough: |
+  Each model keeps a list of version records, a dict mapping stage to the single version that holds it, and a history list of production versions. promote moves the old holder to archived, updates the holder map and the record's stage in O(1); rollback pops the history and restores the previous production version. Records are deep-copied on the way in and out. Standard registry semantics (stages and rollback); no source note applies.
+categories:
+- ai-infra

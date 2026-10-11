@@ -1,0 +1,212 @@
+id: lru-from-scratch-ordered
+title: Hash Map + Doubly Linked List Primitives
+bar_level: 2
+target_minutes: 22
+patterns:
+- doubly-linked-list
+- hash-map
+- sentinels
+- lru
+firm_tags:
+- ai-infra
+statement: |
+  Build an LRU cache from primitives you write yourself: no `OrderedDict`, no `collections.deque`.
+
+  `Node(key, val)` has attributes `key`, `val`, `prev`, `next`.
+
+  `DList` is a doubly linked list with sentinel head and tail (front = least recent, back = most
+  recent):
+  - `push_back(node)`: append a detached node.
+  - `unlink(node)`: remove a node that is in the list (O(1), no search).
+  - `pop_front()` -> the removed front node, or `None` if empty.
+  - `move_to_back(node)`: unlink then push_back.
+  - `len(dl)` and `keys()` -> list of keys from front to back.
+
+  `LRUCache(capacity)` uses a dict plus a `DList`:
+  - `get(key)` -> value or `-1`; a hit becomes most recent.
+  - `put(key, val)`: insert/update (becomes most recent); when size exceeds `capacity` evict the
+    front node. `capacity <= 0` stores nothing.
+  - `order()` -> keys from least to most recent.
+
+  Example
+  ```python
+  c = LRUCache(2); c.put(1, 1); c.put(2, 2); c.get(1); c.put(3, 3)
+  c.get(2) == -1; c.order() == [1, 3]
+  ```
+prelude: |
+  class Node:
+      def __init__(self, key=None, val=None):
+          self.key = key
+          self.val = val
+          self.prev = None
+          self.next = None
+starter: |
+  class DList:
+      def __init__(self):
+          pass
+
+      def push_back(self, node):
+          pass
+
+      def unlink(self, node):
+          pass
+
+      def pop_front(self):
+          pass
+
+      def move_to_back(self, node):
+          pass
+
+      def __len__(self):
+          pass
+
+      def keys(self):
+          pass
+
+  class LRUCache:
+      def __init__(self, capacity):
+          pass
+
+      def get(self, key):
+          pass
+
+      def put(self, key, val):
+          pass
+
+      def order(self):
+          pass
+hints:
+- Use two sentinel nodes so no operation needs None checks.
+- Store the key inside the node so eviction can delete it from the dict.
+- move_to_back is just unlink then push_back.
+follow_ups:
+- How would you add per-key TTL on top?
+- How would you turn this into an LFU?
+tests:
+- name: dlist primitives
+  tags:
+  - ordering
+  - empty
+  code: |
+    d = DList()
+    assert len(d) == 0 and d.keys() == [] and d.pop_front() is None
+    a, b, c = Node("a", 1), Node("b", 2), Node("c", 3)
+    for n in (a, b, c):
+        d.push_back(n)
+    assert d.keys() == ["a", "b", "c"] and len(d) == 3
+    d.unlink(b)
+    assert d.keys() == ["a", "c"] and b.prev is None and b.next is None
+    d.move_to_back(a)
+    assert d.keys() == ["c", "a"]
+    assert d.pop_front() is c and d.keys() == ["a"]
+    assert d.pop_front() is a and len(d) == 0 and d.pop_front() is None
+    d.push_back(b)
+    assert d.keys() == ["b"]
+- name: lru example
+  tags:
+  - ordering
+  - boundary
+  code: |
+    c = LRUCache(2)
+    c.put(1, 1); c.put(2, 2)
+    assert c.get(1) == 1
+    c.put(3, 3)
+    assert c.get(2) == -1
+    assert c.order() == [1, 3]
+    c.put(4, 4)
+    assert c.get(1) == -1 and c.get(3) == 3 and c.get(4) == 4
+    assert c.order() == [3, 4]
+- name: update existing key
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    c = LRUCache(2)
+    c.put("a", 1); c.put("b", 2)
+    c.put("a", 10)
+    assert c.order() == ["b", "a"]
+    c.put("c", 3)
+    assert c.get("b") == -1 and c.get("a") == 10
+    assert len(c.map) == 2
+- name: capacity edge cases
+  tags:
+  - zero-capacity
+  - single
+  code: |
+    z = LRUCache(0)
+    z.put(1, 1)
+    assert z.get(1) == -1 and z.order() == []
+    o = LRUCache(1)
+    o.put(1, 1); o.put(2, 2)
+    assert o.get(1) == -1 and o.get(2) == 2 and o.order() == [2]
+- name: heavy churn stays consistent
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    import random
+    r = random.Random(4)
+    c = LRUCache(50)
+    model = []
+    for _ in range(20000):
+        k = r.randrange(120)
+        if r.random() < 0.5:
+            v = c.get(k)
+            assert (v != -1) == (k in model)
+            if k in model:
+                model.remove(k); model.append(k)
+        else:
+            c.put(k, k)
+            if k in model: model.remove(k)
+            model.append(k)
+            if len(model) > 50: model.pop(0)
+    assert c.order() == model and len(model) == 50
+complexity:
+- op: get
+  time: O(1)
+  space: O(n)
+- op: put
+  time: O(1)
+  space: O(n)
+- op: unlink
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Why can't a singly linked list or array do this in O(1)?
+  kind: complexity
+  key_points:
+  - 'Unlinking an arbitrary node needs its predecessor: a doubly linked list gives it in O(1)'
+  - The dict provides O(1) key -> node, so no search is needed
+  - 'Space is O(capacity): one node and one dict entry per key'
+- q: Why sentinel nodes?
+  kind: design
+  key_points:
+  - They remove empty-list and end-of-list branches from push, unlink and pop
+  - Fewer branches means fewer pointer bugs
+  - A circular list with a single sentinel is an equivalent trick
+- q: Make it thread-safe, and then scale it.
+  kind: design
+  key_points:
+  - One lock around get/put is correct because get mutates order
+  - Sharded caches (hash key -> shard) with a lock per shard
+  - Approximate LRU (CLOCK, sampling) avoids list updates on every read
+- q: Where do pointer bugs usually appear?
+  kind: reasoning
+  key_points:
+  - Order of pointer updates when splicing; clear the removed node's links
+  - Forgetting to delete the evicted key from the dict (node.key exists for exactly this reason)
+  - Updating an existing key must move it, not insert a duplicate node
+narration: []
+state_aloud:
+- Existing key put refreshes recency without growing the list.
+- Evicted key must leave the dict too.
+- Capacity 0 and 1 edge cases.
+- State that get counts as a use.
+walkthrough: A doubly linked list with sentinel head/tail keeps keys in recency order (front is least
+  recent) and a dict maps keys to their nodes. get and put move the touched node to the back in O(1) by
+  unlinking it using its own prev/next pointers; when the size exceeds capacity the front node is popped
+  and its key deleted from the dict. All operations are O(1).
+anki_queries: []
+categories:
+- systems-impl

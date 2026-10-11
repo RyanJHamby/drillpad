@@ -1,0 +1,178 @@
+id: best-bid-offer-top-of-book
+title: Top-of-book / BBO Tracker
+bar_level: 2
+target_minutes: 20
+patterns:
+- order-book
+- lazy-heap
+- market-data
+- incremental-update
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Build a top-of-book (BBO) tracker fed by incremental level updates (a "market by price" feed).
+
+  `update(side, price, qty) -> bool` sets the ABSOLUTE resting size at that price level on `side`
+  (`"buy"` or `"sell"`). `qty == 0` deletes the level. Prices are positive int ticks, qty is a non-negative int.
+  `ValueError` for a bad side, non-positive price, or negative qty. Updates for a missing level with qty 0 are
+  harmless no-ops.
+
+  The return value says whether the **BBO changed**: True if the best bid or best ask level (price OR quantity)
+  is different from before the update, else False.
+
+  - `bbo() -> (bid, ask)` where each is `(price, qty)` or `None` when that side is empty.
+  - `best_bid()` / `best_ask()` -> price or None.
+  - `spread() -> int | None`: `ask - bid`, or None if either side is empty. A crossed or locked book
+    is reported as is (spread <= 0); do not "fix" it.
+
+  Updates arrive at feed rate (hundreds of thousands per second), so each one must be O(1) or O(log P) amortized;
+  never rescan all levels to find the best.
+starter: |
+  class BBO:
+      def __init__(self):
+          pass
+hints:
+- Keep a dict price -> qty per side as the source of truth, and a heap of prices only to find the best
+  quickly.
+- Do not delete from the heap on qty == 0; instead drop stale tops lazily when you read the best (the
+  price is no longer in the dict).
+- To compute "did the BBO change", snapshot bbo() before the update and compare to after. Both reads are
+  O(1) amortized.
+follow_ups:
+- How do you handle snapshot messages that replace a whole side?
+- How would you detect and report a crossed or locked book to downstream consumers?
+- What if prices are bounded ticks and updates are 10M/s?
+tests:
+- name: basic bbo and spread
+  code: |
+    b = BBO()
+    assert b.bbo() == (None, None)
+    assert b.update("buy", 100, 5) is True
+    assert b.bbo() == ((100, 5), None) and b.spread() is None
+    assert b.update("sell", 103, 2) is True
+    assert b.bbo() == ((100, 5), (103, 2)) and b.spread() == 3
+    assert b.best_bid() == 100 and b.best_ask() == 103
+  hidden: false
+  tags:
+  - empty
+  - single
+- name: changed flag only for top-of-book changes
+  code: |
+    b = BBO()
+    b.update("buy", 100, 5); b.update("sell", 103, 2)
+    assert b.update("buy", 99, 50) is False, "worse level does not change BBO"
+    assert b.update("buy", 100, 7) is True, "qty change at the top counts"
+    assert b.update("buy", 100, 7) is False, "identical update"
+    assert b.update("buy", 101, 1) is True and b.best_bid() == 101
+    assert b.update("sell", 110, 1) is False
+    assert b.update("sell", 103, 0) is True and b.bbo()[1] == (110, 1)
+  hidden: false
+  tags:
+  - boundary
+  - duplicate
+- name: deleting top reveals next level
+  code: |
+    b = BBO()
+    for p, q in [(100, 1), (101, 2), (99, 3)]:
+        b.update("buy", p, q)
+    assert b.update("buy", 101, 0) is True
+    assert b.bbo()[0] == (100, 1)
+    assert b.update("buy", 100, 0) is True and b.bbo()[0] == (99, 3)
+    assert b.update("buy", 99, 0) is True and b.bbo() == (None, None)
+    assert b.update("buy", 99, 0) is False, "deleting a missing level is a no-op"
+  hidden: false
+  tags:
+  - ordering
+  - state-reuse
+- name: re-adding a deleted level
+  code: |
+    b = BBO()
+    b.update("sell", 105, 4); b.update("sell", 106, 4)
+    b.update("sell", 105, 0)
+    assert b.best_ask() == 106
+    b.update("sell", 105, 9)
+    assert b.bbo()[1] == (105, 9)
+    b.update("sell", 105, 0)
+    assert b.bbo()[1] == (106, 4)
+  hidden: false
+  tags:
+  - state-reuse
+  - duplicate
+- name: crossed and locked books reported as-is
+  code: |
+    b = BBO()
+    b.update("buy", 100, 1); b.update("sell", 100, 1)
+    assert b.spread() == 0
+    b.update("buy", 102, 1)
+    assert b.spread() == -2 and b.bbo() == ((102, 1), (100, 1))
+  hidden: false
+  tags:
+  - boundary
+  - single
+- name: rejects bad input
+  code: |
+    b = BBO()
+    for args in [("hold", 100, 1), ("buy", 0, 1), ("buy", -3, 1), ("sell", 100, -1)]:
+        try:
+            b.update(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    assert b.bbo() == (None, None)
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: 'scale: 300k updates'
+  code: |
+    b = BBO()
+    changed = 0
+    for i in range(300000):
+        side = "buy" if i % 2 else "sell"
+        price = 5000 + (i * 7919) % 3000
+        qty = 0 if i % 5 == 0 else 1 + i % 9
+        changed += b.update(side, price, qty)
+    assert changed > 50
+    assert b.best_bid() is not None and b.best_ask() is not None
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: update
+  time: O(log P) amortized
+  space: O(P)
+- op: bbo/best/spread
+  time: O(1) amortized
+  space: O(1)
+extensions:
+- q: 'Level 2: also track the number of orders at the best level and the depth sum of the top N levels.'
+  key_points:
+  - Order count is part of the level record and updated with the same absolute-set semantics
+  - Top-N sum uses nlargest/nsmallest over live levels, not the heap with stale entries
+  - Changed-flag semantics extend to the new fields consistently
+  kind: code
+- q: Compare the lazy heap with a sorted container and with a tick-indexed array.
+  key_points:
+  - 'Lazy heap: O(log P) push, each stale entry popped once, so best is O(1) amortized'
+  - 'Sorted container: O(log P) delete and insert but heavier constants; best is O(1)'
+  - 'Tick-indexed array with a best-pointer: O(1) update and the pointer only scans down when the top
+    is deleted'
+  kind: complexity
+- q: 'Design: how does this component sit in a feed handler (gap handling, snapshots, fan-out)?'
+  key_points:
+  - Apply updates only in sequence order; on a gap, stop publishing and rebuild from a snapshot
+  - Publish only when the changed flag is True to cut downstream traffic
+  - One tracker per symbol, owned by a single thread; consumers read an immutable BBO value
+  kind: design
+narration: []
+state_aloud:
+- Qty 0 deletes the level; deleting a missing level is a no-op.
+- Changed means price or quantity of the best level on either side changed.
+- Crossed/locked books are reported, not repaired; integer ticks only.
+walkthrough: |
+  Standard BBO tracker. The dict per side is the truth (absolute sizes, qty 0 deletes) and a heap of prices is purely an index: stale tops are discarded lazily when best is read, which keeps update O(log P) and best O(1) amortized. The changed flag compares bbo() before and after. Source: standard formulation.
+categories:
+- trading

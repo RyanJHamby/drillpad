@@ -1,0 +1,165 @@
+id: fee-and-rebate-calc
+title: Exchange Fee / Rebate Calculator
+bar_level: 2
+target_minutes: 25
+patterns:
+- maker-taker
+- binary-search
+- tiered-pricing
+- aggregation
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Compute the exchange fees and rebates for a day of fills under maker-taker pricing with volume tiers.
+
+  `fees(fills, schedule) -> {"total": int, "by_venue": {venue: int}}`
+
+  - `fills`: list of `(venue, liquidity, price, qty)` in execution order; `liquidity` is `"maker"` (your resting order was
+    hit; usually a REBATE) or `"taker"` (you removed liquidity; a FEE). `qty` is a positive int number of shares.
+    `price` is informational here (fees are per share).
+  - `schedule`: `{venue: {liquidity: [(min_cum_volume, rate), ...]}}` where `rate` is an int in micro-dollars per share
+    (1,000,000 micro-dollars = $1): positive = you PAY, negative = you RECEIVE a rebate. A tier applies once the
+    cumulative volume already executed for that `(venue, liquidity)` pair is `>= min_cum_volume`; the highest
+    qualifying tier is used. Tiers may be listed in any order; the first tier has `min_cum_volume == 0`.
+  - Tier is chosen from the cumulative volume BEFORE the fill, and the whole fill is charged at that tier's rate (a fill that
+    straddles a threshold is not split). Cumulative volume is tracked separately per `(venue, liquidity)`.
+  - Result: net total in micro-dollars (positive = net cost) and the same net per venue (only venues that appear in fills).
+  - `ValueError` for a venue/liquidity pair missing from the schedule or a non-positive qty.
+
+  Example rates: taker `+3000` ($0.003/share), maker `-2000` ($0.002/share rebate).
+starter: |
+  def fees(fills, schedule):
+      pass
+hints:
+- 'Group by (venue, liquidity): keep a running cumulative volume per key and sort its tiers once up front.'
+- The rate for a fill is chosen from the cumulative volume BEFORE adding this fill; bisect_right(mins,
+  cum) - 1 finds the tier.
+- Work in integer micro-dollars so rebates (negative) and fees sum exactly; accumulate per venue and in
+  total.
+follow_ups:
+- How do monthly-volume tiers differ from per-day tiers in practice?
+- How would you add a fee cap (percent of notional) or a minimum fee?
+- How do you validate your computed fees against the exchange invoice?
+tests:
+- name: flat maker taker
+  code: |
+    sched = {"NYSE": {"maker": [(0, -2000)], "taker": [(0, 3000)]}}
+    fills = [("NYSE", "maker", 10000, 100), ("NYSE", "taker", 10010, 100)]
+    assert fees(fills, sched) == {"total": 100000, "by_venue": {"NYSE": 100000}}
+    assert fees([("NYSE", "maker", 1, 100)], sched) == {"total": -200000, "by_venue": {"NYSE": -200000}}
+  hidden: false
+  tags:
+  - single
+  - ordering
+- name: empty fills
+  code: |
+    assert fees([], {"A": {"maker": [(0, -1)]}}) == {"total": 0, "by_venue": {}}
+  hidden: false
+  tags:
+  - empty
+- name: tier uses volume before the fill and does not split
+  code: |
+    sched = {"V": {"taker": [(0, 3000), (1000, 2500), (5000, 2000)]}}
+    fills = [("V", "taker", 1, 900), ("V", "taker", 1, 200), ("V", "taker", 1, 100), ("V", "taker", 1, 4000), ("V", "taker", 1, 10)]
+    # cum before: 0, 900, 1100, 1200, 5200 -> rates 3000, 3000, 2500, 2500, 2000
+    exp = 900 * 3000 + 200 * 3000 + 100 * 2500 + 4000 * 2500 + 10 * 2000
+    assert fees(fills, sched)["total"] == exp
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: tier thresholds are inclusive and tiers can be unsorted
+  code: |
+    sched = {"V": {"maker": [(100, -3000), (0, -1000)]}}
+    out = fees([("V", "maker", 1, 100), ("V", "maker", 1, 1)], sched)
+    assert out["total"] == 100 * -1000 + 1 * -3000, "cum 100 before second fill qualifies for the 100 tier"
+  hidden: false
+  tags:
+  - boundary
+  - duplicate
+- name: volume is tracked per venue and liquidity separately
+  code: |
+    sched = {"A": {"maker": [(0, -1000), (50, -2000)], "taker": [(0, 3000), (50, 2500)]},
+             "B": {"maker": [(0, -500)]}}
+    fills = [("A", "maker", 1, 60), ("A", "taker", 1, 10), ("A", "maker", 1, 10), ("B", "maker", 1, 100), ("A", "taker", 1, 60), ("A", "taker", 1, 1)]
+    out = fees(fills, sched)
+    a = 60 * -1000 + 10 * 3000 + 10 * -2000 + 60 * 3000 + 1 * 2500
+    b = 100 * -500
+    assert out["by_venue"] == {"A": a, "B": b} and out["total"] == a + b
+  hidden: false
+  tags:
+  - state-reuse
+  - duplicate
+- name: rejects unknown pairs and bad qty
+  code: |
+    sched = {"A": {"maker": [(0, -1)]}}
+    for fills in ([("B", "maker", 1, 1)], [("A", "taker", 1, 1)], [("A", "maker", 1, 0)], [("A", "maker", 1, -5)]):
+        try:
+            fees(fills, sched)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(fills)
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: net rebate sign
+  code: |
+    sched = {"A": {"maker": [(0, -2000)], "taker": [(0, 1000)]}}
+    out = fees([("A", "maker", 1, 1000), ("A", "taker", 1, 500)], sched)
+    assert out["total"] == -1500000 and out["by_venue"]["A"] == -1500000
+  hidden: true
+  tags:
+  - boundary
+  - ordering
+- name: 'scale: 300k fills'
+  code: |
+    sched = {f"V{i}": {"maker": [(0, -2000), (10000, -2300), (1000000, -2800)], "taker": [(0, 3000), (50000, 2900)]} for i in range(10)}
+    fills = [(f"V{i % 10}", "maker" if i % 3 else "taker", 100, 1 + i % 7) for i in range(300000)]
+    out = fees(fills, sched)
+    assert len(out["by_venue"]) == 10 and out["total"] == sum(out["by_venue"].values())
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: fees
+  time: O(n log T)
+  space: O(K)
+extensions:
+- q: 'Level 2: split a fill that straddles a tier threshold across the two tiers.'
+  key_points:
+  - Compute the quantity left in the current tier and charge it at that rate, the rest at the next
+  - Loop in case a fill spans multiple tiers
+  - Cumulative volume advances by the full qty at the end
+  kind: code
+- q: 'Level 3: add a cap of 0.3% of notional per fill (Reg NMS access fee cap style) and a per-venue minimum.'
+  key_points:
+  - Fee = min(qty * rate, cap_bps * price * qty / 10000) with integer rounding rules stated up front
+  - Rebates (negative) are not capped by the same rule
+  - Rounding mode is documented because it changes totals
+  kind: code
+- q: Complexity of the calculation.
+  key_points:
+  - One pass over fills, each doing an O(log T) bisect over tiers
+  - O(K) state for K (venue, liquidity) pairs plus tier arrays
+  - Sorting tiers once is O(K T log T), independent of the fill count
+  kind: complexity
+- q: 'Design: why does a market maker care about this logic?'
+  key_points:
+  - Maker rebates and taker fees can exceed the spread captured, so strategy PnL must be net of fees (hft
+    primer Part 2 Maker-Taker Pricing)
+  - Post-only orders exist to guarantee maker status and rebate qualification
+  - 'Fee schedules change monthly: keep them as versioned data and reconcile against invoices'
+  kind: design
+narration: []
+state_aloud:
+- Negative rate means rebate; tier chosen from cumulative volume before the fill with inclusive thresholds.
+- Volume tracked per (venue, liquidity); fills are not split across tiers.
+- Integer micro-dollars; unknown venue/liquidity or non-positive qty is a ValueError.
+walkthrough: |
+  Volume tiers and micro-dollar integer accounting are added so the problem has real structure; schedule format is my own formulation. Source: standard formulation.
+categories:
+- trading

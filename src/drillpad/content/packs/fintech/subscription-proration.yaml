@@ -1,0 +1,231 @@
+id: subscription-proration
+title: Subscription Billing Proration
+bar_level: 3
+target_minutes: 35
+patterns:
+- rounding
+- integer-arithmetic
+- line-items
+- validation
+firm_tags: []
+categories:
+- fintech
+anki_queries: []
+statement: |
+  A customer prepays a subscription for a billing period and then changes plans mid-period. Compute the
+  proration line items. Money is integer cents; timestamps are integers (seconds).
+
+  `prorate(period_start, period_end, plan_price, changes)`:
+
+  * The customer already paid `plan_price` for the whole period `[period_start, period_end)`.
+  * `changes` is a list of `(ts, new_price)` in non-decreasing `ts` order; `new_price = 0` means cancel.
+  * For each change, in order, with `cur` the price in effect just before it, `remaining = period_end - ts`
+    and `length = period_end - period_start`:
+    * `credit = round_half_up(cur * remaining / length)` (unused part of the old plan, refunded)
+    * `charge = round_half_up(new_price * remaining / length)` (the new plan for the rest of the period)
+    * The line is `{"ts": ts, "credit": credit, "charge": charge, "amount": charge - credit}`; after the line
+      `cur = new_price`.
+  * Return `{"lines": [...], "net": sum of amounts}`. A positive net is owed by the customer, negative is
+    credited back.
+  * `round_half_up` rounds exact halves away from zero for the non-negative values here (so 2.5 -> 3). Do all
+    math in integers: `(2*p*remaining + length) // (2*length)`. Each credit and charge is rounded separately,
+    and the net is the sum of the rounded lines (not a re-rounding of an exact total).
+
+  Validation (`ValueError`): `period_end <= period_start`; any price negative; any `ts` outside
+  `[period_start, period_end]`; `ts` decreasing between consecutive changes. No changes returns
+  `{"lines": [], "net": 0}`.
+starter: |
+  def prorate(period_start, period_end, plan_price, changes):
+      pass
+hints:
+- Work with integer cents and a single helper rounded(price, remaining, length) = (2*price*remaining +
+  length) // (2*length); never touch floats.
+- Track the price in effect as you walk the changes; the next change's credit uses that price, not the
+  original plan price.
+- Validate the whole input before producing any output so a bad later change cannot leave you with partial
+  results.
+follow_ups:
+- Should rounding be per line or on the total, and which one reconciles with the customer's invoice?
+- How do you prorate by calendar days when months have different lengths?
+- How do usage-based charges or seat quantity changes fit the same model?
+tests:
+- name: upgrade halfway through the period
+  tags:
+  - boundary
+  - single
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    out = prorate(0, 1000, 1000, [(500, 3000)])
+    assert out == {"lines": [{"ts": 500, "credit": 500, "charge": 1500, "amount": 1000}], "net": 1000}
+- name: downgrade produces a negative net
+  tags:
+  - ordering
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    out = prorate(0, 100, 5000, [(25, 1000)])
+    assert out["lines"] == [{"ts": 25, "credit": 3750, "charge": 750, "amount": -3000}]
+    assert out["net"] == -3000
+- name: no changes and boundary timestamps
+  tags:
+  - empty
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    assert prorate(0, 100, 999, []) == {"lines": [], "net": 0}
+    out = prorate(0, 100, 1000, [(0, 2000), (100, 5000)])
+    assert out["lines"][0] == {"ts": 0, "credit": 1000, "charge": 2000, "amount": 1000}
+    assert out["lines"][1] == {"ts": 100, "credit": 0, "charge": 0, "amount": 0}
+    assert out["net"] == 1000
+- name: chained changes use the price in effect
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    out = prorate(0, 1000, 1000, [(250, 2000), (500, 500), (750, 0)])
+    assert out["lines"] == [
+        {"ts": 250, "credit": 750, "charge": 1500, "amount": 750},
+        {"ts": 500, "credit": 1000, "charge": 250, "amount": -750},
+        {"ts": 750, "credit": 125, "charge": 0, "amount": -125},
+    ]
+    assert out["net"] == -125
+- name: rounding is half up per line
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    out = prorate(0, 4, 1, [(2, 3)])
+    assert out["lines"] == [{"ts": 2, "credit": 1, "charge": 2, "amount": 1}], "0.5 -> 1 and 1.5 -> 2"
+    out = prorate(0, 3, 100, [(1, 100)])
+    assert out["lines"][0]["credit"] == 67 and out["lines"][0]["charge"] == 67 and out["net"] == 0
+    out = prorate(0, 3, 100, [(2, 100)])
+    assert out["lines"][0]["credit"] == 33
+- name: validation
+  tags:
+  - invalid
+  - ordering
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    assert raises(prorate, 10, 10, 100, [])
+    assert raises(prorate, 10, 5, 100, [])
+    assert raises(prorate, 0, 100, -1, [])
+    assert raises(prorate, 0, 100, 1, [(10, -5)])
+    assert raises(prorate, 0, 100, 1, [(101, 5)])
+    assert raises(prorate, 0, 100, 1, [(-1, 5)])
+    assert raises(prorate, 0, 100, 1, [(50, 5), (49, 6)])
+    assert prorate(0, 100, 1, [(50, 5), (50, 6)])["lines"][1]["credit"] == 3, "equal timestamps are allowed"
+- name: cancel at the start refunds everything
+  tags:
+  - zero-capacity
+  - single
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    out = prorate(1000, 2000, 1234, [(1000, 0)])
+    assert out == {"lines": [{"ts": 1000, "credit": 1234, "charge": 0, "amount": -1234}], "net": -1234}
+- name: very many changes
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    n = 400000
+    changes = [(i * 1000 // n, 1000 if i % 2 == 0 else 3000) for i in range(n)]
+    out = prorate(0, 1000, 1000, changes)
+    assert len(out["lines"]) == n
+    cur, net = 1000, 0
+    for ts, p in changes:
+        net += (p - cur) // 1000 * (1000 - ts)
+        cur = p
+    assert out["net"] == net
+complexity:
+- op: prorate
+  time: O(n)
+  space: O(n)
+extensions:
+- q: 'Level 2: prorate by calendar day for monthly periods (30 vs 31 vs 28 days) using days instead of
+    seconds.'
+  kind: code
+  key_points:
+  - Convert timestamps to day counts and use period length in days as the denominator
+  - Decide whether the change day itself is billed at the old or new price and document it
+  - Keep the same integer rounding helper
+- q: 'Level 3: seat-based plans: quantity changes mid-period (price per seat times seats).'
+  kind: code
+  key_points:
+  - Replace price with unit_price * quantity; credit uses the old quantity, charge the new
+  - Adding then removing seats the same day should net to zero
+  - Guard against negative quantities
+- q: How should the invoice show prorations and how do you keep it auditable?
+  kind: design
+  key_points:
+  - One line per change with from/to plan, period, and exact rounded amounts
+  - Persist the inputs (prices, timestamps) with the invoice so it can be re-derived
+  - Rounding policy documented and consistent (per line vs total) across all customers
+- q: What are the costs and what can go wrong with rounding?
+  kind: complexity
+  key_points:
+  - 'One pass over the changes: O(n) time and O(n) output'
+  - Rounding each line separately can differ by a few cents from rounding the exact total; choose per
+    line and be consistent
+  - Floats would drift and break reconciliation; integer arithmetic is exact
+narration: []
+state_aloud:
+- All math in integer cents with an explicit half-up helper; no float division anywhere.
+- 'Credit is for the OLD price in effect, which changes after each change: track cur.'
+- Rounding is per line, net is the sum of rounded lines; mention this is a policy choice.
+- 'Boundaries: change at period start is a full swap; change at period end is zero.'
+- Validate ordering and range of timestamps up front.
+walkthrough: |
+  One pass: keep cur (price currently in effect), compute remaining = period_end - ts and length once, and produce credit and charge via a half-up integer division helper. Each line is appended and the net accumulated. All inputs are validated before output is built. Standard formulation (Stripe-style proration); no source doc. State the policy choice (per-line rounding) out loud.

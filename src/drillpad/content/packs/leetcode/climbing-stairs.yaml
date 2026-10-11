@@ -1,0 +1,85 @@
+id: climbing-stairs
+title: Climbing Stairs
+bar_level: 1
+target_minutes: 12
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Climbing Stairs (LC 70)"
+statement: |
+  You are at the bottom of a staircase with `n` steps. Each move takes you up either 1 or 2 steps. Return the number of distinct sequences of moves that land exactly on step `n`.
+
+  Example: `climbing_stairs(3)` returns `3` (1+1+1, 1+2, 2+1).
+starter: |
+  def climbing_stairs(n):
+      pass
+hints:
+- The last move was either a 1-step or a 2-step, so ways(n) = ways(n-1) + ways(n-2).
+- 'State: ways[i] is the number of move sequences that reach step i exactly.'
+- ways[0] = 1 (stand still) and ways[1] = 1; only the previous two values are ever needed.
+follow_ups:
+- What if you may also take 3 steps?
+- Can you do it in O(log n) time?
+tests:
+- name: one step
+  tags:
+  - single
+  code: |
+    assert climbing_stairs(1)==1
+- name: two steps
+  tags:
+  - boundary
+  code: |
+    assert climbing_stairs(2)==2
+- name: small
+  tags:
+  - ordering
+  code: |
+    assert climbing_stairs(3)==3
+    assert climbing_stairs(5)==8
+- name: ten
+  tags:
+  - boundary
+  code: |
+    assert climbing_stairs(10)==89
+- name: large n
+  tags:
+  - scale
+  hidden: true
+  code: |
+    a, b = 1, 1
+    for _ in range(80):
+        a, b = b, a + b
+    assert climbing_stairs(80)==a
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Complexity of the rolling-variable version
+  kind: complexity
+  key_points:
+  - Linear time, one pass
+  - Only two previous values kept so O(1) space
+  - A full table would be O(n) space
+- q: Allow steps of 1, 2 or 3 (or any set of step sizes)
+  kind: code
+  key_points:
+  - ways[i] = sum of ways[i-s] for each allowed size s
+  - Keep a window as wide as the largest step
+  - Time O(n * k) for k step sizes
+- q: Return the answer for n up to 10^18
+  kind: design
+  key_points:
+  - The recurrence is linear so it is a 2x2 matrix power
+  - Fast exponentiation gives O(log n) multiplications
+  - Numbers grow, so use big ints or a modulus
+narration: []
+state_aloud:
+- n = 1 has exactly one way.
+- n = 2 has two ways, not one.
+- Answers grow like Fibonacci; Python ints do not overflow.
+walkthrough: 'Let `ways[i]` be the number of sequences that reach step `i`. The final move came from `i-1` or `i-2`, so `ways[i] = ways[i-1] + ways[i-2]` with both base values equal to 1. Only the last two values matter, so two variables replace the table: O(n) time, O(1) space. This is the Fibonacci sequence.'

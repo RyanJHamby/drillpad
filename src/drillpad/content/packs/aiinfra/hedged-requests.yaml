@@ -1,0 +1,204 @@
+id: hedged-requests
+title: Hedged Requests / Tail Latency
+bar_level: 3
+target_minutes: 30
+patterns:
+- hedged-requests
+- tail-latency
+- percentile
+- sliding-window
+- simulation
+- bisect
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Hedging cuts tail latency: if a request has not answered after a delay (usually a high percentile of
+  recent latencies), send a duplicate to another replica and take whichever answers first. Build the
+  simulation and the delay estimator.
+
+  1. `hedged_request(latencies, hedge_delay, max_hedges=1) -> (winner_index, finish_time, attempts)`:
+     `latencies[k]` is how long attempt `k` would take if launched (use `float("inf")` for an attempt that
+     never answers). Attempt `0` launches at time 0; attempt `k` launches at `k * hedge_delay`, but only if
+     `k <= max_hedges`, an attempt `k` exists, AND no earlier attempt has finished by then (an attempt
+     finishing exactly at `k * hedge_delay` already answered, so no hedge is sent). Attempt `k` finishes
+     at `k * hedge_delay + latencies[k]`. The winner is the earliest finish (ties: lower index). Return
+     the winner index, its finish time and the number of attempts launched. If every launched attempt is
+     `inf` return `(None, inf, attempts)`.
+  2. `percentile(samples, p)`: nearest-rank percentile, `sorted(samples)[ceil(p/100*n) - 1]`;
+     `ValueError` for empty samples or `p` outside `(0, 100]`.
+  3. `LatencyTracker(window)`: keeps the last `window` latencies (`ValueError` if `window < 1`).
+     `record(x)` adds one; `hedge_delay(p)` returns the nearest-rank percentile of the window, or `None`
+     if empty. It will be called after every record, so do not sort the window on every query.
+
+  Example: `hedged_request([10, 3], 4) == (1, 7, 2)`: the original would take 10, the hedge launched at
+  time 4 finishes at 7.
+starter: |
+  def percentile(samples, p):
+      pass
+
+
+  def hedged_request(latencies, hedge_delay, max_hedges=1):
+      pass
+
+
+  class LatencyTracker:
+      def __init__(self, window):
+          pass
+
+      def record(self, x):
+          pass
+
+      def hedge_delay(self, p):
+          pass
+hints:
+- Walk attempts in order; stop launching as soon as the best finish so far is <= the next launch time
+  (>=, because finishing at the exact delay means no hedge).
+- Track the best (finish, index) with a strict < so ties keep the earlier attempt.
+- For the tracker keep a deque (eviction order) plus a sorted list updated with bisect.insort and a bisect_left
+  delete.
+follow_ups:
+- Cancel the loser and account for its wasted work.
+- Only hedge idempotent requests and cap the hedge rate (for example 5% of traffic).
+- Adaptive hedge delay that targets a budget of extra load.
+tests:
+- name: hedge launches when the first attempt is slow
+  code: |
+    assert hedged_request([10, 3], 4) == (1, 7, 2)
+    assert hedged_request([10, 3], 12) == (0, 10, 1), "first attempt finishes before the hedge fires"
+  hidden: false
+  tags:
+  - time
+  - ordering
+- name: hedge not launched when the first attempt completes exactly at the delay
+  code: |
+    assert hedged_request([4, 1], 4) == (0, 4, 1)
+    assert hedged_request([6, 1], 4) == (1, 5, 2)
+  hidden: false
+  tags:
+  - boundary
+  - time
+- name: original can still win after a hedge is sent; ties go to the earlier attempt
+  code: |
+    assert hedged_request([6, 5], 4) == (0, 6, 2), "hedge would finish at 9"
+    assert hedged_request([8, 4], 4) == (0, 8, 2), "tie at 8: attempt 0 wins"
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: multiple hedges chain on the delay
+  code: |
+    # attempts launch at 0, 3, 6; finish at 20, 13, 8 -> third wins
+    assert hedged_request([20, 10, 2], 3, max_hedges=2) == (2, 8, 3)
+    assert hedged_request([20, 10, 2], 3, max_hedges=1) == (1, 13, 2)
+    assert hedged_request([20, 10, 2], 3, max_hedges=0) == (0, 20, 1)
+    # a later hedge is skipped once an earlier attempt has already completed
+    assert hedged_request([4, 50, 1], 5, max_hedges=2) == (0, 4, 1)
+  hidden: true
+  tags:
+  - time
+  - boundary
+- name: failed attempts (inf) and all failing
+  code: |
+    inf = float("inf")
+    assert hedged_request([inf, 2], 5) == (1, 7, 2)
+    assert hedged_request([inf, inf], 5) == (None, inf, 2)
+    assert hedged_request([3], 5, max_hedges=3) == (0, 3, 1), "fewer attempts than allowed hedges"
+  hidden: true
+  tags:
+  - invalid
+  - single
+- name: percentile uses the nearest-rank method
+  code: |
+    xs = [15, 20, 35, 40, 50]
+    assert percentile(xs, 50) == 35 and percentile(xs, 100) == 50 and percentile(xs, 20) == 15
+    assert percentile(xs, 95) == 50 and percentile([7], 99) == 7
+    for args in [([], 50), (xs, 0), (xs, 101)]:
+        try:
+            percentile(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+  hidden: false
+  tags:
+  - boundary
+  - empty
+- name: tracker keeps a sliding window
+  code: |
+    t = LatencyTracker(3)
+    assert t.hedge_delay(95) is None
+    for x in [100, 1, 2, 3]:
+        t.record(x)                     # 100 has slid out
+    assert t.hedge_delay(100) == 3 and t.hedge_delay(50) == 2
+    t.record(500)
+    assert t.hedge_delay(100) == 500 and t.hedge_delay(1) == 2
+  hidden: true
+  tags:
+  - state-reuse
+  - time
+- name: 100k records and 100k percentile queries on a 10k window
+  code: |
+    import random
+    rng = random.Random(9)
+    t = LatencyTracker(10000)
+    last = None
+    for i in range(100000):
+        t.record(rng.random() * 100)
+        last = t.hedge_delay(95)
+    assert 90 < last < 99
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: hedged_request
+  time: O(H)
+  space: O(1)
+- op: record
+  time: O(W)
+  space: O(W)
+- op: hedge_delay
+  time: O(1)
+  space: O(W)
+extensions:
+- q: 'Level 2: add a hedge budget: allow a hedge only if hedges_sent / requests_seen over the last N requests
+    is below `max_rate`.'
+  kind: code
+  key_points:
+  - Maintain a counter pair over a sliding window of requests (a deque of booleans or a ring buffer)
+  - The budget check happens at hedge launch time, using only information available then
+  - Under overload the budget stops hedging from amplifying load
+- q: When is hedging harmful, and how do you mitigate it for LLM inference?
+  kind: design
+  key_points:
+  - Hedging duplicates expensive GPU work; during overload it amplifies load and can cause a retry storm
+  - Only hedge idempotent, short or time-to-first-token requests, cap the extra-load budget and cancel
+    the loser promptly
+  - Hedge to a different replica or provider (see provider-pool-failover), and prefer hedging the queueing
+    stage not the long decode
+- q: Why choose a high percentile such as p95 as the hedge delay?
+  kind: reasoning
+  key_points:
+  - Only the slowest ~5% of requests are duplicated, so extra load is ~5% yet the tail is cut to about
+    delay + typical latency
+  - A lower percentile hedges too often; a higher one barely helps p99
+  - Recompute from a recent window so the delay follows load and deployments
+- q: Cost of the tracker operations and of the percentile query.
+  kind: complexity
+  key_points:
+  - record is O(log W) to locate plus O(W) memmove for insort and delete, tiny in practice; query is O(1)
+    on a sorted list
+  - Sorting per query would be O(W log W)
+  - An order-statistic tree or two heaps give O(log W) for both, or a histogram with fixed buckets O(B)
+narration: []
+state_aloud:
+- 'Define when a hedge fires: delay elapsed AND nothing finished yet (>= boundary).'
+- Ties between attempts go to the earlier launch.
+- inf latency means the attempt never answers.
+- 'Percentile definition: nearest rank; empty window returns None.'
+- Fewer attempts than max_hedges is fine.
+walkthrough: |
+  hedged_request iterates attempts, launching attempt k at k*delay only while the best finish so far is strictly later than that launch time, and keeps the minimum finish with a strict comparison so ties favour the earlier attempt. The tracker keeps a FIFO deque for eviction and a sorted list maintained with bisect so the nearest-rank percentile is an index lookup. Standard hedged-request formulation (send a second copy after a high percentile delay); the code is the problem's own.
+categories:
+- ai-infra

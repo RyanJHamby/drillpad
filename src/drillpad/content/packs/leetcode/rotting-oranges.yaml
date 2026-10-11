@@ -1,0 +1,102 @@
+id: rotting-oranges
+title: Rotting Oranges
+bar_level: 2
+target_minutes: 22
+patterns:
+- graph-bfs-dfs
+- multi-source-bfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Rotting Oranges (LC 994)"
+statement: |
+  A grid contains `0` (empty), `1` (fresh orange) and `2` (rotten orange). Each minute, every fresh orange that is directly adjacent (up, down, left, right) to a rotten orange becomes rotten. Return the minimum number of minutes until no fresh orange remains, or `-1` if some fresh orange can never rot. If there are no fresh oranges at the start the answer is `0`.
+
+  Example: `[[2,1,1],[1,1,0],[0,1,1]]` returns `4`.
+starter: |
+  def oranges_rotting(grid):
+      pass
+hints:
+- All rotten oranges spread simultaneously, which is a BFS with multiple sources processed in layers.
+- Count fresh oranges up front; decrement when one rots; when the queue empties check whether any remain.
+- Count minutes per BFS layer, but do not add a minute for the final layer that rotted nothing.
+follow_ups:
+- Return the grid state after k minutes.
+- Oranges can also rot diagonally every second minute; adapt it.
+tests:
+- name: classic example
+  tags:
+  - time
+  code: |
+    assert oranges_rotting([[2,1,1],[1,1,0],[0,1,1]])==4
+- name: unreachable fresh orange
+  tags:
+  - invalid
+  code: |
+    assert oranges_rotting([[2,1,1],[0,1,1],[1,0,1]])==-1
+- name: nothing fresh
+  tags:
+  - empty
+  - boundary
+  code: |
+    assert oranges_rotting([[0,2]])==0
+    assert oranges_rotting([[0]])==0
+- name: single fresh without rotten
+  tags:
+  - single
+  hidden: true
+  code: |
+    assert oranges_rotting([[1]])==-1
+- name: already adjacent
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    assert oranges_rotting([[2,1]])==1
+- name: two sources finish earlier
+  tags:
+  - duplicate
+  - ordering
+  hidden: true
+  code: |
+    assert oranges_rotting([[2,1,1,1,2]])==2
+- name: long corridor
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=500
+    g=[[1]*n for _ in range(n)]
+    g[0][0]=2
+    assert oranges_rotting(g)==2*(n-1)
+complexity:
+- op: overall
+  time: O(R * C)
+  space: O(R * C)
+extensions:
+- q: Why is it a single BFS and not one per rotten orange?
+  kind: complexity
+  key_points:
+  - Rot spreads in parallel so distance is to the nearest rotten source
+  - Seeding the queue with all sources gives min distance for every cell
+  - Each cell enqueued once, O(RC)
+- q: What is the off-by-one trap in counting minutes?
+  kind: reasoning
+  key_points:
+  - Increment minutes only when a layer rotted at least one orange
+  - Or compute minutes as the max distance assigned
+  - Starting at 1 or counting the last empty layer gives answers one too large
+- q: How would you simulate an orchard that keeps getting new infected cells over time?
+  kind: design
+  key_points:
+  - Keep the frontier queue between events and push new sources with the current minute
+  - Process by timestamp with a heap if arrival times are arbitrary
+  - Track fresh count incrementally for O(1) completion checks
+narration: []
+state_aloud:
+- No fresh oranges means 0 minutes.
+- A fresh orange with no path to rot returns -1.
+- Do not count the final empty layer.
+walkthrough: |
+  Count fresh oranges and enqueue every rotten one. Run BFS in layers: for each layer, rot all fresh neighbours of the queued cells, decrement the fresh count, and enqueue them. Increment the minute counter only after a layer that actually rotted something. When the queue empties return the minutes if no fresh oranges remain and -1 otherwise.

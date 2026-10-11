@@ -1,0 +1,253 @@
+title: Implement Iterator and Adapters
+target_minutes: 25
+patterns:
+- iterator-trait
+- generic-adapter
+- extension-trait
+- blanket-impl
+- lazy-evaluation
+firm_tags: []
+categories:
+- systems-impl
+statement: |2
+
+  Implement your own iterator source and two lazy adapters, then wire the adapters up as methods on every iterator
+  through an extension trait.
+
+  ```rust
+  struct Fibonacci { /* ... */ }
+  impl Fibonacci { fn new() -> Self; }
+  impl Iterator for Fibonacci { type Item = u64; /* ... */ }
+  // 0, 1, 1, 2, 3, 5, ... Ends (returns None) instead of overflowing: the last item is F(93) = 12200160415121876738.
+  // Use checked_add; do not panic and do not wrap. So Fibonacci::new().count() == 94.
+
+  struct Stride<I> { /* ... */ }      // every n-th item of the inner iterator, starting with the first
+  struct Pairwise<I: Iterator> { /* ... */ }  // overlapping pairs (prev, cur); needs I::Item: Clone
+
+  trait IterExt: Iterator + Sized {
+      fn stride(self, n: usize) -> Stride<Self>;                       // n == 0 yields nothing
+      fn pairwise(self) -> Pairwise<Self> where Self::Item: Clone;
+  }
+  impl<I: Iterator> IterExt for I {}   // blanket impl: every iterator gets the methods
+  ```
+
+  Both adapters must be lazy (they work on infinite iterators like `0..` and `Fibonacci`) and must implement
+  `Iterator` with the right `Item` types: `Stride<I>` yields `I::Item`, `Pairwise<I>` yields `(I::Item, I::Item)`.
+
+  Examples: `(0..10).stride(3)` yields 0, 3, 6, 9. `vec![1, 2, 3].into_iter().pairwise()` yields (1,2), (2,3). Fewer
+  than two items gives no pairs.
+starter: |2
+
+  struct Fibonacci {
+      cur: Option<u64>,
+      next: Option<u64>,
+  }
+
+  impl Fibonacci {
+      fn new() -> Self {
+          todo!()
+      }
+  }
+
+  impl Iterator for Fibonacci {
+      type Item = u64;
+
+      fn next(&mut self) -> Option<u64> {
+          todo!()
+      }
+  }
+
+  struct Stride<I> {
+      iter: I,
+      n: usize,
+      first: bool,
+  }
+
+  impl<I: Iterator> Iterator for Stride<I> {
+      type Item = I::Item;
+
+      fn next(&mut self) -> Option<I::Item> {
+          todo!()
+      }
+  }
+
+  struct Pairwise<I: Iterator> {
+      iter: I,
+      prev: Option<I::Item>,
+  }
+
+  impl<I: Iterator> Iterator for Pairwise<I>
+  where
+      I::Item: Clone,
+  {
+      type Item = (I::Item, I::Item);
+
+      fn next(&mut self) -> Option<Self::Item> {
+          todo!()
+      }
+  }
+
+  trait IterExt: Iterator + Sized {
+      fn stride(self, n: usize) -> Stride<Self> {
+          todo!()
+      }
+
+      fn pairwise(self) -> Pairwise<Self>
+      where
+          Self::Item: Clone,
+      {
+          todo!()
+      }
+  }
+
+  impl<I: Iterator> IterExt for I {}
+hints:
+- 'Fibonacci with overflow: keep `cur: Option<u64>` and `next: Option<u64>`. In `next`: `let c = self.cur?; let n = self.next; self.cur = n; self.next = n.and_then(|n| c.checked_add(n)); Some(c)`. Start with `Some(0)` and `Some(1)`. Yielding F(93) before noticing F(94) overflows is why two Options are used.'
+- 'Stride: the first call returns `self.iter.next()`; later calls return `self.iter.nth(self.n - 1)`, which skips n-1 items and returns the next. Handle `n == 0` up front by returning None. Pairwise needs the previous item stored (hence the Clone bound): on the first call pull two items, afterwards pull one and `std::mem::replace` the stored previous with a clone of it.'
+- 'The extension trait methods just construct the structs: `Stride { iter: self, n, first: true }`. The `impl<I: Iterator> IterExt for I {}` blanket impl needs no body because the trait''s methods have default implementations; that is how `.stride()` appears on `0..10`, `Vec::into_iter()`, and `Fibonacci` alike.'
+follow_ups:
+- 'Why does Pairwise need I::Item: Clone while Stride needs no bound?'
+- How would you implement size_hint for these adapters, and why does it matter for collect?
+- What is the difference between a blanket impl and implementing the trait for each type?
+- 'How does itertools implement tuple_windows without cloning (hint: references or arrays)?'
+tests:
+- name: fibonacci prefix
+  tags:
+  - single
+  - ordering
+  code: |
+    let v: Vec<u64> = Fibonacci::new().take(10).collect();
+    assert_eq!(v, vec![0, 1, 1, 2, 3, 5, 8, 13, 21, 34]);
+    let s: u64 = Fibonacci::new().take_while(|&x| x < 100).filter(|x| x % 2 == 0).sum();
+    assert_eq!(s, 0 + 2 + 8 + 34);
+    assert_eq!(Fibonacci::new().nth(50), Some(12586269025));
+  hidden: false
+- name: fibonacci ends instead of overflowing
+  tags:
+  - boundary
+  - scale
+  code: |
+    let mut f = Fibonacci::new();
+    let mut count = 0;
+    let mut last = 0;
+    while let Some(x) = f.next() { count += 1; last = x; }
+    assert_eq!(count, 94);
+    assert_eq!(last, 12200160415121876738u64);
+    assert_eq!(f.next(), None);
+    assert_eq!(f.next(), None); // stays finished
+    let even_sum: u64 = Fibonacci::new().take_while(|&x| x <= 4_000_000).filter(|x| x % 2 == 0).sum();
+    assert_eq!(even_sum, 4_613_732);
+  hidden: false
+- name: stride basics
+  tags:
+  - single
+  - ordering
+  code: |
+    assert_eq!((0..10).stride(3).collect::<Vec<_>>(), vec![0, 3, 6, 9]);
+    assert_eq!((0..10).stride(1).collect::<Vec<_>>(), (0..10).collect::<Vec<_>>());
+    assert_eq!((0..10).stride(10).collect::<Vec<_>>(), vec![0]);
+    assert_eq!((0..10).stride(100).collect::<Vec<_>>(), vec![0]);
+    assert_eq!(vec!["a", "b", "c", "d", "e"].into_iter().stride(2).collect::<Vec<_>>(), vec!["a", "c", "e"]);
+    let total: u32 = (1..=100u32).stride(10).sum();
+    assert_eq!(total, 1 + 11 + 21 + 31 + 41 + 51 + 61 + 71 + 81 + 91);
+  hidden: false
+- name: stride edge cases
+  tags:
+  - empty
+  - zero-capacity
+  code: |
+    assert_eq!(std::iter::empty::<i32>().stride(3).count(), 0);
+    assert_eq!((0..10).stride(0).count(), 0);
+  hidden: false
+- name: pairwise basics
+  tags:
+  - single
+  - ordering
+  - empty
+  code: |
+    assert_eq!(vec![1, 2, 3].into_iter().pairwise().collect::<Vec<_>>(), vec![(1, 2), (2, 3)]);
+    assert_eq!((0..5).pairwise().map(|(a, b)| b - a).collect::<Vec<_>>(), vec![1, 1, 1, 1]);
+    assert_eq!(std::iter::empty::<i32>().pairwise().count(), 0);
+    assert_eq!(std::iter::once(7).pairwise().count(), 0);
+    assert_eq!(vec![4, 9].into_iter().pairwise().collect::<Vec<_>>(), vec![(4, 9)]);
+  hidden: false
+- name: adapters are lazy and compose on infinite iterators
+  tags:
+  - scale
+  - ordering
+  hidden: true
+  code: |
+    assert_eq!((0..).stride(5).take(4).collect::<Vec<u64>>(), vec![0, 5, 10, 15]);
+    assert_eq!(
+        Fibonacci::new().pairwise().take(4).collect::<Vec<_>>(),
+        vec![(0, 1), (1, 1), (1, 2), (2, 3)]
+    );
+    assert_eq!(Fibonacci::new().stride(3).take(5).collect::<Vec<_>>(), vec![0, 2, 8, 34, 144]);
+    let ratios: Vec<u64> = Fibonacci::new().stride(2).pairwise().take(3).map(|(a, b)| a + b).collect();
+    assert_eq!(ratios, vec![1, 4, 11]);
+    let big: u64 = (0..3_000_000u64).stride(3).pairwise().map(|(a, b)| b - a).sum();
+    assert_eq!(big, 3 * 999_999);
+- name: non-Copy items and by-reference iterators
+  tags:
+  - duplicate
+  - state-reuse
+  hidden: true
+  code: |
+    let words = vec!["x".to_string(), "y".to_string(), "z".to_string()];
+    let pairs: Vec<(String, String)> = words.clone().into_iter().pairwise().collect();
+    assert_eq!(pairs, vec![("x".to_string(), "y".to_string()), ("y".to_string(), "z".to_string())]);
+    let refs: Vec<&String> = words.iter().stride(2).collect();
+    assert_eq!(refs, vec![&words[0], &words[2]]);
+    let mut it = (0..6).stride(2);
+    assert_eq!(it.next(), Some(0));
+    let rest: Vec<i32> = it.collect();
+    assert_eq!(rest, vec![2, 4]);
+complexity:
+- op: Fibonacci next
+  time: O(1)
+  space: O(1)
+- op: Stride next
+  time: O(n)
+  space: O(1)
+- op: Pairwise next
+  time: O(1)
+  space: O(1)
+extensions:
+- q: 'What does the blanket impl `impl<I: Iterator> IterExt for I {}` do, and why is the extension-trait pattern used?'
+  kind: design
+  key_points:
+  - It implements the trait for every type that implements Iterator, so `.stride()` and `.pairwise()` appear on ranges, Vec iterators, and your own iterators
+  - You cannot add inherent methods to a foreign trait like Iterator (orphan rule), but you can define your own trait with default methods and blanket-implement it; itertools works this way
+  - 'The trait must be in scope (use IterExt) at the call site: a common source of ''method not found'' errors'
+- q: What is the cost of each adapter per item and does laziness change the memory profile?
+  kind: complexity
+  key_points:
+  - Pairwise is O(1) per item with one stored item and a clone per step; Fibonacci is O(1) per item
+  - Stride::next costs O(n) because skipped items are still produced by the inner iterator, unless the inner iterator overrides nth in O(1) (ranges and slices do)
+  - Adapters hold O(1) state and allocate nothing; compare with collecting intermediate Vecs in Python lists, which is O(n) memory
+- q: How would you implement size_hint and ExactSizeIterator for Stride, and what do they buy?
+  kind: design
+  key_points:
+  - size_hint of Stride is ceil(remaining / n) for both bounds when the inner hint is exact; Pairwise is remaining.saturating_sub(1) plus the one pending item
+  - collect and Vec::from_iter use the lower bound to reserve capacity once, avoiding repeated reallocation
+  - Implement ExactSizeIterator only when the lower and upper bounds always agree
+- q: Why does Fibonacci terminate with None rather than panic or wrap, and what would the alternatives look like?
+  kind: reasoning
+  key_points:
+  - checked_add returns None on overflow, so the iterator contract (None means exhausted) models 'no more representable values'
+  - With overflow-checks on, a plain + would panic; with them off it would silently wrap and yield wrong numbers
+  - 'Alternatives: switch to u128 or a big-integer type, or yield Result<u64, Overflow> items'
+state_aloud:
+- 'Fibonacci must stop after F(93): u64 overflow is a real boundary, say checked_add.'
+- stride(0) yields nothing instead of dividing by zero or looping forever.
+- Adapters must be lazy so they work on infinite iterators and never collect.
+- 'Pairwise needs Item: Clone since each item appears in two pairs; fewer than two items gives no pairs.'
+- The extension trait must be in scope and the blanket impl is what puts the methods on every iterator.
+walkthrough: |2
+
+  An iterator is any type with `next(&mut self) -> Option<Item>`; `Fibonacci` keeps two `Option<u64>` slots so it can yield F(93) and then end when `checked_add` fails. `Stride` and `Pairwise` are generic structs that wrap an inner iterator `I` and implement `Iterator` on top of it, doing work only when `next` is called, which is why they run on infinite sources. The `IterExt` trait with a blanket `impl<I: Iterator> IterExt for I` adds `.stride()` and `.pairwise()` to every iterator, the Rust analogue of writing a generator that wraps another generator in Python, but with static dispatch and no heap allocation.
+id: rs-iterator-adapter
+language: rust
+bar_level: 2
+narration: []
+anki_queries: []

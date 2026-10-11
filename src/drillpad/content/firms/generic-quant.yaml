@@ -1,0 +1,95 @@
+id: generic-quant
+name: Generic quant / trading firm
+family: quant
+confidence: inferred
+sources:
+- private notes:Part 2 LC Strategy (HFTs paragraph)
+- private notes:Part 6 What Separates Pass from Fail
+- private notes:sections 0, 1.3, 5
+- private notes:section 1
+format:
+  rounds: algorithmic coding, system design, sometimes a C++ round, take-home, or debug-this-code round
+    (supplemental Part 10)
+  platform: HackerRank/CoderPad class tools mentioned generically (playbook section 6); firm-specific
+    platform unknown
+  minutes: 45
+  problems_per_round: 1-2
+  language_notes: C++ preferred at many firms (supplemental); Some firms lean Python/Java. Docs disagree
+    on how much practice to do in C++ (see INDEX conflicts).
+  ai_assistance_allowed: unknown
+format_confidence: reported
+weights:
+  correctness: 25
+  edge_cases: 15
+  complexity: 15
+  pace: 15
+  communication: 15
+  extensions: 5
+  quality: 10
+weights_confidence: inferred
+bar:
+  pass_score: 75
+  floors:
+    correctness: 0.6
+    edge_cases: 0.4
+    complexity: 0.4
+bar_confidence: inferred
+pace:
+  target_minutes_by_level:
+    1: 10
+    2: 18
+    3: 27
+    4: 38
+  first_code_by_minute: 5
+  approach_by_minute: 4
+pace_confidence: inferred
+what_earns_points:
+- traces a real example by hand before declaring done
+- runs the code before submitting
+- names complexity unprompted
+- writes a test unprompted right after the core logic works
+- states edge cases (empty, single, duplicates, overflow)
+- engages with hints instead of getting defensive
+what_loses_points:
+- off-by-one and loop bound slips
+- integer overflow ignored
+- format-string / type slips that only show at runtime
+- silent pauses over 20-30 seconds
+- blowing the whole round on one phase
+- brute force with no stated complexity
+red_flags:
+- submitting code without running or tracing it
+- getting defensive when the interviewer hints
+- running out of time with no working solution and no summary
+- no clarifying questions at all
+canonical_topics:
+- heap
+- graph
+- dynamic-programming
+- string
+- bit-manipulation
+- ring-buffer
+- order-book
+- lru-cache
+- concurrency-debugging
+problem_ids:
+- min-heap
+- lru-cache
+- ring-buffer
+- hashmap-open-addressing
+- deque-circular
+- bounded-queue
+- thread-pool
+missing_problems:
+- problem: limit order book / matching engine (price-time priority, partial fills, cancel)
+  source: private notes:3.3; private notes:Part
+    10 take-home
+- problem: debug-this-code (race, memory ordering, overflow, off-by-one, deadlock)
+  source: private notes:Part 10
+tags:
+- quant
+- hft
+- c++
+- timed
+notes: Weights are the family default; the docs give qualitative emphasis only (hard algorithmic problems,
+  correctness, process).

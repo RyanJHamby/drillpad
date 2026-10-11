@@ -1,0 +1,392 @@
+title: Bank Ledger with Typed Errors
+target_minutes: 40
+patterns:
+- double-entry
+- idempotency-key
+- error-enum
+- display-and-error-traits
+- checked-arithmetic
+- atomic-update
+firm_tags:
+- distsys
+categories:
+- fintech
+statement: |2
+
+  Build an in-memory bank ledger whose failures are a typed error enum, not strings. Amounts are `u64` minor units
+  (cents). This helper type is **already defined for you** (do not redefine it):
+
+  ```rust
+  #[derive(Debug, Clone, PartialEq)]
+  struct Entry { delta: i64, counterparty: Option<String> }   // one ledger line on one account
+  ```
+
+  You write the error enum (derive `Debug, Clone, PartialEq`), its `Display` and `std::error::Error` impls, and `Ledger`:
+
+  ```rust
+  enum LedgerError {
+      AccountExists(String),
+      UnknownAccount(String),
+      InvalidAmount,                                   // amount == 0
+      SameAccount,                                     // transfer with src == dst
+      InsufficientFunds { needed: u64, available: u64 },
+      Overflow,                                        // a balance would exceed u64::MAX
+  }
+  // Display text (exactly):
+  //   AccountExists(id)      -> "account already exists: {id}"
+  //   UnknownAccount(id)     -> "unknown account: {id}"
+  //   InvalidAmount          -> "amount must be positive"
+  //   SameAccount            -> "cannot transfer to the same account"
+  //   InsufficientFunds{..}  -> "insufficient funds: needed {needed}, available {available}"
+  //   Overflow               -> "balance overflow"
+
+  struct Ledger { /* ... */ }
+  impl Ledger {
+      fn new() -> Self;
+      fn create_account(&mut self, id: &str) -> Result<(), LedgerError>;
+      fn deposit(&mut self, id: &str, amount: u64) -> Result<u64, LedgerError>;       // returns the new balance
+      fn transfer(&mut self, src: &str, dst: &str, amount: u64, txn_id: Option<&str>) -> Result<(), LedgerError>;
+      fn balance(&self, id: &str) -> Result<u64, LedgerError>;
+      fn history(&self, id: &str) -> Result<Vec<Entry>, LedgerError>;                 // oldest first
+      fn total(&self) -> u64;                                                         // sum of all balances
+  }
+  ```
+
+  Rules:
+
+  - Validation order for `deposit` and `transfer`: amount (`InvalidAmount`), then for transfer `SameAccount`, then
+    `UnknownAccount(src)`, then `UnknownAccount(dst)`, then `InsufficientFunds` (transferring exactly the balance is fine),
+    then `Overflow` on the destination. For `deposit`: amount, then unknown account, then overflow. A failed call changes
+    nothing and writes no ledger lines.
+  - Double entry: a deposit is `Entry { delta: +amount, counterparty: None }`; a transfer writes `-amount` (counterparty
+    `dst`) on the source and `+amount` (counterparty `src`) on the destination together.
+  - Idempotency: if `txn_id` is `Some(id)` and was seen before, return a clone of the STORED result of the first attempt
+    (success OR error) without doing anything. Every outcome of a call with a `txn_id`, including failures, is stored. `None`
+    is never deduplicated.
+  - Use checked arithmetic: no wrapping, no panics. Ledger deltas are `i64`, so an amount above `i64::MAX` is rejected with
+    `Overflow` (before any change). `total` may assume the sum fits in `u64`.
+
+  Example: after `create_account("a")`, `deposit("a", 100)`, `transfer("a", "b", 150, None)` is
+  `Err(InsufficientFunds { needed: 150, available: 100 })`.
+prelude: |2
+
+  #[derive(Debug, Clone, PartialEq)]
+  struct Entry {
+      delta: i64,
+      counterparty: Option<String>,
+  }
+starter: |2
+
+  use std::collections::HashMap;
+  use std::fmt;
+
+  #[derive(Debug, Clone, PartialEq)]
+  enum LedgerError {
+      AccountExists(String),
+      UnknownAccount(String),
+      InvalidAmount,
+      SameAccount,
+      InsufficientFunds { needed: u64, available: u64 },
+      Overflow,
+  }
+
+  impl fmt::Display for LedgerError {
+      fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+          todo!()
+      }
+  }
+
+  impl std::error::Error for LedgerError {}
+
+  struct Account {
+      balance: u64,
+      entries: Vec<Entry>,
+  }
+
+  struct Ledger {
+      accounts: HashMap<String, Account>,
+      // txn_id -> the stored result of the first attempt
+      processed: HashMap<String, Result<(), LedgerError>>,
+  }
+
+  impl Ledger {
+      fn new() -> Self {
+          todo!()
+      }
+
+      fn create_account(&mut self, id: &str) -> Result<(), LedgerError> {
+          todo!()
+      }
+
+      fn deposit(&mut self, id: &str, amount: u64) -> Result<u64, LedgerError> {
+          todo!()
+      }
+
+      fn transfer(&mut self, src: &str, dst: &str, amount: u64, txn_id: Option<&str>) -> Result<(), LedgerError> {
+          todo!()
+      }
+
+      fn balance(&self, id: &str) -> Result<u64, LedgerError> {
+          todo!()
+      }
+
+      fn history(&self, id: &str) -> Result<Vec<Entry>, LedgerError> {
+          todo!()
+      }
+
+      fn total(&self) -> u64 {
+          todo!()
+      }
+  }
+hints:
+- 'Split transfer in two: a private `apply_transfer(&mut self, src, dst, amount) -> Result<(), LedgerError>` that validates everything with `?` and only then mutates, and the public `transfer` that consults and fills the idempotency map around it. That makes ''failed calls change nothing'' automatic: every `?` happens before the first write.'
+- Store `Result<(), LedgerError>` in the `processed` map; since the error enum derives `Clone`, a retry just returns `stored.clone()`. Look the key up BEFORE validating, and insert after computing the result (success and failure alike).
+- 'Two accounts in one HashMap: you cannot hold two `get_mut` borrows at once, but you do not need to. Read what you need (`available`, the destination balance via `checked_add`) with `get`, finish all validation, then do two separate `get_mut` calls one after the other. Use `i64::try_from(amount)` (or `amount as i64` after bounding) for the ledger deltas, and `ok_or_else(|| LedgerError::UnknownAccount(id.to_string()))` to turn a missing key into the typed error.'
+follow_ups:
+- Why implement std::error::Error and Display instead of returning String errors?
+- What if txn_id is reused with different parameters (src/dst/amount)? How would you detect it?
+- How would you make transfer atomic under concurrent callers (lock ordering to avoid deadlock)?
+- How would you persist this (append-only journal, replay) and expire old idempotency keys?
+tests:
+- name: accounts and deposits
+  tags:
+  - empty
+  - single
+  - invalid
+  code: |
+    let mut l = Ledger::new();
+    assert_eq!(l.total(), 0);
+    assert_eq!(l.balance("a"), Err(LedgerError::UnknownAccount("a".to_string())));
+    assert_eq!(l.create_account("a"), Ok(()));
+    assert_eq!(l.create_account("a"), Err(LedgerError::AccountExists("a".to_string())));
+    assert_eq!(l.balance("a"), Ok(0));
+    assert_eq!(l.history("a"), Ok(vec![]));
+    assert_eq!(l.deposit("a", 500), Ok(500));
+    assert_eq!(l.deposit("a", 25), Ok(525));
+    assert_eq!(l.deposit("nope", 5), Err(LedgerError::UnknownAccount("nope".to_string())));
+    assert_eq!(l.deposit("a", 0), Err(LedgerError::InvalidAmount));
+    assert_eq!(l.balance("a"), Ok(525));
+    assert_eq!(l.history("a").unwrap(), vec![
+        Entry { delta: 500, counterparty: None },
+        Entry { delta: 25, counterparty: None },
+    ]);
+  hidden: false
+- name: transfer records both legs
+  tags:
+  - ordering
+  - boundary
+  code: |
+    let mut l = Ledger::new();
+    l.create_account("a").unwrap();
+    l.create_account("b").unwrap();
+    l.deposit("a", 100).unwrap();
+    assert_eq!(l.transfer("a", "b", 100, None), Ok(())); // exact balance is fine
+    assert_eq!(l.balance("a"), Ok(0));
+    assert_eq!(l.balance("b"), Ok(100));
+    assert_eq!(l.history("a").unwrap().last().unwrap(), &Entry { delta: -100, counterparty: Some("b".to_string()) });
+    assert_eq!(l.history("b").unwrap(), vec![Entry { delta: 100, counterparty: Some("a".to_string()) }]);
+    assert_eq!(l.total(), 100);
+  hidden: false
+- name: transfer errors are typed and change nothing
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    let mut l = Ledger::new();
+    l.create_account("a").unwrap();
+    l.create_account("b").unwrap();
+    l.deposit("a", 100).unwrap();
+    assert_eq!(l.transfer("a", "b", 150, None), Err(LedgerError::InsufficientFunds { needed: 150, available: 100 }));
+    assert_eq!(l.transfer("a", "a", 10, None), Err(LedgerError::SameAccount));
+    assert_eq!(l.transfer("a", "b", 0, None), Err(LedgerError::InvalidAmount));
+    assert_eq!(l.transfer("zzz", "b", 10, None), Err(LedgerError::UnknownAccount("zzz".to_string())));
+    assert_eq!(l.transfer("a", "zzz", 10, None), Err(LedgerError::UnknownAccount("zzz".to_string())));
+    assert_eq!(l.transfer("x", "y", 10, None), Err(LedgerError::UnknownAccount("x".to_string())));
+    assert_eq!(l.balance("a"), Ok(100));
+    assert_eq!(l.balance("b"), Ok(0));
+    assert_eq!(l.history("a").unwrap().len(), 1);
+    assert_eq!(l.history("b").unwrap().len(), 0);
+    assert_eq!(l.total(), 100);
+  hidden: false
+- name: error display text and std Error
+  tags:
+  - invalid
+  - single
+  code: |
+    assert_eq!(LedgerError::AccountExists("a".into()).to_string(), "account already exists: a");
+    assert_eq!(LedgerError::UnknownAccount("bob".into()).to_string(), "unknown account: bob");
+    assert_eq!(LedgerError::InvalidAmount.to_string(), "amount must be positive");
+    assert_eq!(LedgerError::SameAccount.to_string(), "cannot transfer to the same account");
+    assert_eq!(
+        LedgerError::InsufficientFunds { needed: 7, available: 3 }.to_string(),
+        "insufficient funds: needed 7, available 3"
+    );
+    assert_eq!(LedgerError::Overflow.to_string(), "balance overflow");
+    fn run() -> Result<u64, Box<dyn std::error::Error>> {
+        let mut l = Ledger::new();
+        l.create_account("a")?;
+        l.deposit("a", 5)?;
+        l.transfer("a", "ghost", 1, None)?; // `?` converts LedgerError into Box<dyn Error>
+        Ok(l.total())
+    }
+    let err = run().unwrap_err();
+    assert_eq!(err.to_string(), "unknown account: ghost");
+  hidden: false
+- name: idempotent retry returns the stored result
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    let mut l = Ledger::new();
+    l.create_account("a").unwrap();
+    l.create_account("b").unwrap();
+    l.deposit("a", 100).unwrap();
+    assert_eq!(l.transfer("a", "b", 40, Some("t1")), Ok(()));
+    assert_eq!(l.transfer("a", "b", 40, Some("t1")), Ok(())); // retry: no second debit
+    assert_eq!(l.transfer("a", "b", 40, Some("t1")), Ok(()));
+    assert_eq!(l.balance("a"), Ok(60));
+    assert_eq!(l.balance("b"), Ok(40));
+    assert_eq!(l.history("b").unwrap().len(), 1);
+    // a different id is a different transaction; None is never deduplicated
+    assert_eq!(l.transfer("a", "b", 10, Some("t2")), Ok(()));
+    assert_eq!(l.transfer("a", "b", 10, None), Ok(()));
+    assert_eq!(l.transfer("a", "b", 10, None), Ok(()));
+    assert_eq!(l.balance("a"), Ok(30));
+    assert_eq!(l.total(), 100);
+  hidden: false
+- name: failures are stored too
+  tags:
+  - duplicate
+  - invalid
+  - ordering
+  hidden: true
+  code: |
+    let mut l = Ledger::new();
+    l.create_account("a").unwrap();
+    l.create_account("b").unwrap();
+    l.deposit("a", 10).unwrap();
+    let first = l.transfer("a", "b", 50, Some("big"));
+    assert_eq!(first, Err(LedgerError::InsufficientFunds { needed: 50, available: 10 }));
+    l.deposit("a", 1000).unwrap(); // now it would succeed...
+    // ...but the retry must replay the stored failure, not re-execute
+    assert_eq!(l.transfer("a", "b", 50, Some("big")), first);
+    assert_eq!(l.balance("b"), Ok(0));
+    // the same payload under a fresh id does succeed
+    assert_eq!(l.transfer("a", "b", 50, Some("big2")), Ok(()));
+    assert_eq!(l.balance("b"), Ok(50));
+- name: overflow is an error not a wrap
+  tags:
+  - boundary
+  - invalid
+  hidden: true
+  code: |
+    let mut l = Ledger::new();
+    l.create_account("a").unwrap();
+    l.create_account("b").unwrap();
+    let half = i64::MAX as u64;
+    assert_eq!(l.deposit("a", half), Ok(half));
+    assert_eq!(l.deposit("a", half), Ok(u64::MAX - 1));
+    assert_eq!(l.deposit("a", 1), Ok(u64::MAX));
+    assert_eq!(l.deposit("a", 1), Err(LedgerError::Overflow));
+    assert_eq!(l.balance("a"), Ok(u64::MAX));
+    assert_eq!(l.deposit("b", u64::MAX), Err(LedgerError::Overflow)); // entry deltas are i64
+    l.deposit("b", 5).unwrap();
+    assert_eq!(l.transfer("b", "a", 1, None), Err(LedgerError::Overflow));
+    assert_eq!(l.balance("b"), Ok(5), "a failed transfer must not debit the source");
+    assert_eq!(l.history("b").unwrap().len(), 1);
+- name: history order and counterparties across accounts
+  tags:
+  - ordering
+  - single
+  hidden: true
+  code: |
+    let mut l = Ledger::new();
+    for id in ["a", "b", "c"] { l.create_account(id).unwrap(); }
+    l.deposit("a", 100).unwrap();
+    l.transfer("a", "b", 30, None).unwrap();
+    l.transfer("b", "c", 10, None).unwrap();
+    l.transfer("a", "c", 5, None).unwrap();
+    assert_eq!(l.history("a").unwrap(), vec![
+        Entry { delta: 100, counterparty: None },
+        Entry { delta: -30, counterparty: Some("b".to_string()) },
+        Entry { delta: -5, counterparty: Some("c".to_string()) },
+    ]);
+    assert_eq!(l.history("c").unwrap(), vec![
+        Entry { delta: 10, counterparty: Some("b".to_string()) },
+        Entry { delta: 5, counterparty: Some("a".to_string()) },
+    ]);
+    assert_eq!(l.history("zzz"), Err(LedgerError::UnknownAccount("zzz".to_string())));
+    let sum: i64 = ["a", "b", "c"].iter().map(|id| l.history(id).unwrap().iter().map(|e| e.delta).sum::<i64>()).sum();
+    assert_eq!(sum, 100); // money is conserved across the ledger
+- name: many transfers conserve total
+  tags:
+  - scale
+  - state-reuse
+  hidden: true
+  code: |
+    let mut l = Ledger::new();
+    let n = 50;
+    for i in 0..n { l.create_account(&format!("acct{}", i)).unwrap(); l.deposit(&format!("acct{}", i), 1_000).unwrap(); }
+    let mut ok = 0u64;
+    for k in 0..60_000u64 {
+        let s = format!("acct{}", k % n);
+        let d = format!("acct{}", (k * 7 + 3) % n);
+        let txn = format!("tx{}", k % 20_000); // every id is submitted three times
+        if l.transfer(&s, &d, 1 + k % 90, Some(&txn)).is_ok() { ok += 1; }
+    }
+    assert_eq!(l.total(), 50_000);
+    assert!(ok > 0);
+    let delta_sum: i64 = (0..n).map(|i| l.history(&format!("acct{}", i)).unwrap().iter().map(|e| e.delta).sum::<i64>()).sum();
+    assert_eq!(delta_sum, 50_000, "double entry: deltas must sum to total deposits");
+complexity:
+- op: create_account / deposit / balance
+  time: O(1) expected
+  space: O(1)
+- op: transfer
+  time: O(1) expected
+  space: O(1)
+- op: history
+  time: O(h)
+  space: O(h)
+- op: total
+  time: O(accounts)
+  space: O(1)
+extensions:
+- q: Why a typed error enum with Display and std::error::Error, and how do ? and Box<dyn Error> interact with it?
+  kind: design
+  key_points:
+  - Callers can match exhaustively on variants (retry on InsufficientFunds, alert on Overflow) and the compiler flags new unhandled variants; strings force parsing
+  - Implementing Display plus Error lets it convert into Box<dyn Error> via `?`, work with source() chains, and compose in libraries (thiserror derives exactly this boilerplate)
+  - Deriving Clone and PartialEq is what makes idempotency replay (store and clone the Result) and exact test assertions possible
+- q: What are the costs of this ledger, and what grows without bound?
+  kind: complexity
+  key_points:
+  - All account operations are O(1) expected through a HashMap; history copies O(h) entries
+  - 'The per-account entry log and the idempotency map grow forever: O(total transactions) memory'
+  - Fix with a TTL or a bounded window for txn ids and snapshotting or compaction of old entries
+- q: How would you make transfer safe for concurrent callers, and what does Rust's type system check for you?
+  kind: design
+  key_points:
+  - Wrap in Arc<Mutex<Ledger>> for simplicity, or lock per account and ALWAYS acquire the two locks in a global order (for example sorted account id) to avoid deadlock
+  - Ledger must be Send for Arc<Mutex<Ledger>> to be shared across threads; the compiler rejects sharing it with a bare Rc or RefCell
+  - Atomicity of the debit+credit pair holds because both happen under one lock; the idempotency check-then-insert must be inside the same critical section or two retries can both execute
+- q: What if the same txn_id arrives with different parameters?
+  kind: reasoning
+  key_points:
+  - Store a fingerprint (src, dst, amount) with the result and return an error variant such as IdempotencyConflict on mismatch, as payment APIs do
+  - Silently replaying the first result would hide client bugs; silently re-executing would double-spend
+  - Decide per product whether the key is scoped per account or global
+state_aloud:
+- 'Money is u64 minor units with checked arithmetic: never floats, never wrapping, never panicking on overflow.'
+- Validate everything before mutating so a failed transfer leaves no half-applied state and writes no ledger lines.
+- 'Idempotency: look up txn_id first, and store failures as well as successes so a retry cannot succeed after a failure.'
+- 'Double entry: both legs are written together, so the sum of deltas across all accounts equals total deposits.'
+- Error enum derives Clone and PartialEq, and implements Display and std::error::Error.
+walkthrough: |2
+
+  Failures are a `LedgerError` enum with data (`InsufficientFunds { needed, available }`), implementing `Display` and `std::error::Error` so it works with `?` and `Box<dyn Error>`. `transfer` first checks the idempotency map for the `txn_id`, then calls a private `apply_transfer` that validates everything with `?` and only then mutates the two accounts one after the other (two `get_mut` borrows never overlap), and finally stores the `Result` (cloned) under the id, failures included. Python raises exceptions and returns status strings; here the compiler makes callers handle each case, `u64::checked_add` turns overflow into a value, and `Clone` on the error enum is what makes replaying a stored result trivial.
+id: rs-bank-ledger-result
+language: rust
+bar_level: 3
+narration: []
+anki_queries: []

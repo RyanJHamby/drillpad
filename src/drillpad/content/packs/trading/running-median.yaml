@@ -1,0 +1,185 @@
+id: running-median
+title: Running Median of Prices
+bar_level: 3
+target_minutes: 30
+patterns:
+- two-heaps
+- streaming
+- median
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `RunningMedian`, a structure that ingests a stream of integer prices and reports the median of
+  everything seen so far.
+
+  - `add(x)`: insert one int price (`ValueError` if `x` is not an int).
+    Duplicates are allowed and counted.
+  - `median() -> float`: the median of all values added. For an odd count it is the middle value; for an even count it is
+    the mean of the two middle values (so it can end in `.5`). `ValueError` if nothing has been added.
+  - `len(obj)`: number of values added.
+
+  Both calls must be fast: `add` O(log n), `median` O(1). Do not sort or re-scan the data on each query.
+starter: |
+  class RunningMedian:
+      def __init__(self):
+          pass
+hints:
+- Split the data into a lower half (max-heap) and an upper half (min-heap). Every element of lo is <=
+  every element of hi.
+- Keep len(lo) == len(hi) or len(lo) == len(hi) + 1; after inserting, move one top across to rebalance.
+- Median is lo[0] for odd counts, else the mean of the two tops. Python has only a min-heap, so store
+  negated values for the lower half.
+follow_ups:
+- How would you support a sliding window (remove the oldest value)?
+- How would you compute an approximate median/quantile in O(1) memory?
+- What if the values are bounded ints (price ticks)?
+tests:
+- name: odd and even counts
+  code: |
+    m = RunningMedian()
+    m.add(5)
+    assert m.median() == 5.0
+    m.add(15)
+    assert m.median() == 10.0
+    m.add(1)
+    assert m.median() == 5.0
+    m.add(3)
+    assert m.median() == 4.0
+    assert len(m) == 4
+  hidden: false
+  tags:
+  - single
+  - ordering
+- name: empty raises
+  code: |
+    m = RunningMedian()
+    assert len(m) == 0
+    try:
+        m.median()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("median of nothing")
+    m.add(1)
+    assert m.median() == 1.0
+  hidden: false
+  tags:
+  - empty
+  - invalid
+- name: duplicates
+  code: |
+    m = RunningMedian()
+    for x in [7, 7, 7, 7]:
+        m.add(x)
+    assert m.median() == 7.0
+    m.add(1); m.add(1)
+    assert m.median() == 7.0
+    m.add(1)
+    assert m.median() == 7.0
+  hidden: false
+  tags:
+  - duplicate
+- name: descending and ascending inputs
+  code: |
+    m = RunningMedian()
+    got = []
+    for x in range(10, 0, -1):
+        m.add(x)
+        got.append(m.median())
+    assert got == [10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0, 6.5, 6.0, 5.5]
+    m2 = RunningMedian()
+    got = []
+    for x in range(1, 8):
+        m2.add(x)
+        got.append(m2.median())
+    assert got == [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: negative and large values
+  code: |
+    m = RunningMedian()
+    for x in [-5, 10**12, -10**12, 0]:
+        m.add(x)
+    assert m.median() == -2.5
+    m.add(3)
+    assert m.median() == 0.0
+  hidden: true
+  tags:
+  - boundary
+  - invalid
+- name: rejects non-int
+  code: |
+    m = RunningMedian()
+    for bad in (1.5, "3", None):
+        try:
+            m.add(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+    assert len(m) == 0
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: 'scale: 200k adds with median after each'
+  code: |
+    import random
+    rng = random.Random(7)
+    m = RunningMedian()
+    last = 0.0
+    for i in range(200000):
+        m.add(rng.randrange(1, 1000000))
+        last = m.median()
+    assert 450000 < last < 550000
+    assert len(m) == 200000
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: add
+  time: O(log n)
+  space: O(n)
+- op: median
+  time: O(1)
+  space: O(1)
+extensions:
+- q: 'Level 2: add a sliding-window variant `WindowMedian(k)` using lazy deletion.'
+  key_points:
+  - Track a delayed-removal count per value and keep logical sizes for each heap
+  - Prune heap tops while they have pending deletions before reading the median
+  - Rebalance based on logical sizes, not len(heap)
+  kind: code
+- q: 'Level 3: support arbitrary quantiles (p99) with the same idea or a Fenwick tree over price ticks.'
+  key_points:
+  - Two heaps generalise to a fixed ratio, but a Fenwick/bucket count over bounded ticks answers any quantile
+    in O(log T)
+  - Quantile is found by prefix-sum binary descent over counts
+  - Define the interpolation convention explicitly
+  kind: code
+- q: Cost of two heaps vs sorted list vs counting buckets.
+  key_points:
+  - 'Two heaps: O(log n) add, O(1) median, O(n) memory'
+  - 'bisect.insort into a list: O(n) insertion due to shifting, fine until a few 10^4 items'
+  - 'Bucket counts over bounded ticks: O(1) add and O(T) or O(log T) query with O(T) memory regardless
+    of n'
+  kind: complexity
+- q: 'Design: median of prices in a live system (outliers, windows, memory).'
+  key_points:
+  - An unbounded history is a memory leak; use a window or approximate sketch (t-digest) in production
+  - Median is robust to bad ticks, which is why it is used for cleaning/reference prices
+  - Checkpoint state or rebuild from the log after restart
+  kind: design
+narration: []
+state_aloud:
+- 'Even count: mean of the two middle values (float, may end in .5).'
+- Empty median is an error; duplicates are counted individually.
+- 'Integer inputs only; heaps invariant: lo <= hi and sizes differ by at most one.'
+walkthrough: |
+  Classic two-heap running median (LeetCode 295 formulation) applied to price streams. Lower half in a negated max-heap, upper half in a min-heap, rebalanced so len(lo) is len(hi) or len(hi)+1. Standard formulation; no specific doc problem.
+categories:
+- trading

@@ -1,0 +1,94 @@
+id: longest-increasing-subsequence
+title: Longest Increasing Subsequence
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Longest Increasing Subsequence (LC 300)"
+statement: |
+  Return the length of the longest strictly increasing subsequence of `nums` (elements need not be adjacent, but keep their order). An empty list gives 0.
+
+  Example: `length_of_lis([10,9,2,5,3,7,101,18])` returns `4` (for instance `2,3,7,18`).
+starter: |
+  def length_of_lis(nums):
+      pass
+hints:
+- A subsequence ending at i extends one ending at an earlier, smaller value.
+- 'State: dp[i] = length of the longest increasing subsequence ending at index i.'
+- dp[i] = 1 + max(dp[j] for j<i with nums[j]<nums[i]), default 1. For speed keep a tails array and binary search.
+follow_ups:
+- Can you reach O(n log n)?
+- Reconstruct one longest subsequence.
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert length_of_lis([10,9,2,5,3,7,101,18])==4
+- name: with repeats
+  tags:
+  - boundary
+  code: |
+    assert length_of_lis([0,1,0,3,2,3])==4
+- name: all equal
+  tags:
+  - duplicate
+  code: |
+    assert length_of_lis([7,7,7,7])==1
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert length_of_lis([])==0
+- name: single
+  tags:
+  - single
+  code: |
+    assert length_of_lis([5])==1
+- name: descending
+  tags:
+  - ordering
+  code: |
+    assert length_of_lis([5,4,3,2,1])==1
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert length_of_lis(list(range(2000)))==2000
+    assert length_of_lis(list(range(2000,0,-1)))==1
+complexity:
+- op: overall
+  time: O(n log n)
+  space: O(n)
+  accepted_time:
+  - O(n^2)
+extensions:
+- q: Complexity of both approaches
+  kind: complexity
+  key_points:
+  - Quadratic DP compares each pair
+  - Patience sorting uses binary search for O(n log n)
+  - Both use O(n) space
+- q: Patience sorting tails array
+  kind: code
+  key_points:
+  - tails[k] is the smallest tail of any increasing subsequence of length k+1
+  - bisect_left replaces the first tail >= x
+  - The length of tails is the answer; strictness comes from bisect_left
+- q: Reconstruct the subsequence
+  kind: design
+  key_points:
+  - Store predecessor indexes or the index in tails of each element
+  - Walk back from the last tail
+  - Tails itself is not a valid subsequence
+narration: []
+state_aloud:
+- Strictly increasing so equal values do not extend.
+- Empty input returns 0.
+- Subsequence, not substring.
+walkthrough: Define `tails[k]` as the smallest possible last value of an increasing subsequence of length `k+1`; it is always sorted. For each number, binary search the first tail that is not smaller (`bisect_left`) and overwrite it, or append if none exists. The final length of `tails` is the answer. This compresses the O(n^2) recurrence `dp[i] = 1 + max dp[j]` into O(n log n) time and O(n) space.

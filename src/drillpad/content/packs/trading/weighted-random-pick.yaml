@@ -1,0 +1,172 @@
+id: weighted-random-pick
+title: Weighted Random Pick
+bar_level: 2
+target_minutes: 20
+patterns:
+- prefix-sums
+- binary-search
+- randomized
+- sampling
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `WeightedPicker(weights, rng=None)`: pick an index with probability proportional to its integer weight.
+
+  - `weights`: a list of non-negative ints. `ValueError` if the list is empty, any weight is negative or not an int, or
+    the total is 0.
+  - `pick() -> int`: draw `r = rng.randrange(total)` EXACTLY ONCE per call (`total = sum(weights)`) and return the
+    smallest index `i` such that `r < weights[0] + ... + weights[i]` (prefix sums). Zero-weight indices are therefore
+    never returned. `rng` is a `random.Random`-like object (default `random.Random()`).
+
+  Using exactly that draw makes the behaviour deterministic under a scripted RNG, which the tests use.
+  `pick` must be O(log n) (prefix sums plus binary search), not a linear scan per call.
+starter: |
+  import random
+
+
+  class WeightedPicker:
+      def __init__(self, weights, rng=None):
+          pass
+hints:
+- Lay the weights end to end on a number line of length total; a uniform integer in [0, total) lands in
+  exactly one weight-sized interval.
+- Precompute prefix sums once; the answer for r is the first prefix strictly greater than r, which is
+  bisect_right.
+- Validate in the constructor (empty, negative, total 0) so pick() has no failure path.
+follow_ups:
+- How do you support changing a weight (updates)?
+- What is the alias method and when is it better?
+- How do you sample without replacement with weights?
+tests:
+- name: scripted draws map to prefix intervals
+  code: |
+    class Fake:
+        def __init__(self, vals): self.vals = list(vals)
+        def randrange(self, n):
+            v = self.vals.pop(0)
+            assert 0 <= v < n or v == "any"
+            self.n = n
+            return v
+    f = Fake([0, 1, 2, 3, 5, 9])
+    w = WeightedPicker([2, 1, 3, 4], f)   # prefix 2,3,6,10
+    assert [w.pick() for _ in range(6)] == [0, 0, 1, 2, 2, 3]
+    assert f.n == 10
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: zero weights are never picked
+  code: |
+    class Fake:
+        def __init__(self): self.i = -1
+        def randrange(self, n):
+            self.i += 1
+            return self.i % n
+    w = WeightedPicker([0, 3, 0, 2, 0], Fake())
+    got = [w.pick() for _ in range(10)]
+    assert set(got) == {1, 3}
+    assert got[:5] == [1, 1, 1, 3, 3]
+  hidden: false
+  tags:
+  - boundary
+  - duplicate
+- name: single element
+  code: |
+    import random
+    w = WeightedPicker([7], random.Random(1))
+    assert all(w.pick() == 0 for _ in range(20))
+  hidden: false
+  tags:
+  - single
+- name: statistical frequency with seeded rng
+  code: |
+    import random
+    w = WeightedPicker([1, 2, 7], random.Random(42))
+    c = [0, 0, 0]
+    for _ in range(20000):
+        c[w.pick()] += 1
+    assert abs(c[0] - 2000) < 300 and abs(c[1] - 4000) < 400 and abs(c[2] - 14000) < 500, c
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: rejects bad weights
+  code: |
+    for bad in ([], [0, 0], [1, -1], [1.5, 2], ["a"]):
+        try:
+            WeightedPicker(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+  hidden: true
+  tags:
+  - invalid
+  - empty
+  - zero-capacity
+- name: large single weight and unaltered input
+  code: |
+    import random
+    ws = [0, 10**12, 0]
+    w = WeightedPicker(ws, random.Random(3))
+    assert w.pick() == 1 and ws == [0, 10**12, 0]
+  hidden: true
+  tags:
+  - boundary
+  - state-reuse
+- name: 'scale: 100k weights, 300k picks'
+  code: |
+    import random
+    n = 100000
+    w = WeightedPicker([1 + i % 10 for i in range(n)], random.Random(5))
+    seen = set()
+    for _ in range(300000):
+        i = w.pick()
+        assert 0 <= i < n
+        seen.add(i)
+    assert len(seen) > 50000
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: init
+  time: O(n)
+  space: O(n)
+- op: pick
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: 'Level 2: support `update(i, w)` with pick still O(log n).'
+  key_points:
+  - Replace prefix sums with a Fenwick tree over weights; update is O(log n)
+  - pick descends the tree (binary lifting) to find the smallest index with prefix > r
+  - Total is tracked incrementally and zero total raises
+  kind: code
+- q: 'Level 3: implement the alias method for O(1) picks.'
+  key_points:
+  - Build tables of probabilities and aliases in O(n) by splitting indices into small and large
+  - pick draws one index and one coin, no binary search
+  - Updates require rebuilding, so it suits static weights
+  kind: code
+- q: Compare linear scan, prefix+bisect, Fenwick and alias.
+  key_points:
+  - Linear scan O(n) per pick; prefix+bisect O(log n) with O(n) rebuild on update
+  - Fenwick O(log n) pick and update
+  - Alias O(1) pick, O(n) build
+  kind: complexity
+- q: 'Design: weighted picking in trading infrastructure (e.g. venue selection, test traffic generation).'
+  key_points:
+  - Inject the RNG for reproducible simulation and replay
+  - Integer weights avoid float edge cases at interval boundaries
+  - Document tie/zero-weight behaviour since it changes order flow
+  kind: design
+narration: []
+state_aloud:
+- Exactly one randrange(total) per pick; smallest i with r < prefix[i].
+- Zero weights never chosen; total must be positive.
+- Integer weights only.
+walkthrough: |
+  Standard prefix-sum + binary-search weighted sampling (LeetCode 528). The specified single randrange draw makes outputs deterministic under a scripted RNG. Source: standard formulation.
+categories:
+- trading

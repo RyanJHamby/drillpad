@@ -1,0 +1,103 @@
+id: interleaving-string
+title: Interleaving String
+bar_level: 3
+target_minutes: 38
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Interleaving String (LC 97)"
+statement: |
+  Decide whether `s3` can be formed by interleaving `s1` and `s2`: merge them into one string by repeatedly taking the next unused character from either string, preserving each string's internal order and using every character exactly once.
+
+  Example: `is_interleave("aabcc", "dbbca", "aadbbcbcac")` returns `True`.
+starter: |
+  def is_interleave(s1, s2, s3):
+      pass
+hints:
+- The next character of s3 must match the next unused character of s1 or of s2.
+- 'State: ok[i][j] is True if s3[:i+j] is an interleaving of s1[:i] and s2[:j].'
+- ok[0][0] = True; ok[i][j] = (ok[i-1][j] and s1[i-1]==s3[i+j-1]) or (ok[i][j-1] and s2[j-1]==s3[i+j-1]). Lengths must add up.
+follow_ups:
+- Reduce space to O(min(m, n)).
+- Return one interleaving.
+tests:
+- name: true case
+  tags:
+  - ordering
+  code: |
+    assert is_interleave("aabcc","dbbca","aadbbcbcac")==True
+- name: false case
+  tags:
+  - invalid
+  code: |
+    assert is_interleave("aabcc","dbbca","aadbbbaccc")==False
+- name: all empty
+  tags:
+  - empty
+  code: |
+    assert is_interleave("","","")==True
+- name: one empty
+  tags:
+  - boundary
+  code: |
+    assert is_interleave("a","","a")==True
+    assert is_interleave("","b","c")==False
+- name: length mismatch
+  tags:
+  - invalid
+  code: |
+    assert is_interleave("a","b","a")==False
+    assert is_interleave("","","a")==False
+- name: either order
+  tags:
+  - ordering
+  code: |
+    assert is_interleave("a","b","ab")==True
+    assert is_interleave("a","b","ba")==True
+- name: shared chars
+  tags:
+  - duplicate
+  code: |
+    assert is_interleave("ab","bc","babc")==True
+    assert is_interleave("ab","ab","aabb")==True
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert is_interleave("a"*500,"a"*500,"a"*1000)==True
+    assert is_interleave("a"*500,"a"*500,"a"*999+"b")==False
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(n)
+  accepted_space:
+  - O(m * n)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - m*n states with O(1) transitions
+  - Row-by-row rolling array gives O(n) space
+  - Plain recursion is exponential, memoised is O(m*n)
+- q: Space-optimised rolling row
+  kind: code
+  key_points:
+  - dp[j] holds the previous row until overwritten
+  - dp[j] = (dp[j] and match1) or (dp[j-1] and match2)
+  - Choose the shorter string for the row
+- q: Why not greedy
+  kind: design
+  key_points:
+  - Both strings can match the same next character
+  - Greedy commits to one and may dead-end
+  - A set of reachable (i,j) states per step is the BFS view of the same DP
+narration: []
+state_aloud:
+- Lengths must satisfy len(s3)=len(s1)+len(s2).
+- Empty strings are valid.
+- Both strings can match the same character.
+walkthrough: Let `ok[i][j]` be True when `s3[:i+j]` interleaves `s1[:i]` and `s2[:j]`. Reject immediately if the lengths do not add up. `ok[i][j]` holds if the last character of `s3[:i+j]` was taken from `s1` (`ok[i-1][j]` and a match) or from `s2` (`ok[i][j-1]` and a match). A single rolling row reduces space to O(n); time O(m*n).

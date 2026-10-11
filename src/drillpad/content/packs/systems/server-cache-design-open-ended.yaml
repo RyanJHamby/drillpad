@@ -1,0 +1,403 @@
+id: server-cache-design-open-ended
+title: Design a Cache Between a Server and a Backend (Open-ended)
+bar_level: 4
+target_minutes: 45
+patterns:
+- cache
+- single-flight
+- lru
+- concurrency
+firm_tags:
+- quant-hft
+- distsys
+categories:
+- systems-impl
+- trading
+prelude: |
+  import threading
+
+  _MISSING = object()
+
+
+  class FakeClock:
+      def __init__(self):
+          self.t = 0
+
+      def __call__(self):
+          return self.t
+
+      def advance(self, dt):
+          self.t += dt
+
+
+  class FakeBackend:
+      """fetch(key) -> value, raises KeyError for absent keys. Records every call."""
+
+      def __init__(self, data=None):
+          self.data = dict(data or {})
+          self.calls = []
+          self.stores = []
+          self.fail = None
+          self.store_fail = None
+          self.gate = None
+          self.entered = threading.Event()
+          self._lock = threading.Lock()
+
+      def fetch(self, key):
+          with self._lock:
+              self.calls.append(key)
+          self.entered.set()
+          err = self.fail
+          val = self.data.get(key, _MISSING)
+          if self.gate is not None:
+              self.gate.wait(5)
+          if err is not None:
+              raise err
+          if val is _MISSING:
+              raise KeyError(key)
+          return val
+
+      def store(self, key, value):
+          if self.store_fail is not None:
+              raise self.store_fail
+          self.stores.append((key, value))
+          self.data[key] = value
+statement: |
+  **Interview prompt (deliberately vague):** "A service reads from a slow backend. Design a cache in front of it."
+
+  In a real interview you would spend the first minutes asking questions: how big is the key space, how stale may data be, who writes, what happens when the backend is down or a hot key expires. The *extensions* below are those questions and the trade-offs behind them; read them before you start coding. To make the exercise gradable, assume these answers and implement the class:
+
+  ```python
+  class Cache:
+      def __init__(self, backend, capacity, ttl, clock): ...
+      def get(self, key): ...          # value, or raises KeyError if the backend has no such key
+      def write(self, key, value): ... # write-through
+      def invalidate(self, key): ...
+      def stats(self): ...             # {"hits": int, "misses": int}
+  ```
+
+  `backend.fetch(key)` returns the value, raises `KeyError` for an absent key, and may raise any other exception. `backend.store(key, value)` persists a value. `clock()` returns the current time (a number); the tests inject a fake one.
+
+  - **Hit / TTL.** A fresh entry is served without calling the backend. An entry stored at time `t0` is expired when `clock() - t0 >= ttl`. Hits do not extend the TTL.
+  - **Bounded capacity.** At most `capacity` entries (negative entries included). Evict the least recently used entry (a hit or insert counts as use). `capacity < 1` raises `ValueError`.
+  - **Negative caching.** If the backend raises `KeyError`, cache that absence for `ttl` too and re-raise `KeyError` on later gets without calling the backend.
+  - **Errors.** Any other backend exception propagates to the caller and is never cached; the next get tries the backend again.
+  - **Single flight.** Concurrent `get`s for the same missing key must trigger exactly one backend fetch. The waiters receive the leader's value, or the leader's exception if it failed. Never hold your lock while calling the backend.
+  - **Writes.** `write` calls `backend.store`, then caches the new value with a fresh TTL. If `store` raises, the cache is unchanged and the error propagates. `invalidate` drops the entry (positive or negative). A fetch that was already in flight when `write` or `invalidate` happened must not install its stale result into the cache.
+  - **Metrics.** `misses` counts gets that started a backend fetch; `hits` counts every other get (fresh entry, negative entry, or joining an in-flight fetch).
+starter: |
+  class Cache:
+      def __init__(self, backend, capacity, ttl, clock):
+          pass
+
+      def get(self, key):
+          pass
+
+      def write(self, key, value):
+          pass
+
+      def invalidate(self, key):
+          pass
+
+      def stats(self):
+          pass
+hints:
+- Start with a dict plus an ordered structure for LRU (OrderedDict move_to_end / popitem(last=False)) and store (found, value, stored_at) per key.
+- For single flight keep a dict key -> in-flight record with an Event; the first getter becomes the leader, others wait on the event and read the shared result.
+- Release the lock around backend.fetch. To drop stale results, remove (detach) the in-flight record when write or invalidate runs and have the leader only install its result if its record is still the current one.
+follow_ups:
+- Serve stale data (stale-if-error) when the backend is failing. What consistency are you trading?
+- Shard the cache across processes. How do you route keys and what breaks for single flight?
+tests:
+- name: hits and misses
+  tags:
+  - duplicate
+  code: |
+    b = FakeBackend({"a": 1, "b": 2})
+    c = Cache(b, 10, 100, FakeClock())
+    assert c.get("a") == 1
+    assert c.get("a") == 1
+    assert c.get("b") == 2
+    assert b.calls == ["a", "b"]
+    assert c.stats() == {"hits": 1, "misses": 2}
+- name: ttl expiry boundary
+  tags:
+  - time
+  - boundary
+  code: |
+    clk = FakeClock()
+    b = FakeBackend({"a": 1})
+    c = Cache(b, 10, 10, clk)
+    assert c.get("a") == 1
+    clk.advance(9)
+    assert c.get("a") == 1
+    assert b.calls == ["a"]
+    b.data["a"] = 2
+    clk.advance(1)
+    assert c.get("a") == 2
+    assert b.calls == ["a", "a"]
+    clk.advance(5)
+    assert c.get("a") == 2 and len(b.calls) == 2
+- name: lru eviction order
+  tags:
+  - ordering
+  - boundary
+  code: |
+    b = FakeBackend({k: k.upper() for k in "abcd"})
+    c = Cache(b, 2, 100, FakeClock())
+    assert c.get("a") == "A"
+    assert c.get("b") == "B"
+    assert c.get("a") == "A"
+    assert c.get("c") == "C"
+    assert b.calls == ["a", "b", "c"]
+    assert c.get("a") == "A"
+    assert b.calls == ["a", "b", "c"]
+    assert c.get("b") == "B"
+    assert b.calls == ["a", "b", "c", "b"]
+- name: capacity bounds
+  tags:
+  - zero-capacity
+  - invalid
+  code: |
+    b = FakeBackend({"a": 1, "b": 2})
+    for cap in (0, -1):
+        try:
+            Cache(b, cap, 10, FakeClock())
+        except ValueError:
+            pass
+        else:
+            assert False, "expected ValueError"
+    c = Cache(b, 1, 10, FakeClock())
+    assert c.get("a") == 1
+    assert c.get("b") == 2
+    assert c.get("a") == 1
+    assert b.calls == ["a", "b", "a"]
+- name: negative caching
+  tags:
+  - invalid
+  - time
+  code: |
+    clk = FakeClock()
+    b = FakeBackend()
+    c = Cache(b, 10, 10, clk)
+    for _ in range(3):
+        try:
+            c.get("x")
+        except KeyError:
+            pass
+        else:
+            assert False, "expected KeyError"
+    assert b.calls == ["x"]
+    assert c.stats() == {"hits": 2, "misses": 1}
+    b.data["x"] = 5
+    clk.advance(10)
+    assert c.get("x") == 5
+    assert b.calls == ["x", "x"]
+- name: backend errors are not cached
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    b = FakeBackend({"a": 1})
+    b.fail = RuntimeError("down")
+    c = Cache(b, 10, 100, FakeClock())
+    for _ in range(2):
+        try:
+            c.get("a")
+        except RuntimeError:
+            pass
+        else:
+            assert False, "expected RuntimeError"
+    assert b.calls == ["a", "a"]
+    b.fail = None
+    assert c.get("a") == 1
+    assert c.get("a") == 1
+    assert b.calls == ["a", "a", "a"]
+- name: write through and invalidate
+  tags:
+  - state-reuse
+  code: |
+    b = FakeBackend({"a": 1})
+    c = Cache(b, 10, 100, FakeClock())
+    assert c.get("a") == 1
+    c.write("a", 2)
+    assert b.stores == [("a", 2)]
+    assert c.get("a") == 2
+    assert b.calls == ["a"]
+    c.write("n", 9)
+    assert c.get("n") == 9 and b.calls == ["a"]
+    b.data["a"] = 3
+    c.invalidate("a")
+    assert c.get("a") == 3
+    assert b.calls == ["a", "a"]
+    c.invalidate("never-seen")
+    b.store_fail = RuntimeError("readonly")
+    try:
+        c.write("a", 99)
+    except RuntimeError:
+        pass
+    else:
+        assert False, "expected RuntimeError"
+    assert c.get("a") == 3
+- name: concurrent misses fetch once
+  tags:
+  - concurrency
+  code: |
+    import time
+    b = FakeBackend({"k": "v"})
+    b.gate = threading.Event()
+    c = Cache(b, 10, 100, FakeClock())
+    results = []
+    def worker():
+        results.append(c.get("k"))
+    ts = [threading.Thread(target=worker) for _ in range(8)]
+    ts[0].start()
+    assert b.entered.wait(1)
+    for t in ts[1:]:
+        t.start()
+    time.sleep(0.05)
+    b.gate.set()
+    for t in ts:
+        t.join(5)
+        assert not t.is_alive()
+    assert results == ["v"] * 8
+    assert b.calls == ["k"]
+    assert c.stats() == {"hits": 7, "misses": 1}
+- name: leader failure is shared and not cached
+  tags:
+  - concurrency
+  - invalid
+  hidden: true
+  code: |
+    import time
+    b = FakeBackend({"k": "v"})
+    b.fail = RuntimeError("boom")
+    b.gate = threading.Event()
+    c = Cache(b, 10, 100, FakeClock())
+    errors = []
+    def worker():
+        try:
+            c.get("k")
+        except RuntimeError as e:
+            errors.append(str(e))
+    ts = [threading.Thread(target=worker) for _ in range(4)]
+    ts[0].start()
+    assert b.entered.wait(1)
+    for t in ts[1:]:
+        t.start()
+    time.sleep(0.05)
+    b.gate.set()
+    for t in ts:
+        t.join(5)
+        assert not t.is_alive()
+    assert errors == ["boom"] * 4
+    b.fail = None
+    assert c.get("k") == "v"
+- name: invalidate during in-flight fetch drops stale result
+  tags:
+  - concurrency
+  - state-reuse
+  hidden: true
+  code: |
+    b = FakeBackend({"k": "old"})
+    b.gate = threading.Event()
+    c = Cache(b, 10, 100, FakeClock())
+    out = []
+    t = threading.Thread(target=lambda: out.append(c.get("k")))
+    t.start()
+    assert b.entered.wait(1)
+    b.data["k"] = "new"
+    c.invalidate("k")
+    b.gate.set()
+    t.join(5)
+    assert not t.is_alive()
+    b.gate = None
+    assert c.get("k") == "new"
+    assert b.calls == ["k", "k"]
+- name: write during in-flight fetch wins
+  tags:
+  - concurrency
+  - ordering
+  hidden: true
+  code: |
+    b = FakeBackend({"k": "old"})
+    b.gate = threading.Event()
+    c = Cache(b, 10, 100, FakeClock())
+    t = threading.Thread(target=lambda: c.get("k"))
+    t.start()
+    assert b.entered.wait(1)
+    c.write("k", "new")
+    b.gate.set()
+    t.join(5)
+    assert not t.is_alive()
+    assert c.get("k") == "new"
+    assert b.calls == ["k"]
+- name: many keys stay bounded and fast
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 100000
+    b = FakeBackend({i: i * 2 for i in range(n)})
+    c = Cache(b, 5000, 10 ** 9, FakeClock())
+    for i in range(n):
+        assert c.get(i) == i * 2
+    assert len(b.calls) == n
+    for i in range(n - 100, n):
+        assert c.get(i) == i * 2
+    assert len(b.calls) == n
+    assert c.get(0) == 0
+    assert len(b.calls) == n + 1
+    assert c.stats() == {"hits": 100, "misses": n + 1}
+complexity:
+- op: get
+  time: O(1) expected
+  space: O(capacity)
+- op: write
+  time: O(1) expected
+  space: O(capacity)
+extensions:
+- q: "Stage 1 - requirements. Before designing, what would you ask about the workload and the data?"
+  kind: design
+  key_points:
+  - Read/write ratio, key-space size versus memory, skew of hot keys, and backend latency/QPS limits
+  - Staleness tolerance - can a read be seconds old, who else writes to the backend, is read-your-writes required
+  - Value size and mutability, whether absent keys are common (negative caching), and what happens when the backend errors
+  - Success metric - hit ratio, p99 latency, backend load reduction
+- q: "Stage 2 - eviction and expiry. Bounded memory is required. Which policy and what staleness bound?"
+  kind: design
+  key_points:
+  - LRU via hash map plus doubly linked list gives O(1); compare LFU, FIFO, TinyLFU admission for scan resistance
+  - TTL bounds staleness; expiry can be lazy on read and sweeps, and jittered to avoid synchronized expiry
+  - Capacity counts entries versus bytes; negative entries consume capacity too
+  - Hits refreshing recency but not TTL keeps the staleness bound honest
+- q: "Stage 3 - a hot key expires and 1000 requests arrive at once. What happens to the backend?"
+  kind: design
+  key_points:
+  - Thundering herd - single flight so one request fetches and the rest wait for its result
+  - Never hold the cache lock across the backend call; use per-key in-flight records
+  - Decide shared failure semantics for waiters, add timeouts, and consider refresh-ahead or stale-while-revalidate
+  - Per-key coalescing is local to one process; multiple servers still multiply the load by the fleet size
+- q: "Stage 4 - writes and consistency. How do writes and invalidation interact with in-flight reads?"
+  kind: design
+  key_points:
+  - Write-through versus write-around versus write-back, and what each does to read-after-write and failure modes
+  - Race - a read fetches the old value, a write lands, then the read installs stale data; fix with versions or detaching in-flight records
+  - Invalidation across several cache nodes needs pub/sub or short TTLs; discuss eventual consistency
+  - Do not cache backend errors; consider stale-if-error with an explicit staleness cap
+- q: What is the complexity of the cache operations, and how would sharding and observability change the design?
+  kind: complexity
+  key_points:
+  - get and write are O(1) expected with a hash map plus ordered eviction structure; space O(capacity)
+  - Lock contention grows with threads, so shard the cache by key hash into independent locked segments
+  - Expose hits, misses, evictions, in-flight waits, backend latency and error rate; hit ratio alone hides herd effects
+  - Consistent hashing for distributed shards limits remapped keys when nodes change
+narration: []
+state_aloud:
+- Ask who writes the data and how stale a read may be before choosing TTL and write policy.
+- Capacity of 0 or 1, and TTL boundary (expired at exactly ttl).
+- Absent keys are cacheable but backend errors are not.
+- Concurrent misses must coalesce; never call the backend while holding the lock.
+- A write or invalidate racing an in-flight fetch must not be overwritten by the stale result.
+walkthrough: |
+  Entries live in an OrderedDict of `(found, value, stored_at)` guarded by one lock, used only for short critical sections. `get` checks for a fresh entry (moving it to the MRU end), otherwise either joins an existing in-flight record for the key or becomes the leader of a new one. The leader calls the backend with the lock released, then re-acquires it to publish the outcome: it installs a positive or negative entry (never an error) only if its in-flight record is still current, evicts from the LRU end when over capacity, and wakes the waiters through an Event. `write` stores to the backend first and then replaces the entry; `write` and `invalidate` detach and mark any in-flight record stale so late fetch results are discarded.

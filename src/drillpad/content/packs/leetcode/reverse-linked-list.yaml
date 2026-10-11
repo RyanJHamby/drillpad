@@ -1,0 +1,109 @@
+id: reverse-linked-list
+title: Reverse Linked List
+bar_level: 1
+target_minutes: 10
+patterns:
+- linked-list
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Reverse Linked List (LC 206)"
+statement: |
+  Reverse a singly linked list and return the new head. The `ListNode`, `build_list` and `to_list` helpers are provided in the starter.
+
+  Example: `to_list(reverse_list(build_list([1,2,3])))` is `[3,2,1]`.
+prelude: |
+  class ListNode:
+      def __init__(self, val=0, next=None):
+          self.val = val
+          self.next = next
+
+  def build_list(vals):
+      head = None
+      for v in reversed(vals):
+          head = ListNode(v, head)
+      return head
+
+  def to_list(head):
+      out = []
+      while head:
+          out.append(head.val)
+          head = head.next
+      return out
+starter: |
+  def reverse_list(head):
+      pass
+hints:
+- You need to remember the next node before overwriting `next`.
+- Walk with `prev` and `curr` pointers, flipping each link.
+- Return `prev` when `curr` falls off the end.
+follow_ups:
+- Do it recursively; what is the stack cost?
+- Reverse only nodes in positions m..n.
+tests:
+- name: basic
+  tags:
+  - ordering
+  code: |
+    assert to_list(reverse_list(build_list([1,2,3,4,5])))==[5,4,3,2,1]
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert reverse_list(None) is None
+    assert to_list(reverse_list(build_list([1,2])))==[2,1]
+- name: single node
+  tags:
+  - single
+  code: |
+    h=build_list([7])
+    r=reverse_list(h)
+    assert r is h and to_list(r)==[7]
+- name: two nodes
+  tags:
+  - boundary
+  code: |
+    assert to_list(reverse_list(build_list([1,2])))==[2,1]
+- name: duplicates
+  tags:
+  - duplicate
+  code: |
+    assert to_list(reverse_list(build_list([1,1,2,2])))==[2,2,1,1]
+- name: long list needs iteration
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    assert to_list(reverse_list(build_list(list(range(n)))))==list(range(n-1,-1,-1))
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Recursive version cost?
+  kind: complexity
+  key_points:
+  - Same O(n) time
+  - O(n) call-stack space
+  - Risks recursion limit on long lists
+- q: Reverse a sublist m..n
+  kind: code
+  key_points:
+  - Walk to node before m
+  - Reverse n-m+1 nodes in place
+  - Reconnect both ends
+- q: 'Design: reverse in groups of k'
+  kind: design
+  key_points:
+  - Count k nodes ahead before reversing
+  - Reverse each group and stitch the tails
+  - Leave a final short group unreversed
+narration: []
+state_aloud:
+- None head.
+- Single node returns itself.
+- Don't lose the old head's next pointer.
+walkthrough: |
+  Walk the list with `prev` starting at None. At each node save `next`, point the node at `prev`, then advance both pointers. When `curr` becomes None, `prev` is the new head. This rewires every link in place with a single pass and constant space.

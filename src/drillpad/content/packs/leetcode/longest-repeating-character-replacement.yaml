@@ -1,0 +1,97 @@
+id: longest-repeating-character-replacement
+title: Longest Repeating Character Replacement
+bar_level: 2
+target_minutes: 22
+patterns:
+- sliding-window
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Longest Repeating Char Replace (LC 424)"
+statement: |
+  Given an uppercase string `s` and an integer `k`, you may replace at most `k` characters with any other uppercase letter. Return the length of the longest substring that can be made of one repeated letter using at most `k` replacements.
+
+  Example: `character_replacement("AABABBA", 1)` returns `4` (for example, change the `B` in `AABA` to `A`).
+starter: |
+  def character_replacement(s, k):
+      pass
+hints:
+- A window is feasible if (window length - count of its most frequent letter) <= k.
+- Expand the right edge; when infeasible, shrink from the left.
+- 'You never need to decrease the tracked max frequency when shrinking: the window only matters when it
+  grows beyond the best so far.'
+follow_ups:
+- Why is it safe not to recompute the max count on shrink?
+- Support lowercase and uppercase letters.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert character_replacement('ABAB',2)==4
+    assert character_replacement('AABABBA',1)==4
+- name: empty string
+  tags:
+  - empty
+  code: |
+    assert character_replacement('',2)==0
+- name: single character
+  tags:
+  - single
+  code: |
+    assert character_replacement('A',0)==1
+- name: zero replacements
+  tags:
+  - zero-capacity
+  code: |
+    assert character_replacement('AABBBCC',0)==3
+- name: k covers the whole string
+  tags:
+  - boundary
+  code: |
+    assert character_replacement('ABCDE',4)==5
+    assert character_replacement('ABCDE',10)==5
+- name: already uniform
+  tags:
+  - duplicate
+  code: |
+    assert character_replacement('AAAA',2)==4
+- name: long string
+  tags:
+  - scale
+  hidden: true
+  code: |
+    s='A'*100000
+    assert character_replacement(s,0)==100000
+    assert character_replacement('AB'*50000,1)==3
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Complexity and the role of the alphabet.
+  kind: complexity
+  key_points:
+  - 'Each index enters and leaves the window once: O(n)'
+  - Count array is O(26) space, constant
+  - Recomputing the max per step would add a factor 26
+- q: Generalise to arbitrary characters.
+  kind: design
+  key_points:
+  - Use a hash map of counts
+  - Max frequency tracked incrementally
+  - Space O(distinct characters)
+- q: Why is the stale max-frequency trick correct?
+  kind: reasoning
+  key_points:
+  - The answer only improves when a true higher max appears
+  - A stale larger max keeps the window size from shrinking, not from being valid
+  - Window length never decreases
+narration: []
+state_aloud:
+- k = 0 means longest run.
+- k >= length means whole string.
+- Empty string.
+walkthrough: |
+  Slide a window `[l, r]` and keep letter counts and the max frequency seen. If `window_len - max_freq > k` the window needs more than k replacements, so move `l` right (decrementing its count). The window size is the running answer; it never needs to shrink below its best size, so a stale max is harmless.

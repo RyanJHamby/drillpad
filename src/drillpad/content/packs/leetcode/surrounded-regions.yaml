@@ -1,0 +1,115 @@
+id: surrounded-regions
+title: Surrounded Regions
+bar_level: 2
+target_minutes: 22
+patterns:
+- graph-bfs-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  You are given a board (a list of lists of the characters `"X"` and `"O"`). Capture every region of `"O"` cells that is completely surrounded by `"X"`: flip all of its `"O"`s to `"X"`. A region is 4-connected, and any region that touches the border of the board is not surrounded and must be left untouched.
+
+  Modify the board in place and also return that same board.
+
+  Example: `[["X","X","X"],["X","O","X"],["X","X","X"]]` becomes all `"X"`.
+starter: |
+  def solve(board):
+      pass
+hints:
+- It is easier to find the regions that survive than the ones that die.
+- Start a flood fill from every border 'O' and mark everything reachable with a temporary symbol such as 'S'.
+- 'Then sweep the whole board: remaining ''O'' become ''X'', and ''S'' go back to ''O''.'
+follow_ups:
+- Return the number of captured regions.
+- Do it with union-find and a virtual border node.
+tests:
+- name: basic capture
+  tags:
+  - boundary
+  code: |
+    b=[list("XXXX"),list("XOOX"),list("XXOX"),list("XOXX")]
+    r=solve(b)
+    assert r is b
+    assert b==[list("XXXX"),list("XXXX"),list("XXXX"),list("XOXX")]
+- name: single cell
+  tags:
+  - single
+  code: |
+    b=[["O"]]
+    assert solve(b) is b
+    assert b==[["O"]]
+- name: region touching the border survives
+  tags:
+  - invalid
+  code: |
+    b=[list("OOO"),list("XOX"),list("XXX")]
+    assert solve(b) is b
+    assert b==[list("OOO"),list("XOX"),list("XXX")]
+- name: empty board
+  tags:
+  - empty
+  hidden: true
+  code: |
+    b=[]
+    assert solve(b) is b
+- name: too small to have interior
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    b=[list("OO"),list("OO")]
+    assert solve(b) is b
+    assert b==[list("OO"),list("OO")]
+- name: two interior regions one linked to border
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    b=[list("XXXXX"),list("XOXOX"),list("XOXXX"),list("XXXOO")]
+    solve(b)
+    assert b==[list("XXXXX"),list("XXXXX"),list("XXXXX"),list("XXXOO")]
+- name: large interior
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=300
+    b=[["X"]*n]+[["X"]+["O"]*(n-2)+["X"] for _ in range(n-2)]+[["X"]*n]
+    solve(b)
+    assert all(c=="X" for row in b for c in row)
+    n=300
+    b=[["O"]*n for _ in range(n)]
+    solve(b)
+    assert all(c=="O" for row in b for c in row)
+complexity:
+- op: overall
+  time: O(R * C)
+  space: O(R * C)
+extensions:
+- q: What is the space cost and how do you bound the stack?
+  kind: complexity
+  key_points:
+  - Explicit stack or queue can hold O(RC) cells in the worst case
+  - Recursive DFS risks a stack overflow on large boards
+  - The temporary marking removes the need for a visited set
+- q: Why start from the border and not from interior regions?
+  kind: reasoning
+  key_points:
+  - A region is safe iff any of its cells touches the border
+  - One traversal from the border reaches exactly the safe cells
+  - Checking each region separately needs a flag and a second pass
+- q: How would you do this with union-find?
+  kind: design
+  key_points:
+  - Union neighbouring 'O' cells, and union border 'O' cells with a dummy node
+  - Flip every 'O' whose root differs from the dummy's root
+  - Good when cells arrive incrementally; same near-linear cost
+narration: []
+state_aloud:
+- Border-connected regions stay O.
+- Boards without an interior cannot capture anything.
+- Return the same board object.
+walkthrough: |
+  Flood fill from every 'O' on the border, temporarily marking reachable cells with a different symbol so they are distinguished from capturable cells. After the border pass, one sweep over the board turns each remaining 'O' (those never reached) into 'X' and restores the temporary mark to 'O'. The fill is iterative to avoid recursion limits.

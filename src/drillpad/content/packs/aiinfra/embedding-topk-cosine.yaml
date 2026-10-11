@@ -1,0 +1,211 @@
+id: embedding-topk-cosine
+title: Embedding Top-k (cosine) Search
+bar_level: 2
+target_minutes: 25
+patterns:
+- vector-search
+- cosine-similarity
+- top-k
+- heapq
+- normalisation
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Build the in-memory core of an embedding search service (the exact, brute-force baseline that
+  approximate indexes are compared against). Pure Python lists, no numpy.
+
+  `EmbeddingIndex()`:
+  - `add(item_id, vec)`: store a vector. `ValueError` for an empty vector or a dimension different from
+    the index's (the first vector fixes the dimension; it resets when the index is empty). Adding an
+    existing id REPLACES its vector and keeps its original insertion position.
+  - `remove(item_id)`: `KeyError` if unknown. Removing and re-adding puts the id at the end.
+  - `search(query, k) -> list[(item_id, cosine)]`: the `k` most similar items, highest cosine first;
+    ties go to the earlier insertion position. `k <= 0` or an empty index returns `[]`; `k` larger than
+    the index returns every item. `ValueError` if the query dimension differs. The cosine involving a
+    zero vector (stored or query) is `0.0`.
+  - `__len__`.
+
+  Cosine similarity is `dot(a, b) / (|a| * |b|)`. Compare floats with a tolerance.
+
+  Do the normalisation work once at insertion time rather than on every query, and select the top `k`
+  without sorting all scores.
+starter: |
+  class EmbeddingIndex:
+      def __init__(self):
+          pass
+
+      def add(self, item_id, vec):
+          pass
+
+      def remove(self, item_id):
+          pass
+
+      def search(self, query, k):
+          pass
+
+      def __len__(self):
+          pass
+hints:
+- 'Store unit vectors (or None for a zero vector): then cosine is just a dot product and a query is normalised
+  once.'
+- Score tuples (-score, insertion_order, id) make heapq.nsmallest(k, ...) return best first with ties
+  in insertion order.
+- Zero-norm vectors must not divide by zero; define the similarity as 0.0.
+follow_ups:
+- 'Approximate nearest neighbours: IVF (clusters) or HNSW; measure recall against this exact baseline.'
+- Batch queries as a matrix product.
+- Metadata filtering (only items with tenant == X) before or during the search.
+tests:
+- name: ranks by cosine similarity
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    ix = EmbeddingIndex()
+    ix.add("x", [1.0, 0.0]); ix.add("y", [0.0, 1.0]); ix.add("xy", [1.0, 1.0]); ix.add("neg", [-1.0, 0.0])
+    r = ix.search([2.0, 0.0], 3)
+    assert [i for i, _ in r] == ["x", "xy", "y"]
+    assert close(r[0][1], 1.0) and close(r[1][1], 2 ** -0.5) and close(r[2][1], 0.0)
+    assert ix.search([1.0, 0.0], 4)[-1][0] == "neg"
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: vector magnitude does not matter
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    ix = EmbeddingIndex()
+    ix.add("small", [0.1, 0.1]); ix.add("big", [100.0, 101.0]); ix.add("other", [1.0, 0.0])
+    assert [i for i, _ in ix.search([5.0, 5.0], 2)] == ["small", "big"]
+  hidden: false
+  tags:
+  - duplicate
+- name: ties keep insertion order; k larger than the index returns everything
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    ix = EmbeddingIndex()
+    for name in ["c", "a", "b"]:
+        ix.add(name, [1.0, 0.0])
+    assert [i for i, _ in ix.search([1.0, 0.0], 2)] == ["c", "a"]
+    assert len(ix.search([1.0, 0.0], 99)) == 3
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: empty index, k <= 0
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    ix = EmbeddingIndex()
+    assert ix.search([1.0], 3) == [] and len(ix) == 0
+    ix.add("a", [1.0])
+    assert ix.search([1.0], 0) == [] and ix.search([1.0], -2) == []
+  hidden: false
+  tags:
+  - empty
+  - zero-capacity
+- name: update in place keeps position; remove and re-add moves to the end
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    ix = EmbeddingIndex()
+    ix.add("a", [1.0, 0.0]); ix.add("b", [1.0, 0.0])
+    ix.add("a", [2.0, 0.0])                     # replace, still first
+    assert [i for i, _ in ix.search([1.0, 0.0], 2)] == ["a", "b"] and len(ix) == 2
+    ix.remove("a"); ix.add("a", [1.0, 0.0])
+    assert [i for i, _ in ix.search([1.0, 0.0], 2)] == ["b", "a"]
+    try:
+        ix.remove("zzz")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError
+  hidden: true
+  tags:
+  - state-reuse
+  - duplicate
+- name: zero vectors and dimension errors
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    ix = EmbeddingIndex()
+    ix.add("zero", [0.0, 0.0]); ix.add("one", [1.0, 0.0])
+    r = ix.search([1.0, 0.0], 2)
+    assert [i for i, _ in r] == ["one", "zero"] and close(r[1][1], 0.0), "cosine with a zero vector is 0"
+    assert ix.search([0.0, 0.0], 2)[0][1] == 0.0
+    for fn in [lambda: ix.add("bad", [1.0]), lambda: ix.search([1.0, 2.0, 3.0], 1), lambda: ix.add("e", [])]:
+        try:
+            fn()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError
+  hidden: true
+  tags:
+  - invalid
+  - single
+- name: 15k vectors x 32 dims, 20 queries
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    import random
+    rng = random.Random(8)
+    ix = EmbeddingIndex()
+    vecs = [[rng.gauss(0, 1) for _ in range(32)] for _ in range(15000)]
+    for i, v in enumerate(vecs):
+        ix.add(i, v)
+    for _ in range(20):
+        q = vecs[rng.randrange(15000)]
+        r = ix.search(q, 5)
+        assert r[0][1] > 0.999999 and r[0][1] >= r[1][1] >= r[4][1]
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: add
+  time: O(d)
+  space: O(N * d)
+- op: search
+  time: O(N * d + N log k)
+  space: O(N)
+extensions:
+- q: 'Level 2: add a `min_score` threshold and a metadata filter predicate to search(). Where should the
+    filter run?'
+  kind: code
+  key_points:
+  - Filter before scoring so rejected items cost nothing; pre-filter vs post-filter changes result count
+    when k items must be returned
+  - With post-filtering you may need to over-fetch (k * factor) and retry
+  - Keep tie-breaking identical so results stay deterministic
+- q: When does brute force stop being acceptable, and what replaces it in a retrieval service?
+  kind: design
+  key_points:
+  - Cost is O(N * d) per query; at millions of vectors latency and memory bandwidth dominate
+  - Approximate indexes (HNSW graphs, IVF with product quantisation) trade a little recall for orders
+    of magnitude speed
+  - Keep the exact search as the ground truth to measure recall@k and to rerank the shortlist
+- q: Why store normalised vectors, and when are dot product and cosine equivalent?
+  kind: reasoning
+  key_points:
+  - For unit vectors dot product equals cosine, so one pass of multiply-adds suffices
+  - Many embedding models output normalised vectors already; check rather than assume
+  - Euclidean distance on unit vectors is a monotone function of cosine (|a-b|^2 = 2 - 2 cos)
+- q: Cost of a query and how heap selection compares to a full sort.
+  kind: complexity
+  key_points:
+  - Scoring is O(N * d); selecting the top k with a heap is O(N log k) versus O(N log N) for a full sort
+  - Insertion is O(d) because of the one-off normalisation
+  - Space is O(N * d) for the vectors plus O(N) per query for scores
+narration: []
+state_aloud:
+- Cosine ignores magnitude; zero vectors give 0.0 by definition here.
+- Dimension mismatch is an error, including for the query.
+- Replace keeps position; remove + add moves to the end.
+- Ties resolve by insertion order.
+- k bigger than N returns everything; k <= 0 returns nothing.
+walkthrough: |
+  Vectors are normalised once at insertion, so cosine reduces to a dot product with the normalised query. Each item keeps an insertion order number so ties are deterministic and replacement keeps position. search scores every item, builds (-score, order, id) tuples and uses heapq.nsmallest to return the top k without a full sort. Zero vectors are stored as None and score 0.0. Standard exact nearest-neighbour baseline; no source note applies.
+categories:
+- ai-infra

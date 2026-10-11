@@ -1,0 +1,131 @@
+id: doubly-linked-list
+title: Doubly linked list with sentinels
+bar_level: 1
+target_minutes: 15
+patterns: [linked-list, sentinel-nodes, lru-substrate]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:3 - *"'
+statement: |
+  Implement `DoublyLinkedList` using sentinel head and tail nodes (the nodes you hand back
+  expose `.val`). Required API, all O(1):
+  `push_front(val)` and `push_back(val)` (both return the new node),
+  `remove(node)` (unlink a node given only the reference),
+  `move_to_front(node)` (node must already be in the list), and `to_list()` (values front to back).
+  This is the substrate for an LRU cache.
+starter: |
+  class DNode:
+      def __init__(self, val, prev=None, next=None):
+          pass
+
+  class DoublyLinkedList:
+      def __init__(self):
+          pass
+hints:
+  - Sentinels mean every real node always has non-null prev and next, so no boundary branches.
+  - Write one helper that inserts a node after a given anchor; push_front, push_back and move_to_front all reuse it.
+follow_ups:
+  - Why sentinels instead of nullable head/tail?
+  - Now build an LRU cache on top of this.
+  - What if two threads call remove on the same node concurrently?
+  - What is the space overhead versus a singly linked list?
+tests:
+  - name: push front and back
+    tags: [ordering]
+    code: |
+      d = DoublyLinkedList()
+      d.push_back(2); d.push_front(1); d.push_back(3)
+      assert d.to_list() == [1, 2, 3]
+  - name: remove by reference
+    tags: [empty, state-reuse, boundary]
+    code: |
+      d = DoublyLinkedList()
+      a = d.push_back("a"); b = d.push_back("b"); c = d.push_back("c")
+      d.remove(b)
+      assert d.to_list() == ["a", "c"]
+      d.remove(a); d.remove(c)
+      assert d.to_list() == []
+      d.push_back("x")
+      assert d.to_list() == ["x"]
+  - name: move to front
+    tags: [ordering, boundary, duplicate]
+    code: |
+      d = DoublyLinkedList()
+      a = d.push_back(1); b = d.push_back(2); c = d.push_back(3)
+      d.move_to_front(c)
+      assert d.to_list() == [3, 1, 2]
+      d.move_to_front(c)
+      assert d.to_list() == [3, 1, 2]
+      d.move_to_front(b)
+      assert d.to_list() == [2, 3, 1]
+  - name: nodes carry values and survive churn
+    tags: [scale, state-reuse]
+    hidden: true
+    code: |
+      d = DoublyLinkedList()
+      nodes = [d.push_front(i) for i in range(50)]
+      assert nodes[7].val == 7
+      for n in nodes[::2]: d.remove(n)
+      assert d.to_list() == [i for i in range(49, -1, -1) if i % 2 == 1]
+  - name: single node operations
+    tags: [single, boundary, empty]
+    hidden: true
+    code: |
+      d = DoublyLinkedList()
+      n = d.push_front(1)
+      d.move_to_front(n)
+      assert d.to_list() == [1]
+      d.remove(n)
+      assert d.to_list() == []
+      m = d.push_back(2)
+      assert d.to_list() == [2] and m.val == 2
+complexity:
+- op: push_front/push_back
+  time: O(1)
+  space: O(n)
+- op: remove/move_to_front (given node)
+  time: O(1)
+  space: O(n)
+- op: search by value
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why sentinels instead of nullable head and tail?
+  kind: reasoning
+  key_points:
+  - Every real node always has non-null prev and next
+  - Removes boundary branches in insert and delete
+  - Empty list is head.next is tail; removing the only node relinks the sentinels
+- q: What is the space overhead versus a singly linked list, and why pay it?
+  kind: complexity
+  key_points:
+  - One extra prev pointer per node
+  - Buys O(1) removal given only the node (no predecessor walk) and backward traversal
+  - Search by value is still O(n)
+- q: What if two threads call remove on the same node concurrently?
+  kind: design
+  key_points:
+  - Unlocked unlink corrupts neighbors or double-removes
+  - Use a lock per list (or per bucket/shard if backing a sharded cache)
+  - 'Define behavior for double-removal: guard with an in-list flag or document as undefined'
+- q: Build an LRU cache on top of this.
+  kind: design
+  key_points:
+  - Hash map key to node plus this list ordered by recency
+  - get does move_to_front; put inserts at front and evicts the node before the tail sentinel
+  - All O(1)
+  - Node must store its key so eviction can delete the map entry
+narration:
+- I'll use sentinel head and tail nodes so insert/delete never need null-checks.
+- '[silent] mostly silent while writing insert/remove'
+- The key property here is remove is O(1) given a node reference — no traversal — because each node knows its own neighbors.
+- This is exactly the structure an LRU cache needs, paired with a hash map for O(1) lookup.
+state_aloud:
+- 'Empty list: with sentinels, `head.next is tail` — no null-checks needed, but state this design choice explicitly.'
+- 'Removing the only real node: both sentinels should re-link to each other.'
+- Removing head-adjacent or tail-adjacent node (boundary neighbors).
+- Moving a node that's already at the front (should be a safe no-op, not corrupt pointers).
+- Double-removal of the same node reference (guard or document as undefined, interviewer's call).
+walkthrough: |
+  Sentinel head and tail nodes mean every real node always has non-null `prev` and `next`, so insert and remove never need boundary null-checks. Removal is O(1) given a node reference because each node knows its own neighbors, with no traversal needed. The cost is one extra pointer per node versus a singly linked list. The invariant is that an empty list has `head.next is tail`, and removing the only real node re-links the sentinels to each other. This is the structure an LRU cache pairs with a hash map.
+categories: [leetcode, trading, ai-infra, systems-impl]

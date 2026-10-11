@@ -1,0 +1,208 @@
+id: temporal-ledger-asof-balance
+title: Ledger with As-of Balance Queries
+bar_level: 3
+target_minutes: 35
+patterns:
+- prefix-sum
+- binary-search
+- sorted-list
+- lazy-rebuild
+- bitemporal
+firm_tags:
+- distsys
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `Ledger`, an append-mostly account ledger that answers historical balance queries.
+  Amounts are signed integers in minor units (credits positive, debits negative). Timestamps are integers.
+
+  * `post(account, amount, ts, entry_id)` records an entry effective at `ts` and returns `True`. Entries may
+    arrive out of order (a backdated entry has a `ts` earlier than entries already posted). If `entry_id` was
+    already posted (and not voided), do nothing and return `False` (idempotent ingestion).
+    A voided id may be posted again.
+  * `void(entry_id)` removes that entry's effect retroactively and returns `True`; unknown or already voided
+    ids return `False`.
+  * `balance_as_of(account, ts)` returns the sum of all live entries of the account with `entry.ts <= ts`
+    (inclusive). Unknown accounts have balance 0.
+  * `net_change(account, start, end)` returns the sum of live entries with `start < entry.ts <= end`
+    (half-open on the left so adjacent windows never double count). `end < start` raises `ValueError`.
+
+  Entries with equal timestamps are all included or all excluded together. Queries must stay fast when
+  there are hundreds of thousands of entries interleaved with queries.
+starter: |
+  class Ledger:
+      def __init__(self):
+          pass
+
+      def post(self, account, amount, ts, entry_id):
+          pass
+
+      def void(self, entry_id):
+          pass
+
+      def balance_as_of(self, account, ts):
+          pass
+
+      def net_change(self, account, start, end):
+          pass
+hints:
+- Per account keep entries sorted by timestamp plus a prefix-sum array; bisect_right on timestamps gives
+  the as-of index.
+- In-order appends can extend the prefix array incrementally; a backdated entry or a void only marks the
+  account dirty and the prefix array is rebuilt on the next query.
+- Keep an entry_id -> (account, ts, amount) map for idempotent posting and for void.
+follow_ups:
+- How would you answer queries in O(log n) even with frequent backdated inserts (Fenwick tree, balanced
+  tree)?
+- What is the difference between valid time and transaction (system) time, and how do you query 'what
+  did we believe on date X'?
+- Why should a ledger void by adding a reversing entry instead of deleting?
+tests:
+- name: as-of is inclusive and cumulative
+  tags:
+  - boundary
+  - time
+  code: |
+    L = Ledger()
+    L.post("a", 100, 10, "e1")
+    L.post("a", -30, 20, "e2")
+    L.post("a", 5, 20, "e3")
+    L.post("b", 7, 15, "e4")
+    assert L.balance_as_of("a", 9) == 0
+    assert L.balance_as_of("a", 10) == 100
+    assert L.balance_as_of("a", 19) == 100
+    assert L.balance_as_of("a", 20) == 75, "both entries at ts=20 included"
+    assert L.balance_as_of("a", 10**9) == 75 and L.balance_as_of("b", 15) == 7
+- name: unknown account and empty ledger
+  tags:
+  - empty
+  - single
+  code: |
+    L = Ledger()
+    assert L.balance_as_of("x", 100) == 0
+    assert L.net_change("x", 0, 100) == 0
+    L.post("a", 1, 5, "e")
+    assert L.balance_as_of("x", 100) == 0
+- name: backdated entries change later balances
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    L = Ledger()
+    L.post("a", 100, 10, "e1")
+    L.post("a", 50, 30, "e2")
+    assert L.balance_as_of("a", 20) == 100
+    L.post("a", 25, 15, "late")
+    assert L.balance_as_of("a", 12) == 100
+    assert L.balance_as_of("a", 20) == 125
+    assert L.balance_as_of("a", 30) == 175
+    L.post("a", -5, 5, "later")
+    assert L.balance_as_of("a", 7) == -5 and L.balance_as_of("a", 30) == 170
+- name: idempotent posting and void
+  tags:
+  - duplicate
+  - invalid
+  code: |
+    L = Ledger()
+    assert L.post("a", 100, 1, "e1") is True
+    assert L.post("a", 100, 1, "e1") is False
+    assert L.post("a", 999, 2, "e1") is False, "same id is ignored even with different data"
+    assert L.balance_as_of("a", 5) == 100
+    assert L.void("e1") is True and L.void("e1") is False and L.void("zzz") is False
+    assert L.balance_as_of("a", 5) == 0
+    assert L.post("a", 40, 3, "e1") is True, "voided ids may be reposted"
+    assert L.balance_as_of("a", 5) == 40
+- name: net change windows are half open
+  tags:
+  - boundary
+  - invalid
+  hidden: true
+  code: |
+    L = Ledger()
+    for i, ts in enumerate([10, 20, 30]):
+        L.post("a", 10 * (i + 1), ts, "e%d" % i)
+    assert L.net_change("a", 10, 20) == 20
+    assert L.net_change("a", 9, 20) == 30
+    assert L.net_change("a", 10, 30) + L.net_change("a", 0, 10) == 60
+    assert L.net_change("a", 30, 30) == 0
+    try:
+        L.net_change("a", 5, 4)
+        assert False
+    except ValueError:
+        pass
+- name: void removes the right entry among equal timestamps
+  tags:
+  - duplicate
+  - ordering
+  hidden: true
+  code: |
+    L = Ledger()
+    L.post("a", 10, 5, "x")
+    L.post("a", 10, 5, "y")
+    L.post("a", 3, 5, "z")
+    assert L.void("y") is True
+    assert L.balance_as_of("a", 5) == 13
+    assert L.void("x") is True and L.void("z") is True
+    assert L.balance_as_of("a", 5) == 0
+- name: hundreds of thousands of posts with interleaved queries
+  tags:
+  - scale
+  hidden: true
+  code: |
+    L = Ledger()
+    n = 300000
+    total = 0
+    for i in range(n):
+        L.post("a", i % 13 - 6, i, i)
+        total += i % 13 - 6
+        if i % 3 == 0:
+            assert L.balance_as_of("a", i) == total
+    for k in range(1, 40):
+        ts = k * 7000 + 0
+        L.post("a", 1000, ts - 5, "back%d" % k)
+        total += 1000
+    assert L.balance_as_of("a", n) == total
+    assert L.balance_as_of("a", 100) == sum(i % 13 - 6 for i in range(101))
+complexity:
+- op: post (in order)
+  time: O(1) amortized
+  space: O(n)
+- op: balance_as_of
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: 'Level 2: make backdated posts cheap with a Fenwick tree over a pre-agreed timestamp grid (e.g. days).'
+  kind: code
+  key_points:
+  - Index entries by coarse time bucket and keep per-bucket Fenwick for prefix sums
+  - Point update O(log B) on backdated post or void instead of O(n) rebuild
+  - Finer-grained within-bucket lookups still need a sorted structure
+- q: 'Level 3: add bitemporal queries: balance_as_of(account, valid_ts, known_at) given each entry also
+    has a recorded_at time.'
+  kind: code
+  key_points:
+  - Store (valid_ts, recorded_at) on every entry; voids get their own recorded_at
+  - Filter entries with recorded_at <= known_at before summing
+  - Reproducing a historical report exactly requires never mutating or deleting entries
+- q: How does a real ledger handle corrections and audits?
+  kind: design
+  key_points:
+  - 'Append-only: corrections are reversing entries, never deletes'
+  - Periodic snapshots (balance checkpoints) bound the replay length for as-of queries
+  - Idempotency on entry_id makes redelivery from upstream safe
+- q: What are the worst cases of the lazy-rebuild approach?
+  kind: complexity
+  key_points:
+  - Alternating a backdated post and a query forces an O(n) rebuild each time, so O(n^2) worst case
+  - A Fenwick or balanced tree makes both operations O(log n)
+  - In-order posting (the common case) is O(1) amortised and queries are O(log n) via bisect
+narration: []
+state_aloud:
+- Signed integer cents; as-of is inclusive of the query timestamp, windows are (start, end].
+- 'Backdated entries are normal in finance: I must not assume timestamps arrive sorted.'
+- Entry ids make ingestion idempotent; void is retroactive and a voided id can be reused.
+- 'Equal timestamps: all included or none, so bisect_right on timestamps is the right bound.'
+- Naive sum over all entries per query is O(n) per query and will not survive the scale test.
+walkthrough: |
+  Per account: a sorted list of timestamps, a parallel list of amounts and a prefix-sum list, plus a dirty flag. A post whose ts is >= the last timestamp appends and extends the prefix array when clean; otherwise it inserts with bisect.insort and marks the account dirty. Queries rebuild the prefix array when dirty, then bisect_right on timestamps and read the prefix. void finds the entry by locating (ts, entry_id) in a parallel id list and deleting it. Standard formulation of the as-of ledger screen (no source doc).

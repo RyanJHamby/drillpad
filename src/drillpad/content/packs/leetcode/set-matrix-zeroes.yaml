@@ -1,0 +1,153 @@
+id: set-matrix-zeroes
+title: Set Matrix Zeroes
+bar_level: 2
+target_minutes: 25
+patterns:
+- matrix-simulation
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Given an `m x n` integer matrix, whenever a cell is `0` set its entire row and column to `0`. Modify `matrix` **in place** and return `None`. Only the zeros present in the original matrix cause zeroing; zeros you create do not cascade.
+
+  Example: `[[1,1,1],[1,0,1],[1,1,1]]` becomes `[[1,0,1],[0,0,0],[1,0,1]]`.
+starter: |
+  def set_zeroes(matrix):
+      pass
+hints:
+- If you zero a row immediately while scanning, new zeros look like original ones. Separate finding from applying.
+- Record which rows and columns contain a zero (two sets or boolean arrays), then apply in a second pass.
+- For O(1) extra space, use the first row and first column as the markers, with two flags remembering whether they themselves had zeros.
+follow_ups:
+- Do it in O(1) extra space.
+- What if the matrix is sparse and huge?
+tests:
+- name: single zero in the middle
+  tags:
+  - boundary
+  code: |
+    m=[[1,1,1],[1,0,1],[1,1,1]]
+    assert set_zeroes(m) is None
+    assert m==[[1,0,1],[0,0,0],[1,0,1]]
+- name: zeros in two places
+  tags:
+  - duplicate
+  code: |
+    m=[[0,1,2,0],[3,4,5,2],[1,3,1,5]]
+    set_zeroes(m)
+    assert m==[[0,0,0,0],[0,4,5,0],[0,3,1,0]]
+- name: no zeros
+  tags:
+  - boundary
+  code: |
+    m=[[1,2],[3,4]]
+    set_zeroes(m)
+    assert m==[[1,2],[3,4]]
+    m=[[1,0],[3,4]]
+    set_zeroes(m)
+    assert m==[[0,0],[3,0]]
+- name: empty
+  tags:
+  - empty
+  code: |
+    m=[]
+    set_zeroes(m)
+    assert m==[]
+    m=[[0,1]]
+    set_zeroes(m)
+    assert m==[[0,0]]
+- name: single cell
+  tags:
+  - single
+  code: |
+    m=[[0]]
+    set_zeroes(m)
+    assert m==[[0]]
+    m=[[3]]
+    set_zeroes(m)
+    assert m==[[3]]
+    m=[[3,0]]
+    set_zeroes(m)
+    assert m==[[0,0]]
+- name: zero in first row and column markers
+  tags:
+  - ordering
+  code: |
+    m=[[1,2,3],[4,0,6],[0,8,9]]
+    set_zeroes(m)
+    assert m==[[0,0,3],[0,0,0],[0,0,0]]
+  hidden: true
+- name: zero only in first row or first column
+  tags:
+  - boundary
+  code: |
+    m=[[1,0,3],[4,5,6]]
+    set_zeroes(m)
+    assert m==[[0,0,0],[4,0,6]]
+    m=[[1,2],[0,4],[5,6]]
+    set_zeroes(m)
+    assert m==[[0,2],[0,0],[0,6]]
+  hidden: true
+- name: negative values and cascade check
+  tags:
+  - invalid
+  code: |
+    m=[[-1,0],[2,-3]]
+    set_zeroes(m)
+    assert m==[[0,0],[2,0]]
+    m=[[0,1,1],[1,1,1]]
+    set_zeroes(m)
+    assert m==[[0,0,0],[0,1,1]]
+  hidden: true
+- name: large matrix
+  tags:
+  - scale
+  code: |
+    r, c = 1500, 1500
+    m = [[1] * c for _ in range(r)]
+    m[3][7] = 0
+    m[900][1400] = 0
+    set_zeroes(m)
+    for i in (0, 3, 900, 1499):
+        for j in (0, 7, 1400, 1499):
+            assert m[i][j] == (0 if i in (3, 900) or j in (7, 1400) else 1)
+    assert sum(map(sum, m)) == (r - 2) * (c - 2)
+  hidden: true
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(1)
+extensions:
+- q: Why can't you zero rows immediately while scanning?
+  kind: reasoning
+  key_points:
+  - Newly written zeros are indistinguishable from original zeros
+  - That cascades and zeroes far more than asked
+  - So record first, apply second, or mark with a sentinel
+- q: Space-time trade-offs of the three approaches.
+  kind: complexity
+  key_points:
+  - 'Copy of the matrix: O(m*n) space'
+  - 'Row and column flag arrays: O(m + n) space'
+  - 'First row/column as markers: O(1) extra space, still O(m*n) time'
+- q: Explain the O(1) marker approach and its pitfall.
+  kind: design
+  key_points:
+  - Use row 0 and column 0 to store 'this column/row has a zero'
+  - Pre-compute whether row 0 and column 0 originally had zeros and fix them last
+  - Applying markers to the first row/column too early corrupts the markers
+- q: Huge sparse matrix stored as coordinates.
+  kind: design
+  key_points:
+  - Store only the zero coordinates, collect distinct rows and columns
+  - Output as implicit set 'rows R and columns C are zero' instead of materialising
+  - Time O(z) for z zeros
+narration: []
+state_aloud:
+- In place, return None.
+- Zeros created by the operation must not cascade.
+- Empty matrix and single cell.
+walkthrough: |
+  First pass: collect which rows and columns contain an original zero. Second pass: zero every cell whose row or column is in those sets. Separating finding from applying prevents newly written zeros from cascading. This uses O(m + n) extra space; the first-row/column marker trick can reduce it to O(1).

@@ -1,0 +1,101 @@
+id: plus-one
+title: Plus One
+bar_level: 1
+target_minutes: 12
+patterns:
+- math
+- matrix-simulation
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  A non-negative integer is stored as a list of decimal `digits`, most significant digit first (no leading zeros except the number `0` itself, stored as `[0]`). Return the digits of that number plus one, as a new list. Do not convert the whole list to an integer.
+
+  Example: `plus_one([1,2,9])` returns `[1,3,0]`; `plus_one([9,9])` returns `[1,0,0]`.
+starter: |
+  def plus_one(digits):
+      pass
+hints:
+- Add one at the last digit and propagate a carry leftwards.
+- A digit less than 9 simply increments and you are done; a 9 becomes 0 and the carry continues.
+- If the carry survives past the first digit, prepend a 1.
+follow_ups:
+- Add an arbitrary non-negative integer k given as digits.
+- Mutate in place when possible.
+tests:
+- name: no carry
+  tags:
+  - boundary
+  code: |
+    assert plus_one([1,2,3]) == [1,2,4]
+- name: carry chain
+  tags:
+  - boundary
+  code: |
+    assert plus_one([1,2,9]) == [1,3,0]
+    assert plus_one([1,9,9]) == [2,0,0]
+- name: all nines grows a digit
+  tags:
+  - boundary
+  code: |
+    assert plus_one([9,9,9]) == [1,0,0,0]
+    assert plus_one([9]) == [1,0]
+- name: zero
+  tags:
+  - single
+  code: |
+    assert plus_one([0]) == [1]
+- name: empty is treated as zero
+  tags:
+  - empty
+  code: |
+    assert plus_one([]) == [1]
+  hidden: true
+- name: input not mutated
+  tags:
+  - state-reuse
+  code: |
+    a=[1,9]
+    assert plus_one(a)==[2,0]
+    assert a==[1,9]
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 200000
+    assert plus_one([9] * n) == [1] + [0] * n
+    assert plus_one([1] + [9] * n) == [2] + [0] * n
+    assert plus_one([4] * n) == [4] * (n - 1) + [5]
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why is converting to int and back a bad answer?
+  kind: reasoning
+  key_points:
+  - Digit lists may be longer than machine words, so fixed-width ints overflow
+  - Even with bignums the conversion is superlinear for very long inputs
+  - The carry loop is linear and works in any language
+- q: Time and space, including the worst case.
+  kind: complexity
+  key_points:
+  - 'Worst case all nines: O(n) time and an extra digit'
+  - Typical case stops at the first non-nine, amortised O(1)
+  - A new list is O(n) space; in-place is O(1) except the all-nines case
+- q: Generalise to adding two digit lists.
+  kind: design
+  key_points:
+  - Walk both lists from the least significant end with a carry
+  - Pad the shorter or stop when both exhausted and carry is 0
+  - O(max(n, m)) time and space
+narration: []
+state_aloud:
+- All nines.
+- Input [0].
+- Do not mutate the caller's list.
+walkthrough: |
+  Copy the digits and walk from the least significant end. A digit below 9 is incremented and we return immediately; a 9 becomes 0 and the carry moves left. If every digit was 9 the loop finishes with all zeros, so prepend a 1.

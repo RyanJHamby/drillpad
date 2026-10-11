@@ -1,0 +1,349 @@
+id: rate-limited-api-client
+title: Rate-limited API Client with Pagination
+bar_level: 2
+target_minutes: 25
+patterns:
+- pagination
+- retry
+- exponential-backoff
+- dedupe
+- injected-clock
+firm_tags:
+- distsys
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Write `fetch_all(call, sleep, max_retries=5, base_delay=1, max_delay=30)`, a client that downloads every
+  item from a paginated, rate-limited HTTP API. Both the transport and the clock are injected so tests are
+  deterministic and instant.
+
+  * `call(cursor)` performs one request and returns `(status, body)`. The first request uses `cursor=None`.
+    * `status == 200`: `body = {"items": [ {"id": ..., ...}, ...], "next": cursor_or_None}`.
+    * `status == 429` (rate limited): `body = {"retry_after": seconds}` (the key may be missing).
+    * `status` in 500-599: transient server error (body ignored).
+    * any other status (e.g. 400, 401, 404): permanent error.
+  * `sleep(seconds)` waits; the client calls it instead of `time.sleep`.
+  * Walk the pages by following `next` until it is `None`. Return all items in order, de-duplicated by their
+    `"id"` (first occurrence wins), because retries and moving cursors can repeat items across pages.
+  * Retry rules: a 429 or 5xx response is retried for the SAME cursor. Count consecutive failures for the
+    current page; the counter resets after any success. If the counter exceeds `max_retries` raise `ApiError`.
+    Wait before each retry: for 429 with an int `retry_after >= 0`, sleep exactly `retry_after`; otherwise
+    (5xx, or 429 without it) sleep `min(max_delay, base_delay * 2 ** (failures - 1))` where `failures` is the
+    count including this one.
+  * A permanent error status raises `ApiError` immediately (no sleep, no retry).
+  * If a `next` cursor equals one that was already requested, raise `ApiError` (cursor loop) instead of
+    looping forever.
+
+  `ApiError` is an `Exception` subclass defined by you.
+starter: |
+  class ApiError(Exception):
+      pass
+
+
+  def fetch_all(call, sleep, max_retries=5, base_delay=1, max_delay=30):
+      pass
+hints:
+- Structure it as an outer loop over pages and an inner retry loop for one page; keep the failure counter
+  local to the page.
+- Keep a set of seen ids for deduping and a set of requested cursors for loop detection; append to one
+  result list instead of concatenating lists.
+- Distinguish retryable (429, 5xx) from permanent (other 4xx) before writing the retry loop; honour retry_after
+  exactly when it is given.
+follow_ups:
+- Add jitter to the backoff. Why does it matter when many clients share a limit?
+- How would you pace requests proactively (token bucket) to avoid ever receiving a 429?
+- How do you resume after a crash halfway through a long export?
+tests:
+- name: follows cursors and returns items in order
+  tags:
+  - ordering
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ApiError:
+            return True
+        return False
+
+    def make_api(pages, script=None):
+        # pages: {cursor: (items, next)}; script: {cursor: [responses to return first]}
+        calls = []
+        script = {k: list(v) for k, v in (script or {}).items()}
+        def call(cursor):
+            calls.append(cursor)
+            if script.get(cursor):
+                return script[cursor].pop(0)
+            items, nxt = pages[cursor]
+            return 200, {"items": items, "next": nxt}
+        return call, calls
+
+    pages = {None: ([{"id": 1}, {"id": 2}], "p2"), "p2": ([{"id": 3}], "p3"), "p3": ([{"id": 4}], None)}
+    call, calls = make_api(pages)
+    sleeps = []
+    out = fetch_all(call, sleeps.append)
+    assert [x["id"] for x in out] == [1, 2, 3, 4]
+    assert calls == [None, "p2", "p3"] and sleeps == []
+- name: dedupes ids across pages, first wins
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ApiError:
+            return True
+        return False
+
+    def make_api(pages, script=None):
+        # pages: {cursor: (items, next)}; script: {cursor: [responses to return first]}
+        calls = []
+        script = {k: list(v) for k, v in (script or {}).items()}
+        def call(cursor):
+            calls.append(cursor)
+            if script.get(cursor):
+                return script[cursor].pop(0)
+            items, nxt = pages[cursor]
+            return 200, {"items": items, "next": nxt}
+        return call, calls
+
+    pages = {None: ([{"id": 1, "v": "a"}, {"id": 2}], "n"), "n": ([{"id": 2, "v": "dup"}, {"id": 3}, {"id": 1, "v": "dup"}], None)}
+    call, _ = make_api(pages)
+    out = fetch_all(call, lambda s: None)
+    assert out == [{"id": 1, "v": "a"}, {"id": 2}, {"id": 3}]
+- name: 429 honours retry_after and 5xx backs off exponentially
+  tags:
+  - time
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ApiError:
+            return True
+        return False
+
+    def make_api(pages, script=None):
+        # pages: {cursor: (items, next)}; script: {cursor: [responses to return first]}
+        calls = []
+        script = {k: list(v) for k, v in (script or {}).items()}
+        def call(cursor):
+            calls.append(cursor)
+            if script.get(cursor):
+                return script[cursor].pop(0)
+            items, nxt = pages[cursor]
+            return 200, {"items": items, "next": nxt}
+        return call, calls
+
+    pages = {None: ([{"id": 1}], None)}
+    script = {None: [(429, {"retry_after": 7}), (503, {}), (500, {}), (429, {}), (200, {"items": [{"id": 1}], "next": None})]}
+    call, calls = make_api(pages, script)
+    sleeps = []
+    out = fetch_all(call, sleeps.append, base_delay=2, max_delay=10)
+    assert out == [{"id": 1}]
+    assert sleeps == [7, 4, 8, 10], "retry_after exact; then 2*2**1, 2*2**2, capped at 10"
+    assert len(calls) == 5
+- name: failure counter resets after a success
+  tags:
+  - state-reuse
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ApiError:
+            return True
+        return False
+
+    def make_api(pages, script=None):
+        # pages: {cursor: (items, next)}; script: {cursor: [responses to return first]}
+        calls = []
+        script = {k: list(v) for k, v in (script or {}).items()}
+        def call(cursor):
+            calls.append(cursor)
+            if script.get(cursor):
+                return script[cursor].pop(0)
+            items, nxt = pages[cursor]
+            return 200, {"items": items, "next": nxt}
+        return call, calls
+
+    pages = {None: ([{"id": 1}], "b"), "b": ([{"id": 2}], None)}
+    script = {None: [(500, {}), (500, {})], "b": [(500, {}), (500, {})]}
+    call, _ = make_api(pages, script)
+    sleeps = []
+    out = fetch_all(call, sleeps.append, max_retries=2, base_delay=1)
+    assert [x["id"] for x in out] == [1, 2]
+    assert sleeps == [1, 2, 1, 2], "each page may fail max_retries times"
+- name: gives up after max_retries and on permanent errors
+  tags:
+  - invalid
+  - zero-capacity
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ApiError:
+            return True
+        return False
+
+    def make_api(pages, script=None):
+        # pages: {cursor: (items, next)}; script: {cursor: [responses to return first]}
+        calls = []
+        script = {k: list(v) for k, v in (script or {}).items()}
+        def call(cursor):
+            calls.append(cursor)
+            if script.get(cursor):
+                return script[cursor].pop(0)
+            items, nxt = pages[cursor]
+            return 200, {"items": items, "next": nxt}
+        return call, calls
+
+    call, calls = make_api({None: ([], None)}, {None: [(500, {})] * 10})
+    sleeps = []
+    assert raises(fetch_all, call, sleeps.append, max_retries=3, base_delay=1)
+    assert len(calls) == 4 and sleeps == [1, 2, 4], "1 try + 3 retries; no sleep after giving up"
+    call2, calls2 = make_api({None: ([], None)}, {None: [(404, {})]})
+    s2 = []
+    assert raises(fetch_all, call2, s2.append)
+    assert calls2 == [None] and s2 == []
+    call3, _ = make_api({None: ([], None)}, {None: [(401, {})]})
+    assert raises(fetch_all, call3, lambda s: None)
+- name: cursor loops and empty results
+  tags:
+  - empty
+  - invalid
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ApiError:
+            return True
+        return False
+
+    def make_api(pages, script=None):
+        # pages: {cursor: (items, next)}; script: {cursor: [responses to return first]}
+        calls = []
+        script = {k: list(v) for k, v in (script or {}).items()}
+        def call(cursor):
+            calls.append(cursor)
+            if script.get(cursor):
+                return script[cursor].pop(0)
+            items, nxt = pages[cursor]
+            return 200, {"items": items, "next": nxt}
+        return call, calls
+
+    call, _ = make_api({None: ([{"id": 1}], "a"), "a": ([{"id": 2}], "a")})
+    assert raises(fetch_all, call, lambda s: None)
+    call2, _ = make_api({None: ([], None)})
+    assert fetch_all(call2, lambda s: None) == []
+    call3, calls3 = make_api({None: ([{"id": 1}], None)}, {None: [(500, {})]})
+    assert fetch_all(call3, lambda s: None, max_retries=0 + 1) == [{"id": 1}]
+    call4, _ = make_api({None: ([], None)}, {None: [(500, {})]})
+    assert raises(fetch_all, call4, lambda s: None, max_retries=0)
+- name: malformed retry_after falls back to backoff
+  tags:
+  - invalid
+  - time
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ApiError:
+            return True
+        return False
+
+    def make_api(pages, script=None):
+        # pages: {cursor: (items, next)}; script: {cursor: [responses to return first]}
+        calls = []
+        script = {k: list(v) for k, v in (script or {}).items()}
+        def call(cursor):
+            calls.append(cursor)
+            if script.get(cursor):
+                return script[cursor].pop(0)
+            items, nxt = pages[cursor]
+            return 200, {"items": items, "next": nxt}
+        return call, calls
+
+    script = {None: [(429, {"retry_after": "soon"}), (429, {"retry_after": -1}), (429, {"retry_after": 0}), (200, {"items": [], "next": None})]}
+    call, _ = make_api({None: ([], None)}, script)
+    sleeps = []
+    fetch_all(call, sleeps.append, base_delay=3)
+    assert sleeps == [3, 6, 0]
+- name: thousands of pages
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ApiError:
+            return True
+        return False
+
+    def make_api(pages, script=None):
+        # pages: {cursor: (items, next)}; script: {cursor: [responses to return first]}
+        calls = []
+        script = {k: list(v) for k, v in (script or {}).items()}
+        def call(cursor):
+            calls.append(cursor)
+            if script.get(cursor):
+                return script[cursor].pop(0)
+            items, nxt = pages[cursor]
+            return 200, {"items": items, "next": nxt}
+        return call, calls
+
+    pages = {}
+    per = 100
+    npages = 4000
+    for p in range(npages):
+        cur = None if p == 0 else "c%d" % p
+        nxt = None if p == npages - 1 else "c%d" % (p + 1)
+        pages[cur] = ([{"id": p * 95 + i} for i in range(per)], nxt)
+    call, _ = make_api(pages)
+    out = fetch_all(call, lambda s: None)
+    assert len(out) == 95 * (npages - 1) + 100
+    assert out[0]["id"] == 0 and out[-1]["id"] == 95 * (npages - 1) + 99
+complexity:
+- op: fetch_all
+  time: O(n + p)
+  space: O(n)
+extensions:
+- q: 'Level 2: add proactive pacing: at most R requests per W seconds using an injected clock, so 429s
+    are rare.'
+  kind: code
+  key_points:
+  - Token bucket or sliding window of request timestamps with the injected now()
+  - Sleep only the shortfall, not a fixed interval
+  - A 429 should also reduce the client's pace (adaptive)
+- q: 'Level 3: make it a generator that yields pages lazily and can resume from a saved cursor.'
+  kind: code
+  key_points:
+  - Expose (items, next_cursor) per page and let the caller persist next_cursor
+  - Dedupe state must survive a resume (persist ids or rely on idempotent downstream writes)
+  - Retry logic stays inside the generator so consumers never see transient errors
+- q: How does this client behave well in a fleet of many workers sharing one API quota?
+  kind: design
+  key_points:
+  - Full jitter on backoff to avoid thundering herds when the limit resets
+  - Central or per-worker token buckets and a shared retry budget
+  - Respect Retry-After, treat 5xx and 429 differently, and cap total elapsed time with a deadline
+- q: What is the cost and where would a naive version blow up?
+  kind: complexity
+  key_points:
+  - Time O(n + p) for n items and p pages; set lookups for dedupe are O(1)
+  - Space O(n) for results and ids; using `in list` for dedupe or list concatenation per page is O(n^2)
+  - Retries add at most max_retries extra calls per page
+narration: []
+state_aloud:
+- 'Classify errors first: 429 and 5xx are retryable, other 4xx are permanent and must fail fast.'
+- Retry the SAME cursor; the failure counter is per page and resets on success.
+- Respect retry_after exactly when valid; otherwise capped exponential backoff.
+- Dedupe by id because retries and shifting cursors repeat items; guard against cursor loops.
+- Sleep and transport are injected so I can test without real time.
+walkthrough: |
+  Outer while loop requests the current cursor; an inner loop calls the API, handling 200 (extend results, dedupe by id with a set, advance the cursor, detect repeated cursors), 429 and 5xx (increment the page's failure counter, raise ApiError when it exceeds max_retries, sleep retry_after or capped exponential backoff, then retry the same cursor) and any other status (raise). Results go into a single list and a set of seen ids so cost is linear. Source: standard formulation.

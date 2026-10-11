@@ -1,0 +1,100 @@
+id: binary-search
+title: Binary Search
+bar_level: 1
+target_minutes: 10
+patterns:
+- binary-search
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Binary Search (LC 704)"
+statement: |
+  `nums` is sorted in ascending order with distinct values. Return the index of `target`, or `-1` if it is absent, in O(log n) time.
+
+  Example: `search([-1,0,3,5,9,12], 9)` returns `4`; `search([-1,0,3,5,9,12], 2)` returns `-1`.
+starter: |
+  def search(nums, target):
+      pass
+hints:
+- Look at the middle element and discard the half that cannot contain the target.
+- Maintain inclusive bounds lo and hi and loop while lo <= hi.
+- Compute mid as lo + (hi - lo) // 2 and move lo = mid + 1 or hi = mid - 1.
+follow_ups:
+- Return the insertion point when the target is missing.
+- What if duplicates exist and you need the first occurrence?
+tests:
+- name: present
+  tags:
+  - ordering
+  code: |
+    assert search([-1,0,3,5,9,12],9)==4
+- name: absent
+  tags:
+  - invalid
+  code: |
+    assert search([-1,0,3,5,9,12],2)==-1
+- name: empty array
+  tags:
+  - empty
+  code: |
+    assert search([],5)==-1
+- name: single element
+  tags:
+  - single
+  code: |
+    assert search([5],5)==0
+    assert search([5],3)==-1
+- name: first and last index
+  tags:
+  - boundary
+  code: |
+    xs=[1,3,5,7,9]
+    assert search(xs,1)==0
+    assert search(xs,9)==4
+- name: smaller and larger than all
+  tags:
+  - duplicate
+  code: |
+    assert search([1,3,5],0)==-1
+    assert search([1,3,5],99)==-1
+- name: many lookups on a big array
+  tags:
+  - scale
+  hidden: true
+  code: |
+    xs=list(range(0,2000000,2))
+    for t in range(0,400000,2):
+        assert search(xs,t)==t//2
+    for t in range(1,200001,2):
+        assert search(xs,t)==-1
+complexity:
+- op: overall
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: Recursive versus iterative.
+  kind: complexity
+  key_points:
+  - Both O(log n) time
+  - Iterative uses O(1) space; recursive O(log n) stack
+  - Prefer iterative
+- q: Lower-bound / upper-bound variants.
+  kind: design
+  key_points:
+  - Use half-open interval [lo, hi) and a predicate
+  - Return first index where nums[i] >= target
+  - Reuse for insertion point and first/last occurrence
+- q: Common bugs.
+  kind: reasoning
+  key_points:
+  - Infinite loop from wrong bound updates
+  - Overflow in (lo+hi)/2 in fixed-width languages
+  - Off-by-one on inclusive versus exclusive hi
+narration: []
+state_aloud:
+- Empty array.
+- Target outside the range.
+- First and last index.
+walkthrough: |
+  Keep inclusive bounds `lo`, `hi`. Compute `mid`, compare `nums[mid]` with the target: equal returns `mid`, smaller moves `lo` to `mid + 1`, larger moves `hi` to `mid - 1`. If the bounds cross the target is absent. The search space halves every iteration.

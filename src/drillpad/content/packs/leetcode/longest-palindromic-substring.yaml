@@ -1,0 +1,96 @@
+id: longest-palindromic-substring
+title: Longest Palindromic Substring
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Longest Palindromic Substring (LC 5)"
+statement: |
+  Given a string `s`, return its longest substring that reads the same forwards and backwards. If several have the maximum length, return the one that starts earliest. For an empty string return `""`.
+
+  Example: `longest_palindrome("babad")` returns `"bab"` (`"aba"` is also valid length, but starts later).
+starter: |
+  def longest_palindrome(s):
+      pass
+hints:
+- A palindrome mirrors around a centre; if s[i..j] is one then s[i+1..j-1] is one too.
+- 'State: is_pal[i][j] true when s[i]==s[j] and the inside is a palindrome. Or expand outward from each of 2n-1 centres.'
+- 'Base: length-1 and length-2 equal-char substrings; process by increasing length or expand from centres.'
+follow_ups:
+- Can you do it in O(n) time?
+- Count them instead (Palindromic Substrings).
+tests:
+- name: odd centre
+  tags:
+  - ordering
+  code: |
+    assert longest_palindrome("babad")=="bab"
+- name: even centre
+  tags:
+  - boundary
+  code: |
+    assert longest_palindrome("cbbd")=="bb"
+- name: single char
+  tags:
+  - single
+  code: |
+    assert longest_palindrome("a")=="a"
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert longest_palindrome("")==""
+- name: no repeats
+  tags:
+  - duplicate
+  code: |
+    assert longest_palindrome("ac")=="a"
+    assert longest_palindrome("abcd")=="a"
+- name: embedded
+  tags:
+  - boundary
+  code: |
+    assert longest_palindrome("forgeeksskeegfor")=="geeksskeeg"
+- name: all same large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    s = "a" * 1500
+    assert longest_palindrome(s)==s
+    assert longest_palindrome("b" + s + "c")==s
+complexity:
+- op: overall
+  time: O(n^2)
+  space: O(1)
+  accepted_space:
+  - O(n^2)
+extensions:
+- q: Complexity of expand-around-centre vs table
+  kind: complexity
+  key_points:
+  - 2n-1 centres each expanding up to n
+  - O(n^2) time, O(1) extra space
+  - The boolean table is also O(n^2) time but O(n^2) space
+- q: Manacher's algorithm
+  kind: design
+  key_points:
+  - Reuse mirror information inside the current rightmost palindrome
+  - Gives O(n) time
+  - Operates on a string with separators inserted to unify odd and even
+- q: Table-based variant
+  kind: code
+  key_points:
+  - dp[i][j] = s[i]==s[j] and (j-i<3 or dp[i+1][j-1])
+  - Iterate i downward or length upward
+  - Track best start and length
+narration: []
+state_aloud:
+- Empty string returns empty.
+- Both odd and even length centres.
+- Ties return the earliest start.
+walkthrough: A palindrome is determined by its centre, and there are `2n-1` centres (characters and gaps between them). For each centre expand outward while the two ends match, recording the longest window found, updating only on a strictly longer one so ties keep the earliest. This is the DP recurrence `is_pal[i][j] = s[i]==s[j] and is_pal[i+1][j-1]` evaluated without storing the table. O(n^2) time, O(1) space.

@@ -1,0 +1,90 @@
+id: two-sum-ii-sorted
+title: Two Sum II (Sorted)
+bar_level: 1
+target_minutes: 12
+patterns:
+- two-pointers
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Two Sum II Sorted (LC 167)"
+statement: |
+  `numbers` is sorted in non-decreasing order. Return the 1-based indices `[i, j]` with `i < j` of two entries whose sum equals `target`. Exactly one solution exists, an element cannot be used twice, and you must use only O(1) extra space.
+
+  Example: `two_sum_sorted([2, 7, 11, 15], 9)` returns `[1, 2]`.
+starter: |
+  def two_sum_sorted(numbers, target):
+      pass
+hints:
+- A hash map works but uses O(n) space; sortedness lets you do better.
+- Start one pointer at each end and look at the sum.
+- If the sum is too small move the left pointer right; if too large move the right pointer left.
+follow_ups:
+- Return all pairs, skipping duplicates.
+- What if the array were not sorted but you must keep O(1) space?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert two_sum_sorted([2,7,11,15],9)==[1,2]
+- name: pair at the far ends
+  tags:
+  - boundary
+  code: |
+    assert two_sum_sorted([1,3,4,6,9],10)==[1,5]
+- name: two elements
+  tags:
+  - single
+  code: |
+    assert two_sum_sorted([5,25],30)==[1,2]
+- name: duplicate values
+  tags:
+  - duplicate
+  code: |
+    assert two_sum_sorted([1,3,3,9],6)==[2,3]
+    assert two_sum_sorted([0,0,3,4],0)==[1,2]
+- name: negatives
+  tags:
+  - invalid
+  code: |
+    assert two_sum_sorted([-5,-3,0,2,8],-3)==[1,4]
+- name: pair at the very end of a big array
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    xs=list(range(1,n+1))
+    assert two_sum_sorted(xs,2*n-1)==[n-1,n]
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why does the pointer movement never skip a valid pair?
+  kind: complexity
+  key_points:
+  - If sum < target, the left value can't pair with anything at or left of right
+  - Symmetrically for sum > target
+  - Each step discards one candidate, so at most n steps
+- q: Return all unique pairs summing to target.
+  kind: design
+  key_points:
+  - After a match move both pointers and skip equal values
+  - Use counts when the same value pairs with itself
+  - Output may be O(n) pairs
+- q: Compare with binary search per element.
+  kind: reasoning
+  key_points:
+  - O(n log n) instead of O(n)
+  - Still O(1) space
+  - Two pointers is strictly better on sorted input
+narration: []
+state_aloud:
+- Indices are 1-based.
+- Same element cannot be used twice.
+- Duplicates and negatives are allowed.
+walkthrough: |
+  With `l = 0` and `r = n - 1`, compute `numbers[l] + numbers[r]`. If it equals the target, return the 1-based indices. If smaller, the left value is too small for any remaining partner, so increment `l`; if larger, decrement `r`. The sorted order guarantees a single linear sweep.

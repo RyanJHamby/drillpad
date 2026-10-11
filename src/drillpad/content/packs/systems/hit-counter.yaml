@@ -1,0 +1,143 @@
+id: hit-counter
+title: Hit Counter
+bar_level: 2
+target_minutes: 22
+patterns:
+- sliding-window
+- deque
+- time-buckets
+firm_tags: []
+statement: |
+  Implement `HitCounter` that counts hits in the past 5 minutes (300 seconds).
+
+  - `hit(timestamp)`: record one hit at integer `timestamp` (seconds). Timestamps are
+    non-decreasing across all calls (hits and queries).
+  - `get_hits(timestamp)`: number of hits `t` with `timestamp - 300 < t <= timestamp`, i.e. the
+    last 300 seconds; a hit exactly 300 seconds old is no longer counted.
+
+  Many hits can arrive in the same second (millions per second in the real system), so memory must
+  be bounded by the window length, not by the number of hits.
+
+  Example
+  ```python
+  h = HitCounter()
+  h.hit(1); h.hit(2); h.hit(3)
+  h.get_hits(4)    # 3
+  h.hit(300)
+  h.get_hits(300)  # 4
+  h.get_hits(301)  # 3  (the hit at t=1 is now exactly 300 old)
+  ```
+starter: |
+  class HitCounter:
+      def __init__(self):
+          pass
+
+      def hit(self, timestamp):
+          pass
+
+      def get_hits(self, timestamp):
+          pass
+hints:
+- Group hits by second so memory does not depend on hit volume.
+- Keep a running total and pop expired buckets from the left of a deque.
+- Expiry test is timestamp - bucket_time >= 300, i.e. bucket_time <= timestamp - 300.
+follow_ups:
+- Circular array of 300 buckets instead of a deque?
+- What if timestamps are not monotonic?
+tests:
+- name: leetcode example
+  tags:
+  - time
+  - boundary
+  code: |
+    h = HitCounter()
+    h.hit(1); h.hit(2); h.hit(3)
+    assert h.get_hits(4) == 3
+    h.hit(300)
+    assert h.get_hits(300) == 4
+    assert h.get_hits(301) == 3
+- name: window boundary
+  tags:
+  - boundary
+  - time
+  code: |
+    h = HitCounter()
+    h.hit(10)
+    assert h.get_hits(309) == 1
+    assert h.get_hits(310) == 0
+- name: same second hits and empty
+  tags:
+  - empty
+  - duplicate
+  code: |
+    h = HitCounter()
+    assert h.get_hits(5) == 0
+    for _ in range(5):
+        h.hit(7)
+    assert h.get_hits(7) == 5
+    assert h.get_hits(306) == 5
+    assert h.get_hits(307) == 0
+- name: query does not drop later hits
+  hidden: true
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    h = HitCounter()
+    h.hit(1); h.hit(100); h.hit(250)
+    assert h.get_hits(250) == 3
+    assert h.get_hits(302) == 2
+    h.hit(302)
+    assert h.get_hits(302) == 3
+    assert h.get_hits(1000) == 0
+- name: memory bounded under heavy load
+  hidden: true
+  tags:
+  - scale
+  - duplicate
+  code: |
+    h = HitCounter()
+    for s in range(2000):
+        for _ in range(100):
+            h.hit(s)
+    assert h.get_hits(1999) == 30000
+    n = len(getattr(h, "q", []))
+    assert n <= 301, "store one bucket per second, not one entry per hit"
+complexity:
+- op: hit
+  time: O(1)
+  space: O(n)
+- op: get_hits
+  time: O(1) amortized
+  space: O(n)
+extensions:
+- q: What are time and space per operation and what dominates memory?
+  kind: complexity
+  key_points:
+  - hit is O(1); get_hits is O(1) amortized because each bucket is popped once
+  - Space is O(window seconds) = at most 300 buckets regardless of hit volume
+  - A fixed array of 300 circular buckets gives the same bound with O(1) worst case
+- q: 'Millions of hits per second across many servers: how do you scale it?'
+  kind: design
+  key_points:
+  - Per-server counters aggregated periodically, or sharded counters summed at query time
+  - Accept approximate counts with bucketed time (1s resolution) and eventual aggregation
+  - A shared store such as Redis INCR on per-second keys with ttl
+- q: Support variable windows (last 1 minute, last hour) from the same data.
+  kind: design
+  key_points:
+  - Keep the 1-second buckets and sum the suffix, or maintain a prefix-sum structure
+  - For hour-scale windows add coarser rollup buckets (minutes) to keep queries cheap
+  - 'Define precision: edge buckets may be partially inside the window'
+narration: []
+state_aloud:
+- Exactly-300-seconds-old hits are excluded.
+- Timestamps are non-decreasing; state it.
+- 'Many hits per second: bucket by second.'
+- Empty counter returns 0.
+walkthrough: Hits are grouped into per-second buckets in a deque, with a running total. A new hit increments
+  the last bucket if it is the same second or appends one. Queries evict buckets at least 300 seconds
+  old from the left and return the total. Memory is at most 300 buckets and eviction is amortized O(1).
+anki_queries: []
+categories:
+- systems-impl

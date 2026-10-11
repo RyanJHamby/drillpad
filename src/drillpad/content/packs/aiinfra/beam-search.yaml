@@ -1,0 +1,240 @@
+id: beam-search
+title: Beam Search
+bar_level: 3
+target_minutes: 35
+patterns:
+- beam-search
+- decoding
+- heap
+- log-probabilities
+- stable-ordering
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Implement beam search decoding over an abstract next-token function.
+
+  `beam_search(step_fn, beam_width, max_len, eos) -> list[(tokens_tuple, score)]`
+  - `step_fn(prefix_tuple) -> list[(token, logprob)]` returns the candidate next tokens for a prefix
+    (deterministic; may return an empty list). It is called with the empty tuple `()` first.
+  - The search keeps at most `beam_width` hypotheses. A hypothesis is `(tokens, score)` where `score` is
+    the SUM of the log-probabilities of its tokens. Start with `[((), 0.0)]`.
+  - Each of at most `max_len` steps: if every hypothesis already ends with `eos`, stop. Otherwise form
+    candidates: a hypothesis that ends with `eos` is carried over unchanged (and `step_fn` is NOT called
+    for it); every other hypothesis yields one candidate per `(token, logprob)` returned by `step_fn`,
+    with `score + logprob`. Keep the `beam_width` best candidates by score. Candidates are generated in
+    order of the current beams (best first) and then in `step_fn` order, and ties are broken by that
+    generation order (a stable sort).
+  - Return the final beams, best first. Unfinished beams are returned too (no length normalisation).
+  - `ValueError` if `beam_width < 1` or `max_len < 0`. `max_len == 0` returns `[((), 0.0)]`.
+
+  Example: with a table where greedy picks `a` (-1.0) and then only bad continuations, `beam_width=1`
+  returns the greedy sequence while `beam_width=2` finds the globally better one that starts with `b`.
+
+  Do not build full token tuples for candidates that are discarded; with beam 50, vocabulary 200 and 40
+  steps there are hundreds of thousands of candidates.
+starter: |
+  def beam_search(step_fn, beam_width, max_len, eos):
+      pass
+hints:
+- Represent a candidate as (parent_tokens, new_score, new_token) and only create the extended tuple for
+  the survivors.
+- 'heapq.nsmallest(k, items, key=lambda c: -c[1]) behaves like a stable sort limited to k items, so ties
+  keep generation order.'
+- A finished beam is one candidate that competes with its siblings unchanged; do not call step_fn for
+  it.
+follow_ups:
+- Length normalisation (score / len ** alpha) when ranking finished hypotheses.
+- Batch the beams into one model call per step and share the KV cache between beams (copy-on-write blocks).
+- Diverse beam search or sampling-based beams.
+tests:
+- name: beam of 1 is greedy and can miss the best sequence
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    TABLE = {
+        (): [("a", -1.0), ("b", -2.0)],
+        ("a",): [("EOS", -4.0), ("x", -5.0)],
+        ("b",): [("EOS", -1.0), ("y", -3.0)],
+    }
+    def table_fn(prefix):
+        return TABLE.get(prefix, [("EOS", -0.5)])
+    g = beam_search(table_fn, 1, 5, "EOS")
+    assert g[0][0] == ("a", "EOS") and close(g[0][1], -5.0)
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: wider beam finds the better sequence
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    TABLE = {
+        (): [("a", -1.0), ("b", -2.0)],
+        ("a",): [("EOS", -4.0), ("x", -5.0)],
+        ("b",): [("EOS", -1.0), ("y", -3.0)],
+    }
+    def table_fn(prefix):
+        return TABLE.get(prefix, [("EOS", -0.5)])
+    r = beam_search(table_fn, 2, 5, "EOS")
+    assert [t for t, _ in r] == [("b", "EOS"), ("a", "EOS")]
+    assert close(r[0][1], -3.0) and close(r[1][1], -5.0)
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: finished beams are carried unchanged and not expanded
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    TABLE = {
+        (): [("a", -1.0), ("b", -2.0)],
+        ("a",): [("EOS", -4.0), ("x", -5.0)],
+        ("b",): [("EOS", -1.0), ("y", -3.0)],
+    }
+    def table_fn(prefix):
+        return TABLE.get(prefix, [("EOS", -0.5)])
+    calls = []
+    def fn(prefix):
+        calls.append(prefix)
+        return table_fn(prefix)
+    beam_search(fn, 2, 5, "EOS")
+    assert all(not p or p[-1] != "EOS" for p in calls), "never expand a finished beam"
+    assert calls.count(()) == 1
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: max_len stops unfinished beams
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    TABLE = {
+        (): [("a", -1.0), ("b", -2.0)],
+        ("a",): [("EOS", -4.0), ("x", -5.0)],
+        ("b",): [("EOS", -1.0), ("y", -3.0)],
+    }
+    def table_fn(prefix):
+        return TABLE.get(prefix, [("EOS", -0.5)])
+    def fn(prefix):
+        return [("t", -1.0), ("u", -2.0)]
+    r = beam_search(fn, 2, 3, "EOS")
+    assert r[0][0] == ("t", "t", "t") and close(r[0][1], -3.0)
+    assert r[1][0] == ("t", "t", "u") and close(r[1][1], -4.0)
+    assert beam_search(fn, 2, 0, "EOS") == [((), 0.0)]
+  hidden: false
+  tags:
+  - boundary
+  - zero-capacity
+- name: ties keep generation order (parent rank, then step_fn order)
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    TABLE = {
+        (): [("a", -1.0), ("b", -2.0)],
+        ("a",): [("EOS", -4.0), ("x", -5.0)],
+        ("b",): [("EOS", -1.0), ("y", -3.0)],
+    }
+    def table_fn(prefix):
+        return TABLE.get(prefix, [("EOS", -0.5)])
+    def fn(prefix):
+        return [("p", -1.0), ("q", -1.0), ("r", -1.0)]
+    r = beam_search(fn, 2, 1, "EOS")
+    assert [t for t, _ in r] == [("p",), ("q",)]
+    r2 = beam_search(fn, 3, 2, "EOS")
+    assert [t for t, _ in r2] == [("p", "p"), ("p", "q"), ("p", "r")]
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+- name: invalid parameters and a dead-end step_fn
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    TABLE = {
+        (): [("a", -1.0), ("b", -2.0)],
+        ("a",): [("EOS", -4.0), ("x", -5.0)],
+        ("b",): [("EOS", -1.0), ("y", -3.0)],
+    }
+    def table_fn(prefix):
+        return TABLE.get(prefix, [("EOS", -0.5)])
+    for args in [(table_fn, 0, 3, "EOS"), (table_fn, 2, -1, "EOS")]:
+        try:
+            beam_search(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    assert beam_search(lambda p: [], 3, 4, "EOS") == []
+  hidden: true
+  tags:
+  - invalid
+  - empty
+- name: beam 50, vocabulary 200, 40 steps
+  code: |
+    def close(a, b, tol=1e-9):
+        return abs(a - b) <= tol
+    TABLE = {
+        (): [("a", -1.0), ("b", -2.0)],
+        ("a",): [("EOS", -4.0), ("x", -5.0)],
+        ("b",): [("EOS", -1.0), ("y", -3.0)],
+    }
+    def table_fn(prefix):
+        return TABLE.get(prefix, [("EOS", -0.5)])
+    import math
+    def fn(prefix):
+        h = hash(prefix) if False else sum((i + 1) * (t + 1) for i, t in enumerate(prefix))
+        return [(v, -((h * 31 + v * 17) % 97) / 10.0 - 0.1) for v in range(200)]
+    r = beam_search(fn, 50, 40, -1)
+    assert len(r) == 50 and all(len(t) == 40 for t, _ in r)
+    scores = [s for _, s in r]
+    assert scores == sorted(scores, reverse=True)
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: beam_search
+  time: O(T * B * V log B)
+  space: O(B * T)
+extensions:
+- q: 'Level 2: add length normalisation. Rank finished and unfinished hypotheses by score / len(tokens)
+    ** alpha and stop early when the best finished hypothesis cannot be beaten.'
+  kind: code
+  key_points:
+  - Keep a separate list of finished hypotheses; they leave the beam and do not occupy beam slots
+  - 'Early stop: with alpha = 0 and log-probs <= 0, once the best finished score is >= the best live score
+    no live hypothesis can overtake it'
+  - With alpha > 0 the bound is not exact, so state the heuristic
+- q: How does beam search interact with the KV cache and with continuous batching?
+  kind: design
+  key_points:
+  - Each beam is a sequence; beams that share a prefix should share KV blocks via copy-on-write (see paged-kv-cache-allocator
+    fork)
+  - Beam width multiplies the decode batch size, so one request with beam 8 costs about 8 slots
+  - Reordering beams each step means block tables are re-pointed rather than copied
+- q: When is beam search a poor choice for open-ended LLM generation, and what do chat systems use instead?
+  kind: reasoning
+  key_points:
+  - It favours high-probability, repetitive text and shorter sequences without normalisation; good for
+    translation, poor for creative text
+  - Sampling with temperature, top-k and top-p is the usual choice for chat (see top-p-top-k-sampling)
+  - Beam search is still used where a single best answer is wanted, such as constrained or structured
+    output
+- q: Cost per step and overall, and the effect of building tuples eagerly.
+  kind: complexity
+  key_points:
+  - 'Each step scores B * V candidates and selects B with a heap: O(B * V log B); overall O(T * B * V
+    log B)'
+  - Creating the extended tuple for every candidate adds O(T) per candidate; build tuples only for survivors
+  - Space O(B * T) for the beams plus O(B * V) candidate records
+narration: []
+state_aloud:
+- Score is a sum of log-probabilities; higher is better; define tie-breaking explicitly.
+- Finished (eos) hypotheses persist and compete but are never expanded.
+- Stop when all beams are finished or max_len steps ran.
+- beam_width 1 equals greedy; empty step_fn output drops the hypothesis.
+- Compare scores with a tolerance in tests; the real code never relies on float equality.
+walkthrough: |
+  Each step builds candidates from the current beams in rank order: finished beams are carried through as a single candidate, live beams expand over step_fn's tokens. heapq.nsmallest with a negated score key picks the top beam_width candidates and is stable, so ties follow generation order. Only the survivors get their token tuple extended, which keeps the cost proportional to the beam instead of the candidate count. Standard beam search; no source note applies.
+categories:
+- ai-infra

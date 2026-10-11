@@ -1,0 +1,241 @@
+id: matching-engine-ioc-fok
+title: 'Matching Engine: IOC / FOK / Post-only'
+bar_level: 4
+target_minutes: 45
+patterns:
+- order-book
+- matching-engine
+- order-types
+- lazy-heap
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `Engine`, a single-symbol matching engine with price-time priority and four order types.
+  Prices and quantities are positive ints; sides are `"buy"` / `"sell"`; ids are client-supplied.
+
+  `submit(order_id, side, otype, price, qty) -> (status, fills)` where each fill is
+  `(resting_order_id, price, qty)` and trades at the RESTING order's price. An order crosses when a buy's
+  price >= a sell's price. Matching goes best price first, FIFO within a level.
+
+  - `"limit"`: match while crossing, rest the remainder at its limit price.
+    Status: `"filled"` (everything executed), `"partial"` (some executed, remainder rests), `"rested"` (nothing executed, all rests).
+  - `"ioc"` (immediate-or-cancel): match while crossing, the remainder is discarded and never rests.
+    Status: `"filled"`, `"partial"` (some executed, remainder cancelled) or `"cancelled"` (nothing executed).
+  - `"fok"` (fill-or-kill): executes only if the FULL quantity is available at prices that cross; otherwise it
+    does nothing at all (book untouched). Status: `"filled"` or `"cancelled"` with `fills == []`.
+  - `"post_only"`: if it would cross at all (i.e. it would take liquidity), it is `"rejected"` with no
+    fills and the book is untouched; otherwise it rests with status `"rested"`.
+
+  An `order_id` that is currently resting is a duplicate: return `("rejected", [])` and change nothing.
+  (An id that has filled or been cancelled may be reused.) `ValueError` for a bad side/type or non-positive
+  price or qty.
+
+  Also: `cancel(order_id) -> bool` (True only for a resting order) and `depth(side) -> [(price, total_qty), ...]`
+  best price first.
+
+  FOK must not scan or mutate more than the levels it needs; a stream of FOKs against a wide book should stay fast.
+starter: |
+  class Engine:
+      def __init__(self):
+          pass
+hints:
+- Share one match routine across types; the types differ only in what happens to the remainder (rest,
+  drop) and whether you may start at all (FOK, post-only).
+- 'FOK needs a dry run: walk the opposite side best-first summing level totals until you have qty or stop
+  crossing, and only then mutate. Per-level totals make that O(levels touched).'
+- 'Post-only never matches: compare against the best opposite price only; if it crosses, reject without
+  touching anything.'
+follow_ups:
+- How would you add self-trade prevention?
+- How would iceberg / hidden quantity change priority?
+- How do you prove a failed FOK or rejected post-only mutated nothing?
+- What does a market order look like in this model?
+tests:
+- name: limit matches at resting price and rests remainder
+  code: |
+    e = Engine()
+    assert e.submit(1, "sell", "limit", 101, 5) == ("rested", [])
+    assert e.submit(2, "buy", "limit", 105, 8) == ("partial", [(1, 101, 5)])
+    assert e.depth("buy") == [(105, 3)] and e.depth("sell") == []
+    assert e.submit(3, "sell", "limit", 100, 3) == ("filled", [(2, 105, 3)])
+    assert e.depth("buy") == [] and e.depth("sell") == []
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: ioc discards remainder
+  code: |
+    e = Engine()
+    e.submit(1, "sell", "limit", 100, 2)
+    e.submit(2, "sell", "limit", 102, 5)
+    assert e.submit(3, "buy", "ioc", 101, 10) == ("partial", [(1, 100, 2)])
+    assert e.depth("buy") == [], "IOC remainder must never rest"
+    assert e.depth("sell") == [(102, 5)]
+    assert e.submit(4, "buy", "ioc", 99, 1) == ("cancelled", [])
+    assert e.submit(5, "buy", "ioc", 102, 5) == ("filled", [(2, 102, 5)])
+    assert e.submit(6, "sell", "ioc", 1, 3) == ("cancelled", [])
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: fok fills entirely across levels
+  code: |
+    e = Engine()
+    e.submit(1, "sell", "limit", 100, 3)
+    e.submit(2, "sell", "limit", 101, 3)
+    e.submit(3, "sell", "limit", 103, 3)
+    st, fills = e.submit(4, "buy", "fok", 101, 6)
+    assert st == "filled" and fills == [(1, 100, 3), (2, 101, 3)]
+    assert e.depth("sell") == [(103, 3)]
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: fok that cannot fill leaves book untouched
+  code: |
+    e = Engine()
+    e.submit(1, "sell", "limit", 100, 3)
+    e.submit(2, "sell", "limit", 101, 3)
+    e.submit(3, "sell", "limit", 105, 10)
+    assert e.submit(4, "buy", "fok", 101, 7) == ("cancelled", [])
+    assert e.depth("sell") == [(100, 3), (101, 3), (105, 10)], "no partial execution may leak"
+    assert e.depth("buy") == []
+    assert e.submit(5, "buy", "fok", 101, 6)[0] == "filled"
+    assert e.submit(6, "buy", "fok", 100, 1) == ("cancelled", [])
+    assert e.submit(7, "sell", "fok", 100, 1) == ("cancelled", []), "empty opposite side"
+  hidden: false
+  tags:
+  - state-reuse
+  - empty
+- name: post-only rejects when it would cross
+  code: |
+    e = Engine()
+    e.submit(1, "sell", "limit", 100, 2)
+    assert e.submit(2, "buy", "post_only", 100, 1) == ("rejected", []), "touching the ask crosses"
+    assert e.submit(3, "buy", "post_only", 101, 1) == ("rejected", [])
+    assert e.depth("buy") == [] and e.depth("sell") == [(100, 2)]
+    assert e.submit(4, "buy", "post_only", 99, 1) == ("rested", [])
+    assert e.depth("buy") == [(99, 1)]
+    assert e.submit(5, "sell", "post_only", 99, 1) == ("rejected", [])
+    assert e.submit(2, "buy", "post_only", 98, 1) == ("rested", []), "rejected id was never live"
+  hidden: false
+  tags:
+  - boundary
+  - state-reuse
+- name: price-time priority and cancel
+  code: |
+    e = Engine()
+    e.submit(1, "buy", "limit", 100, 2)
+    e.submit(2, "buy", "limit", 100, 5)
+    e.submit(3, "buy", "limit", 100, 1)
+    assert e.cancel(2) is True and e.cancel(2) is False and e.cancel(99) is False
+    st, fills = e.submit(4, "sell", "limit", 100, 10)
+    assert fills == [(1, 100, 2), (3, 100, 1)] and st == "partial"
+    assert e.depth("sell") == [(100, 7)] and e.depth("buy") == []
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: duplicate live id rejected, id reusable after fill
+  code: |
+    e = Engine()
+    assert e.submit(1, "buy", "limit", 100, 5) == ("rested", [])
+    assert e.submit(1, "sell", "limit", 90, 5) == ("rejected", []), "must not match or rest"
+    assert e.depth("buy") == [(100, 5)] and e.depth("sell") == []
+    e.submit(2, "sell", "limit", 100, 5)
+    assert e.submit(1, "buy", "limit", 50, 1) == ("rested", [])
+  hidden: true
+  tags:
+  - duplicate
+  - state-reuse
+- name: rejects bad input
+  code: |
+    e = Engine()
+    for args in [(1, "hold", "limit", 100, 1), (1, "buy", "stop", 100, 1), (1, "buy", "limit", 0, 1),
+                 (1, "buy", "ioc", 100, 0), (1, "buy", "fok", 100, -1)]:
+        try:
+            e.submit(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    assert e.depth("buy") == []
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: 'scale: 100k mixed orders incl. fok'
+  code: |
+    e = Engine()
+    n = 100000
+    oid = 0
+    for i in range(1000):
+        oid += 1
+        e.submit(oid, "sell", "limit", 10000 + i, 5)
+    filled = 0
+    for i in range(n):
+        oid += 1
+        if i % 4 == 0:
+            st, _ = e.submit(oid, "sell", "limit", 10000 + (i * 13) % 1000, 3)
+        elif i % 4 == 1:
+            st, _ = e.submit(oid, "buy", "fok", 10000 + 400, 4)
+        elif i % 4 == 2:
+            st, _ = e.submit(oid, "buy", "ioc", 10000 + 20, 2)
+        else:
+            st, _ = e.submit(oid, "buy", "post_only", 9000, 1)
+        filled += st == "filled"
+    assert filled > 1000
+    assert e.depth("buy")[0][0] == 9000
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: submit (limit/ioc)
+  time: O(log P + F)
+  space: O(N)
+- op: submit (fok dry run)
+  time: O(K log P)
+  space: O(K)
+- op: cancel
+  time: O(1)
+  space: O(1)
+- op: depth
+  time: O(P log P)
+  space: O(P)
+extensions:
+- q: 'Level 2: add a `market` order type and a `modify` that keeps priority only on qty decrease.'
+  key_points:
+  - Market is IOC with no price limit and never rests or consumes a resting slot
+  - Modify down in place, up or price change = cancel plus re-submit at the back
+  - Both honor the same duplicate-id and validation rules
+  kind: code
+- q: 'Level 3: add self-trade prevention with a per-order owner and a cancel-resting policy.'
+  key_points:
+  - Skip or cancel a resting order from the same owner instead of trading with it
+  - FOK dry run must apply the same exclusion or availability is overstated
+  - Fills and remaining quantities stay consistent when resting orders are cancelled mid-sweep
+  kind: code
+- q: Cost of a FOK check and how to keep it cheap on a deep book.
+  key_points:
+  - 'Dry run touches only crossing levels using per-level totals: O(K log P) for K levels'
+  - Lazy heap pop-and-restore is cheaper than copying the heap
+  - A price-indexed array or skip list gives O(K) and better cache behavior
+  kind: complexity
+- q: 'Design: where do these order types live in a real exchange or in a firm simulator?'
+  key_points:
+  - Single-threaded sequencer per symbol so every outcome (including rejects) is deterministic and replayable
+  - Reject reasons are explicit statuses published on the order-entry feed, never silent drops
+  - 'Atomicity: FOK/post-only decisions are made on a consistent book snapshot before any mutation'
+  kind: design
+narration: []
+state_aloud:
+- IOC remainder is dropped, never rested; FOK is all-or-nothing and leaves the book untouched on failure.
+- Post-only that touches the opposite best price counts as crossing and is rejected.
+- Fills trade at resting price; FIFO within a level; duplicate live ids rejected.
+- Integer ticks; non-positive price/qty is a ValueError.
+walkthrough: |
+  One match loop consumes opposite levels best-first while the limit crosses. IOC discards leftovers, limit rests them. FOK first runs a read-only availability walk (pop crossing heap entries, sum level totals, push them back) and only executes when the full qty is there, so failure mutates nothing. Post-only compares against the best opposite price and rejects if it crosses. Source: standard formulation.
+categories:
+- trading

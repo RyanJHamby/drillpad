@@ -1,0 +1,104 @@
+id: longest-increasing-path-matrix
+title: Longest Increasing Path in a Matrix
+bar_level: 3
+target_minutes: 40
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Given a 2D list `matrix` of integers, return the length (number of cells) of the longest path in which each step moves up, down, left or right to a cell with a strictly larger value. You may start anywhere. An empty matrix (or one with empty rows) gives 0.
+
+  Example: `longest_increasing_path([[9,9,4],[6,6,8],[2,1,1]])` returns `4` (path 1, 2, 6, 9).
+starter: |
+  def longest_increasing_path(matrix):
+      pass
+hints:
+- 'Strictly increasing steps mean the cells form a DAG: no cycles, so longest path is well defined.'
+- 'State: best[r][c] is the longest increasing path starting (or ending) at cell (r, c).'
+- Process cells in ascending value order so every smaller neighbour is final first, or memoise a DFS (watch recursion depth).
+follow_ups:
+- Return the path itself.
+- How would you avoid recursion limits on a snake-shaped grid?
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert longest_increasing_path([[9,9,4],[6,6,8],[2,1,1]])==4
+- name: example 2
+  tags:
+  - ordering
+  code: |
+    assert longest_increasing_path([[3,4,5],[3,2,6],[2,2,1]])==4
+- name: single cell
+  tags:
+  - single
+  code: |
+    assert longest_increasing_path([[1]])==1
+- name: all equal
+  tags:
+  - duplicate
+  code: |
+    assert longest_increasing_path([[7,7],[7,7]])==1
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert longest_increasing_path([])==0
+    assert longest_increasing_path([[]])==0
+- name: single row
+  tags:
+  - boundary
+  code: |
+    assert longest_increasing_path([[1,2,3,4]])==4
+    assert longest_increasing_path([[4],[3],[5]])==2
+- name: row major
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 200
+    m = [[r * n + c for c in range(n)] for r in range(n)]
+    assert longest_increasing_path(m)==2 * n - 1
+- name: snake deep
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 100
+    m = [[r * n + (c if r % 2 == 0 else n - 1 - c) for c in range(n)] for r in range(n)]
+    assert longest_increasing_path(m)==n * n
+complexity:
+- op: overall
+  time: O(m * n log(m * n))
+  space: O(m * n)
+  accepted_time:
+  - O(m * n)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - Sorting cells costs O(mn log mn); memoised DFS is O(mn)
+  - Each cell examines 4 neighbours
+  - O(mn) space for the table
+- q: Recursion depth
+  kind: design
+  key_points:
+  - The path can be mn long so recursive DFS can overflow
+  - Sort by value and relax, or do a Kahn topological layering
+  - Layer count equals the answer
+- q: Return the path
+  kind: code
+  key_points:
+  - Store the best neighbour per cell
+  - Start from the cell with the max length
+  - Follow successors to the end
+narration: []
+state_aloud:
+- Strictly greater, equal neighbours do not count.
+- Empty matrix returns 0.
+- Path may start anywhere.
+walkthrough: Edges point from smaller to larger neighbours, so the grid is a DAG. Sort all cells by value ascending and set `best[cell] = 1 + max(best[nb])` over strictly smaller neighbours already finalised (the best path ending at that cell). The answer is the largest `best`. Sorting costs O(mn log mn); an equivalent memoised DFS is O(mn) but risks deep recursion.

@@ -1,0 +1,287 @@
+id: wallet-holds-escrow
+title: Wallet with Holds and Escrow
+bar_level: 3
+target_minutes: 35
+patterns:
+- running-total
+- min-heap-expiry
+- state-machine
+- conservation-invariant
+firm_tags:
+- distsys
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `Wallet`, a multi-account balance store with authorization holds and escrow. Money is integer
+  minor units. Time is injected as `now`, and `now` never decreases across calls.
+
+  * `deposit(account, amount)` adds funds (amount > 0) and returns the new balance. Accounts are created on
+    first deposit.
+  * `balance(account)` is the ledger balance (0 for unknown accounts). `available(account, now)` is the balance
+    minus all ACTIVE holds on it.
+  * `hold(account, hold_id, amount, now, ttl=None)` reserves funds without moving them. It raises `WalletError`
+    if `amount <= 0`, if `hold_id` was ever used before, or if `available < amount`. With `ttl`, the hold
+    expires when `now >= created + ttl` and stops reducing availability.
+  * `capture_hold(hold_id, now, amount=None)` turns an ACTIVE hold into a debit of `amount` (default: the whole
+    hold; must be <= hold amount and > 0); the rest of the hold is released. Returns the captured amount.
+    Capturing a hold that is expired, released or already captured raises `WalletError`.
+  * `release_hold(hold_id, now)` returns `True` if an active hold was released, `False` if it was already
+    inactive (expired, released, captured). Unknown id raises `WalletError`.
+  * `open_escrow(escrow_id, buyer, seller, amount, now)` debits `amount` from the buyer immediately (the buyer's
+    AVAILABLE funds must cover it, active holds count) and parks it in escrow. Duplicate escrow id or
+    insufficient funds raises `WalletError`.
+  * `settle_escrow(escrow_id)` pays the seller; `refund_escrow(escrow_id)` returns the money to the buyer. An
+    escrow can be resolved once; any second resolution raises `WalletError`.
+  * `total_funds()` returns the sum of all balances plus all open escrows. It changes only on `deposit`.
+
+  A failed call must not change any state.
+starter: |
+  class WalletError(Exception):
+      pass
+
+
+  class Wallet:
+      def __init__(self):
+          pass
+
+      def deposit(self, account, amount):
+          pass
+
+      def balance(self, account):
+          pass
+
+      def available(self, account, now):
+          pass
+
+      def hold(self, account, hold_id, amount, now, ttl=None):
+          pass
+
+      def capture_hold(self, hold_id, now, amount=None):
+          pass
+
+      def release_hold(self, hold_id, now):
+          pass
+
+      def open_escrow(self, escrow_id, buyer, seller, amount, now):
+          pass
+
+      def settle_escrow(self, escrow_id):
+          pass
+
+      def refund_escrow(self, escrow_id):
+          pass
+
+      def total_funds(self):
+          pass
+hints:
+- 'Do not sum all holds on every call: keep a per-account running total of active hold amounts and update
+  it on hold, capture, release and expiry.'
+- 'Expiry: push (expires_at, hold_id) on a min-heap and, at the top of each call, pop everything with
+  expires_at <= now, flipping still-active holds to EXPIRED.'
+- Escrow is a debit now plus a pending record; settle and refund are just the credit side, guarded by
+  a status field.
+follow_ups:
+- What invariant would you assert after every operation in a property test?
+- How do you handle a capture that arrives after the hold expired (card networks often allow it)?
+- How do concurrent holds against the same account avoid overspending in a database?
+tests:
+- name: holds reduce availability but not balance
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except WalletError:
+            return True
+        return False
+
+    w = Wallet()
+    assert w.deposit("a", 1000) == 1000
+    assert w.hold("a", "h1", 300, 0) is True
+    assert w.balance("a") == 1000 and w.available("a", 0) == 700
+    assert w.hold("a", "h2", 700, 0) is True and w.available("a", 0) == 0
+    assert raises(w.hold, "a", "h3", 1, 0)
+    assert w.release_hold("h1", 1) is True and w.available("a", 1) == 300
+    assert w.release_hold("h1", 2) is False
+- name: capture debits and releases the remainder
+  tags:
+  - invalid
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except WalletError:
+            return True
+        return False
+
+    w = Wallet()
+    w.deposit("a", 1000)
+    w.hold("a", "h", 400, 0)
+    assert w.capture_hold("h", 1, amount=250) == 250
+    assert w.balance("a") == 750 and w.available("a", 1) == 750
+    assert raises(w.capture_hold, "h", 2), "already captured"
+    assert raises(w.release_hold, "nope", 2)
+    w.hold("a", "h2", 100, 3)
+    assert w.capture_hold("h2", 4) == 100 and w.balance("a") == 650
+    w.hold("a", "h3", 50, 5)
+    assert raises(w.capture_hold, "h3", 6, amount=51)
+    assert raises(w.capture_hold, "h3", 6, amount=0)
+    assert w.available("a", 6) == 600, "failed capture changes nothing"
+- name: hold expiry
+  tags:
+  - time
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except WalletError:
+            return True
+        return False
+
+    w = Wallet()
+    w.deposit("a", 500)
+    w.hold("a", "h", 500, 10, ttl=20)
+    assert w.available("a", 29) == 0
+    assert w.available("a", 30) == 500, "expires exactly at created + ttl"
+    assert raises(w.capture_hold, "h", 30)
+    assert w.release_hold("h", 31) is False
+    assert w.hold("a", "h2", 500, 31) is True
+    assert raises(w.hold, "a", "h", 1, 32), "hold ids are never reused"
+- name: escrow settle and refund
+  tags:
+  - invalid
+  - duplicate
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except WalletError:
+            return True
+        return False
+
+    w = Wallet()
+    w.deposit("buyer", 1000)
+    w.hold("buyer", "h", 200, 0)
+    assert raises(w.open_escrow, "e0", "buyer", "seller", 900, 0), "only 800 available"
+    w.open_escrow("e1", "buyer", "seller", 800, 0)
+    assert w.balance("buyer") == 200 and w.balance("seller") == 0 and w.total_funds() == 1000
+    assert raises(w.open_escrow, "e1", "buyer", "seller", 1, 0)
+    w.settle_escrow("e1")
+    assert w.balance("seller") == 800 and w.total_funds() == 1000
+    assert raises(w.settle_escrow, "e1") and raises(w.refund_escrow, "e1")
+    w.release_hold("h", 1)
+    w.open_escrow("e2", "buyer", "seller", 200, 1)
+    w.refund_escrow("e2")
+    assert w.balance("buyer") == 200 and w.balance("seller") == 800
+    assert raises(w.refund_escrow, "missing")
+- name: validation and unknown accounts
+  tags:
+  - empty
+  - invalid
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except WalletError:
+            return True
+        return False
+
+    w = Wallet()
+    assert w.balance("x") == 0 and w.available("x", 0) == 0
+    assert raises(w.hold, "x", "h", 1, 0)
+    assert raises(w.hold, "x", "h", 0, 0)
+    w.deposit("x", 5)
+    assert raises(w.deposit, "x", 0)
+    assert raises(w.deposit, "x", -3)
+    w.hold("x", "h", 5, 0)
+    assert raises(w.hold, "x", "h", 1, 0)
+    assert w.total_funds() == 5
+- name: expired holds free funds for escrow
+  tags:
+  - time
+  - single
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except WalletError:
+            return True
+        return False
+
+    w = Wallet()
+    w.deposit("a", 100)
+    w.hold("a", "h", 100, 0, ttl=10)
+    assert raises(w.open_escrow, "e", "a", "b", 50, 5)
+    w.open_escrow("e", "a", "b", 50, 10)
+    assert w.available("a", 10) == 50 and w.total_funds() == 100
+- name: many holds on one account
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except WalletError:
+            return True
+        return False
+
+    w = Wallet()
+    n = 40000
+    w.deposit("a", n * 10)
+    for i in range(n):
+        w.hold("a", i, 10, i, ttl=n // 2)
+        assert w.available("a", i) >= 0
+    assert w.available("a", n) == n * 10 - 10 * (n // 2 - 1)
+    for i in range(n, 2 * n):
+        w.hold("a", i, 10, i, ttl=5)
+        w.available("a", i)
+    assert w.available("a", 2 * n + 10) == n * 10
+complexity:
+- op: hold / capture / available
+  time: O(log h) amortized
+  space: O(h)
+- op: escrow ops
+  time: O(1)
+  space: O(e)
+extensions:
+- q: 'Level 2: hold extension (increase_hold) and holds that can be partially captured several times.'
+  kind: code
+  key_points:
+  - Increasing a hold must re-check available funds including other active holds
+  - Multiple captures decrement the remaining hold amount until it reaches zero
+  - Update the running held total in lockstep with each change
+- q: 'Level 3: escrow with a deadline that auto-refunds the buyer if the seller never confirms.'
+  kind: code
+  key_points:
+  - Keep an expiry heap for escrows exactly like holds
+  - Auto-refund must be idempotent against a late settle call
+  - Expose the terminal status so the caller can distinguish settled from expired
+- q: How would you implement this over a SQL database with concurrent requests?
+  kind: design
+  key_points:
+  - Row-level lock (SELECT FOR UPDATE) or conditional UPDATE on the account row to check-and-reserve atomically
+  - Holds table with expiry and a ledger of movements; availability is computed or cached transactionally
+  - Idempotency keys on hold and escrow creation, and a double-entry ledger so total funds is checkable
+- q: Why not recompute available() by scanning the holds?
+  kind: complexity
+  key_points:
+  - A scan is O(h) per call, so h operations cost O(h^2)
+  - Running total plus an expiry heap gives O(log h) amortised per call
+  - Requires monotonic now (or a sorted structure); say that assumption aloud
+narration: []
+state_aloud:
+- Integer minor units; holds do not move money, captures and escrows do.
+- available = balance - active holds; expired holds stop counting exactly at created + ttl.
+- 'Conservation: total funds changes only on deposit; assert it after escrow operations.'
+- Hold ids and escrow ids are single use; every state machine has terminal states that cannot be re-entered.
+- Validate before mutating so a rejected call leaves no partial state.
+walkthrough: |
+  Each account keeps balance and a running total of active holds. Holds are records with a status (ACTIVE, CAPTURED, RELEASED, EXPIRED); a min-heap of (expires_at, hold_id) lets every call lazily expire holds whose time has come, subtracting them from the running total. capture and release move the status and adjust the total; escrow debits the buyer's balance at open and credits seller or buyer at resolution. total_funds sums balances plus open escrows. Standard formulation (authorization-hold plus escrow wallet screen); no source doc.

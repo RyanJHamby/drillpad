@@ -1,0 +1,167 @@
+id: tic-tac-toe-nxn
+title: Tic-Tac-Toe (NxN)
+bar_level: 2
+target_minutes: 22
+patterns:
+- counters
+- design
+- o1-win-check
+firm_tags: []
+statement: |
+  Implement `TicTacToe(n)` (LeetCode 348) for an `n x n` board with players `1` and `2`.
+
+  `move(row, col, player)` places the player's mark and returns:
+  - `1` or `2` if that move completes a full row, column or diagonal for the player (the winner),
+  - `0` otherwise.
+
+  Requirements
+  - Each move must be O(1): do not scan the board; keep per-row, per-column and diagonal counters.
+  - `ValueError` for a cell outside the board, an occupied cell, a player not in `{1, 2}`, or
+    any move after the game has been won.
+  - `n < 1` raises `ValueError`.
+
+  Example (n = 3)
+  ```python
+  g = TicTacToe(3)
+  g.move(0,0,1) -> 0; g.move(0,2,2) -> 0; g.move(2,2,1) -> 0
+  g.move(1,1,2) -> 0; g.move(2,0,1) -> 0; g.move(1,0,2) -> 0; g.move(2,1,1) -> 1
+  ```
+starter: |
+  class TicTacToe:
+      def __init__(self, n):
+          pass
+
+      def move(self, row, col, player):
+          pass
+hints:
+- Track, for each player, a counter per row, per column and for each diagonal.
+- A move wins if any of the four relevant counters reaches n.
+- Record occupied cells so replays are rejected; remember the winner.
+follow_ups:
+- How would you detect a draw?
+- How would you support undo?
+tests:
+- name: leetcode example
+  tags:
+  - ordering
+  - boundary
+  code: |
+    g = TicTacToe(3)
+    moves = [(0, 0, 1), (0, 2, 2), (2, 2, 1), (1, 1, 2), (2, 0, 1), (1, 0, 2), (2, 1, 1)]
+    assert [g.move(*m) for m in moves] == [0, 0, 0, 0, 0, 0, 1]
+- name: rows columns and both diagonals
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    g = TicTacToe(3)
+    assert [g.move(0, c, 2) for c in range(3)] == [0, 0, 2]
+    g = TicTacToe(3)
+    assert [g.move(r, 1, 1) for r in range(3)] == [0, 0, 1]
+    g = TicTacToe(3)
+    assert [g.move(i, 2 - i, 2) for i in range(3)] == [0, 0, 2]
+    g = TicTacToe(4)
+    assert [g.move(i, i, 1) for i in range(4)] == [0, 0, 0, 1]
+- name: mixed marks do not win
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    g = TicTacToe(3)
+    assert g.move(0, 0, 1) == 0 and g.move(0, 1, 2) == 0 and g.move(0, 2, 1) == 0
+    assert g.move(1, 1, 1) == 0 and g.move(2, 2, 2) == 0
+- name: invalid moves
+  tags:
+  - invalid
+  - single
+  code: |
+    g = TicTacToe(2)
+    assert g.move(0, 0, 1) == 0
+    for args in ((0, 0, 2), (-1, 0, 1), (2, 0, 1), (0, 2, 1), (1, 1, 3), (1, 1, 0)):
+        try:
+            g.move(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for %r" % (args,))
+    assert g.move(0, 1, 1) == 1
+    try:
+        g.move(1, 0, 2)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("no moves after a win")
+    try:
+        TicTacToe(0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("n < 1")
+- name: one by one board
+  hidden: true
+  tags:
+  - single
+  - boundary
+  code: |
+    g = TicTacToe(1)
+    assert g.move(0, 0, 2) == 2
+- name: large board is constant time per move
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    import time
+    n = 1500
+    g = TicTacToe(n)
+    t0 = time.monotonic()
+    res = 0
+    for i in range(n - 1):
+        res = g.move(i, i + 1, 1)      # a shifted diagonal: never completes a line
+    assert res == 0
+    for r in range(n - 1):
+        assert g.move(r, 0, 2) == 0
+    assert g.move(n - 1, 0, 2) == 2
+    assert time.monotonic() - t0 < 3
+complexity:
+- op: move
+  time: O(1)
+  space: O(n)
+extensions:
+- q: Time and space per move?
+  kind: complexity
+  key_points:
+  - 'O(1): update four counters and compare with n'
+  - O(n) counters per player plus O(moves) for the occupied set
+  - Scanning the row, column and diagonals would be O(n) per move
+- q: Generalise to k-in-a-row on an m x n board or to more players.
+  kind: design
+  key_points:
+  - 'Counters no longer suffice: count contiguous runs from the new cell in four directions'
+  - Cost per move is O(k) with a grid lookup
+  - Players become a parameter and counters a dict keyed by (player, line)
+- q: 'Make a playable game: turns, undo, and an AI.'
+  kind: design
+  key_points:
+  - Game wrapper enforces turn order and detects draws (moves == n*n)
+  - 'Undo: decrement counters using a move stack'
+  - Minimax with alpha-beta and memoised positions for small n
+- q: Why does the counter trick work, and what breaks if marks are added as +1/-1?
+  kind: reasoning
+  key_points:
+  - A line is won exactly when one player has n marks on it
+  - '+1/-1 sums work too: |sum| == n signals a win, using one array per line'
+  - Both rely on each cell being played once, so occupied-cell checks matter
+narration: []
+state_aloud:
+- Anti-diagonal is row + col == n - 1.
+- Occupied cell, wrong player id and out-of-range moves are invalid.
+- After a win no more moves.
+- n = 1 is a one-move win.
+walkthrough: For each player the solution keeps counters per row, per column and for the main and anti
+  diagonal. A move increments the counters for its row, column and (when applicable) diagonals and wins
+  if any reaches n, with an occupied-cell set rejecting repeats and a stored winner blocking further moves.
+  Each move is O(1) time with O(n) space.
+anki_queries: []
+categories:
+- systems-impl

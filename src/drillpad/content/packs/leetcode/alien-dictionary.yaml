@@ -1,0 +1,135 @@
+id: alien-dictionary
+title: Alien Dictionary
+bar_level: 3
+target_minutes: 38
+patterns:
+- topological-sort
+- graph-bfs-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Alien Dictionary (LC 269)"
+statement: |
+  An alien language uses the lowercase letters in an unknown alphabetical order. You are given `words`, a list that is sorted lexicographically according to that unknown order. Deduce an ordering of every letter that appears in the words which is consistent with the list, and return it as a string. If several orderings are valid, any one is accepted. If the input is contradictory (a cycle, or a longer word listed before its own prefix), return `""`.
+
+  Example: `alien_order(["wrt","wrf","er","ett","rftt"])` returns a valid order such as `"wertf"`.
+starter: |
+  def alien_order(words):
+      pass
+hints:
+- 'Only adjacent words give information: the first differing letters of two neighbours give a precedence edge.'
+- Collect every letter as a node, even ones with no edges, then topologically sort.
+- 'Two traps: a longer word before its own prefix is invalid, and a cycle in the precedence graph is invalid.'
+follow_ups:
+- Return the lexicographically smallest valid ordering.
+- Report whether the ordering is unique.
+tests:
+- name: classic example
+  tags:
+  - ordering
+  code: |
+    def ok(words,o):
+        letters=set("".join(words))
+        assert isinstance(o,str) and sorted(o)==sorted(letters), o
+        rank={c:i for i,c in enumerate(o)}
+        for a,b in zip(words,words[1:]):
+            for x,y in zip(a,b):
+                if x!=y:
+                    assert rank[x]<rank[y]
+                    break
+
+    w=["wrt","wrf","er","ett","rftt"]
+    ok(w,alien_order(w))
+- name: two letters
+  tags:
+  - boundary
+  code: |
+    assert alien_order(["z","x"])=="zx"
+    w=["z","x","z"]
+    assert alien_order(w)==""
+- name: single word
+  tags:
+  - single
+  code: |
+    assert sorted(alien_order(["abc"]))==["a","b","c"]
+    assert alien_order(["z"])=="z"
+- name: prefix after longer word
+  tags:
+  - invalid
+  code: |
+    assert alien_order(["abc","ab"])==""
+- name: empty list
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert alien_order([])==""
+- name: duplicate words and unconstrained letters
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    def ok(words,o):
+        letters=set("".join(words))
+        assert isinstance(o,str) and sorted(o)==sorted(letters), o
+        rank={c:i for i,c in enumerate(o)}
+        for a,b in zip(words,words[1:]):
+            for x,y in zip(a,b):
+                if x!=y:
+                    assert rank[x]<rank[y]
+                    break
+
+    w=["ab","ab","ac"]
+    ok(w,alien_order(w))
+    assert sorted(alien_order(["z","z"]))==["z"]
+- name: many words one alphabet
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def ok(words,o):
+        letters=set("".join(words))
+        assert isinstance(o,str) and sorted(o)==sorted(letters), o
+        rank={c:i for i,c in enumerate(o)}
+        for a,b in zip(words,words[1:]):
+            for x,y in zip(a,b):
+                if x!=y:
+                    assert rank[x]<rank[y]
+                    break
+
+    import itertools
+    order="qwertyui"
+    w=["".join(p) for p in itertools.product(order,repeat=5)]
+    ok(w,alien_order(w))
+    assert alien_order(w)==order
+complexity:
+- op: overall
+  time: O(C + L)
+  space: O(1)
+extensions:
+- q: State the cost in terms of total characters C and alphabet size.
+  kind: complexity
+  key_points:
+  - One pass over adjacent word pairs, O(C) total characters
+  - Graph has at most 26 nodes and 26*26 edges so the sort is O(1)
+  - Space is bounded by the alphabet, O(1)
+- q: Which inputs must return the empty string?
+  kind: reasoning
+  key_points:
+  - A cycle among letter precedences
+  - A longer word immediately before its prefix
+  - Anything else, even with unconstrained letters, has an answer
+- q: How would you check that the ordering is unique?
+  kind: design
+  key_points:
+  - 'Kahn''s algorithm: uniqueness iff the queue has exactly one element at every step'
+  - Multiple zero-indegree letters at once means several valid orders
+  - Equivalent to a Hamiltonian path in the DAG
+narration: []
+state_aloud:
+- Include letters that have no constraints.
+- Prefix-after-longer is invalid.
+- Cycles return empty string.
+walkthrough: |
+  Add every letter to the graph, then compare each adjacent pair of words. At the first differing character add an edge from the earlier word's letter to the later word's letter (avoiding duplicates); if no character differs and the first word is longer, return the empty string. Run Kahn's algorithm over the letters: emit letters with indegree zero and release their successors. If the output is shorter than the number of letters there is a cycle, so return the empty string.

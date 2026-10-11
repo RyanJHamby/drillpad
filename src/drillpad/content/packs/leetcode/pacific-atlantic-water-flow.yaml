@@ -1,0 +1,103 @@
+id: pacific-atlantic-water-flow
+title: Pacific Atlantic Water Flow
+bar_level: 2
+target_minutes: 22
+patterns:
+- graph-bfs-dfs
+- multi-source-bfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Pacific Atlantic Water Flow (LC 417)"
+statement: |
+  An island is described by a grid `heights` of terrain heights. The Pacific Ocean touches the top row and left column; the Atlantic Ocean touches the bottom row and right column. Rain on a cell flows to any adjacent cell (up, down, left, right) whose height is less than or equal to the current one. Return the list of `[row, col]` coordinates from which water can reach both oceans. Any order is fine.
+
+  Example: for `[[1,2],[2,1]]` the answer is `[[0,1],[1,0]]`; the two cells of height 1 are low points and cannot reach the far ocean.
+starter: |
+  def pacific_atlantic(heights):
+      pass
+hints:
+- Asking from each cell 'can I reach both oceans' repeats a lot of work.
+- 'Reverse it: search uphill from the ocean borders, moving to neighbours that are at least as high.'
+- Do one search from the Pacific border and one from the Atlantic border and intersect the visited sets.
+follow_ups:
+- Return the count only.
+- What if heights can be negative or the grid is wrapped (torus)?
+tests:
+- name: classic example
+  tags:
+  - boundary
+  code: |
+    h=[[1,2,2,3,5],[3,2,3,4,4],[2,4,5,3,1],[6,7,1,4,5],[5,1,1,2,4]]
+    r=pacific_atlantic(h)
+    assert sorted(map(tuple,r))==[(0,4),(1,3),(1,4),(2,2),(3,0),(3,1),(4,0)]
+- name: single cell
+  tags:
+  - single
+  code: |
+    assert pacific_atlantic([[7]])==[[0,0]]
+- name: two by two
+  tags:
+  - ordering
+  code: |
+    r=pacific_atlantic([[1,2],[2,1]])
+    assert sorted(map(tuple,r))==[(0,1),(1,0)]
+- name: empty grid
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert pacific_atlantic([])==[]
+- name: single row touches both
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    r=pacific_atlantic([[1,2,3]])
+    assert sorted(map(tuple,r))==[(0,0),(0,1),(0,2)]
+- name: equal heights flow everywhere
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    r=pacific_atlantic([[2,2],[2,2]])
+    assert len(r)==4
+- name: large flat grid
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=400
+    r=pacific_atlantic([[5]*n for _ in range(n)])
+    assert len(r)==n*n
+complexity:
+- op: overall
+  time: O(R * C)
+  space: O(R * C)
+extensions:
+- q: Why does the reverse search cost O(RC) instead of O((RC)^2)?
+  kind: complexity
+  key_points:
+  - Each ocean search visits every cell at most once
+  - Two searches then an intersection, all linear
+  - Naive per-cell search repeats paths exponentially often or quadratically with memo
+- q: In the reverse direction, which neighbour moves are allowed?
+  kind: reasoning
+  key_points:
+  - Move from a cell to a neighbour whose height is >= the current one
+  - This mirrors water flowing downhill or level
+  - Equal heights must be allowed or flat plateaus break
+- q: How would you extend it to many oceans (k coasts)?
+  kind: design
+  key_points:
+  - Run one multi-source search per coast and count hits per cell
+  - Or bitmask the reachable coasts and propagate with a single traversal
+  - Cost O(k RC) with a counting array
+narration: []
+state_aloud:
+- Equal heights flow both ways.
+- Border cells touch an ocean directly.
+- Use an iterative traversal to avoid deep recursion.
+walkthrough: |
+  Run a flood fill from the cells adjacent to the Pacific (top row and left column), stepping to neighbours that are at least as high, and record the visited cells. Do the same from the Atlantic border (bottom row and right column). A cell in both visited sets can send water to both oceans, because the uphill search is the reverse of the downhill flow.

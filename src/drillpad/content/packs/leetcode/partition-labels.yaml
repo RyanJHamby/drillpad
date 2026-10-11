@@ -1,0 +1,112 @@
+id: partition-labels
+title: Partition Labels
+bar_level: 2
+target_minutes: 20
+patterns:
+- greedy
+- two-pointers
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Partition Labels (LC 763)"
+statement: |
+  Split the string `s` into as many contiguous pieces as possible so that each letter appears in at most one piece. Return the list of piece lengths in order.
+
+  Example: `partition_labels("ababcbacadefegdehijhklij")` returns `[9, 7, 8]` (pieces `ababcbaca`, `defegde`, `hijhklij`).
+starter: |
+  def partition_labels(s):
+      pass
+hints:
+- Once a piece includes some letter, it must also include that letter's last occurrence.
+- Precompute last[c] for every letter.
+- Sweep with a running end = max(last[s[i]]); when i reaches end, close the piece and start a new one.
+follow_ups:
+- What if the alphabet is Unicode?
+- Return the pieces rather than lengths.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert partition_labels('ababcbacadefegdehijhklij') == [9,7,8]
+- name: all distinct letters
+  tags:
+  - boundary
+  code: |
+    assert partition_labels('abcdef') == [1,1,1,1,1,1]
+- name: single character
+  tags:
+  - single
+  code: |
+    assert partition_labels('a') == [1]
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert partition_labels('') == []
+- name: one letter only
+  tags:
+  - duplicate
+  code: |
+    assert partition_labels('aaaa') == [4]
+- name: one long span swallows everything
+  tags:
+  - ordering
+  code: |
+    assert partition_labels('abcab') == [5]
+    assert partition_labels('eccbbbbdec') == [10]
+  hidden: true
+- name: cut at first repeat is wrong
+  tags:
+  - boundary
+  code: |
+    assert partition_labels('caedbdedda') == [1,9]
+    assert partition_labels('abacdc') == [3,3]
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    s = 'a' + 'bcdefghijklmnopqrstuvwxyz' * 40000 + 'a'
+    assert partition_labels(s) == [len(s)]
+    t = ('abc' * 100000) + ('xyz' * 100000)
+    assert partition_labels(t) == [300000, 300000]
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why is closing a piece at i == end optimal?
+  kind: reasoning
+  key_points:
+  - end is the smallest index that covers last occurrences of every letter in the piece so far
+  - Cutting anywhere earlier would split some letter across pieces
+  - Cutting as early as legal maximises piece count
+- q: Give the exchange argument for maximum number of pieces.
+  kind: reasoning
+  key_points:
+  - Any valid partition's first cut is at or after the greedy's first cut position
+  - Replacing the first piece by the greedy's shorter first piece leaves a valid remainder
+  - Induction on the remainder shows greedy count >= any valid count
+- q: Complexity with alphabet size k.
+  kind: complexity
+  key_points:
+  - 'Two passes over n characters: O(n) time'
+  - 'last-occurrence table has k entries: O(k) space, O(1) for a fixed alphabet'
+  - 'Unicode: dict of last indices is O(distinct characters)'
+- q: 'Design: the string is too large for memory.'
+  kind: design
+  key_points:
+  - Pass 1 streams to compute last occurrences (or an index file)
+  - Pass 2 streams again, emitting piece boundaries
+  - Keep only O(k) state; chunked reads
+narration: []
+state_aloud:
+- Empty string gives an empty list.
+- All the same letter gives one piece.
+- Pieces must be contiguous and cover the entire string.
+walkthrough: |
+  Record the last index of every character. Sweep left to right keeping the start of the current piece and `end`, the maximum last-occurrence among characters seen in it. When the scan index equals `end`, no character in the piece appears later, so close the piece, record its length and start the next one. Two linear passes.

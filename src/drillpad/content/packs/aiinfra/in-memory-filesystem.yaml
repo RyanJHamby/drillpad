@@ -1,0 +1,210 @@
+id: in-memory-filesystem
+title: In-memory Unix-style filesystem
+bar_level: 2
+target_minutes: 25
+patterns:
+- trie
+- path-resolution
+- command-api
+- parent-pointers
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Implement `FileSystem`, an in-memory filesystem. Paths are `/`-separated; a path starting with
+  `/` is absolute, otherwise it is relative to the current directory (initially `/`). Empty
+  components (`//`, trailing `/`) and `.` are ignored; `..` is the parent, and `..` at the root
+  stays at the root. All methods return plain values, they never raise.
+
+  - `mkdir(path) -> bool`: create a directory; False if the parent is missing or not a
+    directory, the name already exists (file or directory), or the path is the root or ends in
+    `.`/`..`.
+  - `touch(path) -> bool`: create an empty file. True if it exists already as a file (content is
+    kept); False if a directory has that name or the parent is missing.
+  - `write_file(path, content) -> bool`: create or overwrite a file; False if the parent is
+    missing or the path is a directory.
+  - `read_file(path) -> str | None`: None if missing or a directory (an empty file returns `""`).
+  - `ls(path=".") -> list[str] | None`: sorted child names of a directory; `[name]` for a file;
+    None if the path does not exist.
+  - `cd(path) -> bool`: False if it does not exist or is a file. `pwd() -> str`: e.g. `/a/b`.
+  - `rm(path) -> bool`: removes a FILE only. `rmdir(path) -> bool`: removes an EMPTY directory
+    only; never the root, the current directory, or an ancestor of the current directory.
+starter: |
+  class FileSystem:
+      def __init__(self):
+          pass
+hints:
+- Tree of nodes with is_dir, children dict, content, and a parent pointer; make root.parent = root so
+  '..' is free.
+- Write one _walk(path) helper (and one _split for create/remove) that everything uses.
+- Check `content is not None`, never truthiness, to tell a file from a directory.
+follow_ups:
+- Add mkdir -p, mv (reject moving a directory into its own subtree), rm -r.
+- Add find/glob and per-directory aggregate sizes.
+- How would you make it thread-safe (per-directory locks, atomic rename)?
+- How would you persist it (snapshot + append-only log)?
+tests:
+- name: mkdir and sorted ls
+  tags:
+  - empty
+  - single
+  - ordering
+  code: |
+    fs = FileSystem()
+    assert fs.ls("/") == [] and fs.pwd() == "/"
+    assert fs.mkdir("/b") and fs.mkdir("/a") and fs.mkdir("/a/z")
+    assert fs.ls("/") == ["a", "b"] and fs.ls("/a") == ["z"]
+    assert fs.mkdir("/a") is False, "already exists"
+    assert fs.mkdir("/nope/x") is False, "parent missing"
+    assert fs.ls("/nope") is None
+    assert fs.mkdir("/") is False
+- name: cd, relative paths, dot-dot and pwd
+  tags:
+  - boundary
+  - ordering
+  code: |
+    fs = FileSystem()
+    fs.mkdir("/a"); fs.mkdir("/a/b"); fs.mkdir("/c")
+    assert fs.cd("a") and fs.pwd() == "/a"
+    assert fs.mkdir("b/d") and fs.ls("b") == ["d"] and fs.ls("/a/b") == ["d"]
+    assert fs.cd("b/./d/..") and fs.pwd() == "/a/b"
+    assert fs.cd("../../c") and fs.pwd() == "/c"
+    assert fs.cd("../../..") and fs.pwd() == "/", ".. at root stays at root"
+    assert fs.cd("/a/b/d") and fs.pwd() == "/a/b/d"
+    assert fs.cd("missing") is False and fs.pwd() == "/a/b/d"
+    assert fs.ls() == [] and fs.ls(".") == []
+- name: 'files: touch, write, read, ls'
+  tags:
+  - duplicate
+  - empty
+  - invalid
+  code: |
+    fs = FileSystem()
+    fs.mkdir("/d")
+    assert fs.touch("/d/f") is True and fs.read_file("/d/f") == ""
+    assert fs.read_file("/d/f") is not None, "empty content is a valid file, not a missing one"
+    assert fs.write_file("/d/f", "hello") and fs.read_file("/d/f") == "hello"
+    assert fs.write_file("/d/f", "") and fs.read_file("/d/f") == ""
+    fs.write_file("/d/f", "keep")
+    assert fs.touch("/d/f") is True and fs.read_file("/d/f") == "keep", "touch must not truncate"
+    assert fs.ls("/d/f") == ["f"] and fs.ls("/d") == ["f"]
+    assert fs.mkdir("/d/f") is False and fs.touch("/d") is False
+    assert fs.write_file("/d", "x") is False, "cannot write over a directory"
+    assert fs.read_file("/d") is None and fs.read_file("/d/nope") is None
+    assert fs.write_file("/nope/f", "x") is False and fs.touch("/nope/f") is False
+- name: rm removes files only, rmdir empty dirs only
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    fs = FileSystem()
+    fs.mkdir("/d"); fs.touch("/d/f")
+    assert fs.rm("/d") is False, "rm does not remove directories"
+    assert fs.rmdir("/d") is False, "directory not empty"
+    assert fs.rmdir("/d/f") is False, "rmdir does not remove files"
+    assert fs.rm("/d/f") is True and fs.rm("/d/f") is False
+    assert fs.rmdir("/d") is True and fs.ls("/") == []
+    assert fs.rmdir("/") is False and fs.rm("/") is False
+    assert fs.mkdir("/d") is True, "name is reusable after removal"
+- name: cannot remove cwd or its ancestors
+  tags:
+  - boundary
+  - state-reuse
+  hidden: true
+  code: |
+    fs = FileSystem()
+    fs.mkdir("/a"); fs.mkdir("/a/b")
+    fs.cd("/a/b")
+    assert fs.rmdir("/a/b") is False and fs.rmdir(".") is False and fs.rmdir("..") is False
+    assert fs.rmdir("/a") is False
+    fs.cd("/")
+    assert fs.rmdir("/a/b") is True and fs.rmdir("/a") is True
+    fs.mkdir("/x"); fs.cd("/x")
+    assert fs.rmdir("/x") is False and fs.pwd() == "/x"
+- name: path normalisation
+  tags:
+  - boundary
+  - invalid
+  hidden: true
+  code: |
+    fs = FileSystem()
+    assert fs.mkdir("//a//") and fs.mkdir("/a/./b/") and fs.mkdir("/a/b/../c")
+    assert fs.ls("/a/") == ["b", "c"]
+    assert fs.mkdir("/a/..") is False and fs.mkdir("/a/.") is False and fs.mkdir("") is False
+    fs.touch("/a/f")
+    assert fs.ls("/a/f/..") is None, "cannot walk through a file"
+    assert fs.cd("/a/f") is False and fs.cd("/a/f/x") is False
+    assert fs.mkdir("/a/f/x") is False
+    assert fs.cd("") is True and fs.pwd() == "/"
+- name: deep and wide trees
+  tags:
+  - scale
+  hidden: true
+  code: |
+    fs = FileSystem()
+    path = ""
+    for i in range(500):
+        path += f"/d{i}"
+        assert fs.mkdir(path)
+    assert fs.cd(path) and fs.pwd() == path
+    for i in range(20000):
+        assert fs.touch(f"f{i:05d}")
+    names = fs.ls()
+    assert len(names) == 20000 and names == sorted(names)
+    assert fs.cd("../" * 500) and fs.pwd() == "/"
+complexity:
+- op: path resolution
+  time: O(L)
+  space: O(1)
+- op: ls
+  time: O(C log C)
+  space: O(C)
+- op: mkdir/touch/rm/rmdir
+  time: O(L)
+  space: O(1)
+extensions:
+- q: 'Level 2: add mkdir_p(path) that creates all missing intermediate directories.'
+  kind: code
+  key_points:
+  - Walk component by component, creating directories that are missing
+  - Fail (False) if an intermediate component is an existing file
+  - Idempotent when the whole path already exists as a directory
+- q: 'Level 3: add mv(src, dst) and rm_r(path).'
+  kind: code
+  key_points:
+  - mv must reject moving a directory into itself or its own subtree (walk dst's ancestors)
+  - mv into an existing directory moves under it; onto an existing file or non-empty dir is rejected or
+    defined explicitly
+  - rm_r cannot remove root, cwd or an ancestor of cwd; detach the node from its parent in O(1)
+- q: 'Level 4: add size(path) with aggregated directory sizes and find(name_glob).'
+  kind: code
+  key_points:
+  - Size is the sum of file content lengths recursively; cache totals and update ancestors on write, or
+    recompute by DFS
+  - Use an explicit stack or bounded recursion for deep trees
+  - find returns sorted absolute paths
+- q: Cost per operation and what dominates ls?
+  kind: complexity
+  key_points:
+  - Path resolution is O(L) in the number of components with O(1) dict lookups
+  - 'ls sorts C children: O(C log C); keep a sorted structure only if ls is hot'
+  - Space is O(total nodes + content)
+- q: How would this become a concurrent or persistent filesystem service?
+  kind: design
+  key_points:
+  - Per-directory locks acquired in path order, or a readers-writer lock; rename needs both parents locked
+    in a global order
+  - Snapshot plus an append-only operation log for recovery
+  - Shard by path prefix and expose idempotent path-addressed APIs
+narration: []
+state_aloud:
+- 'Return contract: False/None instead of exceptions, ls sorted; ask if the interviewer wants exceptions.'
+- One resolver for every path; '..' at root stays at root; '//' and trailing slash are ignored.
+- 'Empty file content is not a missing file: compare with None, not truthiness.'
+- rmdir must refuse non-empty directories, the root, and cwd or its ancestors.
+walkthrough: |
+  A tree of Node objects (name, is_dir, children dict, content, parent pointer). The root is its own parent so `..` at root is a no-op. _walk resolves a path to a node by consuming components against the root or cwd, failing if it descends through a file; _split resolves the parent directory and last component for create/remove operations. Every command is a thin wrapper that applies its rules on top of those two helpers; rmdir additionally walks up from cwd to refuse removing cwd or an ancestor. Source: standard formulation.
+categories:
+- ai-infra
+- systems-impl

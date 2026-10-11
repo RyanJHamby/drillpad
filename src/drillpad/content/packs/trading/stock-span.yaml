@@ -1,0 +1,127 @@
+id: stock-span
+title: Stock Span Problem
+bar_level: 2
+target_minutes: 20
+patterns:
+- monotonic-stack
+- amortized-analysis
+- streaming
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `StockSpanner`, which consumes daily closing prices one at a time.
+
+  `next(price) -> int` returns the **span** of today's price: the number of consecutive days ending today (including
+  today) on which the price was less than or equal to today's price. The first day always has span 1.
+  Equal prices extend the span (`<=`, not `<`). `ValueError` for a non-positive or non-int price.
+
+  Each call must be O(1) amortized; recomputing by walking back through history is O(n) per call and will time out on
+  long streams.
+starter: |
+  class StockSpanner:
+      def __init__(self):
+          pass
+hints:
+- The span of today folds in the spans of every earlier day that is no higher than today.
+- Keep a stack of (price, span) with strictly decreasing prices; pop while top price <= today and add
+  popped spans.
+- Each day is pushed once and popped at most once, so the loop is O(1) amortized.
+follow_ups:
+- How would you answer the same question for an offline array in one pass?
+- What about the next greater element?
+- How does a monotonic deque differ for sliding-window maximum?
+tests:
+- name: classic example
+  code: |
+    s = StockSpanner()
+    assert [s.next(p) for p in [100, 80, 60, 70, 60, 75, 85]] == [1, 1, 1, 2, 1, 4, 6]
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: single and equal prices extend the span
+  code: |
+    s = StockSpanner()
+    assert s.next(5) == 1
+    assert s.next(5) == 2
+    assert s.next(5) == 3
+    assert s.next(4) == 1
+    assert s.next(5) == 5
+  hidden: false
+  tags:
+  - single
+  - duplicate
+- name: monotonic runs
+  code: |
+    s = StockSpanner()
+    assert [s.next(p) for p in [1, 2, 3, 4, 5]] == [1, 2, 3, 4, 5]
+    s = StockSpanner()
+    assert [s.next(p) for p in [5, 4, 3, 2, 1]] == [1, 1, 1, 1, 1]
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: independent instances and invalid input
+  code: |
+    a, b = StockSpanner(), StockSpanner()
+    a.next(10); a.next(20)
+    assert b.next(15) == 1
+    for bad in (0, -1, 2.5):
+        try:
+            a.next(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+    assert a.next(20) == 3, "failed calls must not corrupt state"
+  hidden: true
+  tags:
+  - invalid
+  - state-reuse
+- name: 'scale: 300k days'
+  code: |
+    s = StockSpanner()
+    out = [s.next(1000 + i % 1000) for i in range(300000)]
+    assert out[999] == 1000 and out[1000] == 1
+    s = StockSpanner()
+    last = 0
+    for i in range(300000):
+        last = s.next(i + 1)
+    assert last == 300000
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: next
+  time: O(1) amortized
+  space: O(n)
+extensions:
+- q: 'Level 2: also return the "days since a strictly higher price" (previous greater element index).'
+  key_points:
+  - After popping lower-or-equal prices, the stack top is the previous strictly greater day
+  - Store day indices alongside price and span
+  - Return None or 0 when no higher price exists
+  kind: code
+- q: 'Cost analysis: why is the while loop not O(n) per call?'
+  key_points:
+  - Each element is popped at most once after being pushed once
+  - Total work over n calls is O(n), so O(1) amortized
+  - Worst-case single call is O(n), which matters for latency-sensitive use
+  kind: complexity
+- q: 'Design: a monotonic stack in a live analytics service.'
+  key_points:
+  - Stack size is bounded by the length of the current strictly-decreasing run; cap or window it in production
+  - State is tiny and easy to checkpoint or rebuild from the tick log
+  - Reset at session boundaries so a span never crosses days unless intended
+  kind: design
+narration: []
+state_aloud:
+- Span counts today and uses <= so equal prices extend it.
+- First day is span 1; non-positive prices rejected.
+- Amortized O(1) via a monotonic stack of (price, span).
+walkthrough: |
+  Standard stock span (classic monotonic-stack problem, LeetCode 901). Popped entries donate their spans to the new entry, so each price is pushed and popped once. Source: standard formulation.
+categories:
+- trading

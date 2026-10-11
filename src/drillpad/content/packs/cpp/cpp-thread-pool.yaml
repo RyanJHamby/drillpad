@@ -1,0 +1,254 @@
+id: cpp-thread-pool
+title: Thread Pool with Futures
+language: cpp
+bar_level: 3
+target_minutes: 40
+patterns:
+- thread-pool
+- condition-variable
+- packaged-task
+- future
+- raii-shutdown
+firm_tags:
+- quant-hft
+- ai-infra
+- distsys
+statement: |
+  Implement `class ThreadPool` (C++20) with a fixed number of worker threads, a task queue guarded by
+  `std::mutex` + `std::condition_variable`, and a `submit` that returns a `std::future`.
+
+  API:
+  - `explicit ThreadPool(size_t threads)`: start the workers; throws `std::invalid_argument` for 0
+  - `template <class F, class... Args> auto submit(F&&, Args&&...) -> std::future<R>` where `R` is the invoke result
+    of the decayed callable and decayed arguments. The callable and arguments may be move-only (decay-copy them
+    into the task). A task's exception is rethrown by `future::get()`. Throws `std::runtime_error` if called after shutdown.
+  - `void shutdown()`: stop accepting work, let workers finish every task already queued, join them. Idempotent.
+  - Destructor: same as `shutdown()`. Copying is deleted.
+
+  Rules: do not use `std::async`, `std::jthread` or any ready-made pool. Workers must not run tasks while holding the
+  queue mutex, must not spin, and must sleep on the condition variable when idle. Tests never rely on `sleep` for
+  correctness; hangs are caught by a 5 second per-test alarm.
+
+  Example:
+  ```cpp
+  ThreadPool pool(4);
+  auto f = pool.submit([](int a, int b) { return a + b; }, 2, 3);
+  int five = f.get();
+  ```
+starter: |
+  class ThreadPool {
+  public:
+      // Starts `threads` workers. Throws std::invalid_argument if threads == 0.
+      explicit ThreadPool(std::size_t threads) { (void)threads; }
+      // Drains the queue (every submitted task runs), then joins the workers.
+      ~ThreadPool() = default;
+      ThreadPool(const ThreadPool&) = delete;
+      ThreadPool& operator=(const ThreadPool&) = delete;
+
+      // Queue a call; the future yields its result or rethrows its exception.
+      // Throws std::runtime_error if the pool has been shut down.
+      template <class F, class... Args>
+      auto submit(F&& f, Args&&... args)
+          -> std::future<std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>> {
+          return {};
+      }
+
+      // Stop accepting work, finish what is queued, join workers. Idempotent.
+      void shutdown() {}
+  };
+hints:
+- 'Queue of std::function<void()>; worker loop: wait on cv with predicate (stop || !empty), pop under
+  lock, run after unlocking.'
+- 'std::packaged_task<R()> is move-only but std::function requires copyable callables in C++20: put the
+  packaged_task in a std::shared_ptr and queue a lambda capturing it. Bind move-only args with a lambda
+  init-capture + std::apply.'
+- 'Shutdown: set a stop flag under the mutex, notify_all, join. A worker exits only when stopping AND
+  the queue is empty, so queued work is drained.'
+follow_ups:
+- Why must the predicate be re-checked after waking (spurious wakeups, stolen wakeups)?
+- What is the difference between notify_one and notify_all in submit() and in shutdown()?
+- How would you avoid the shared_ptr allocation per task (C++23 std::move_only_function, small-buffer
+  task type)?
+- What deadlock appears if a task submits to the same pool and waits on the result?
+tests:
+- name: returns values through futures
+  tags:
+  - single
+  - ordering
+  code: |
+    ThreadPool pool(3);
+    std::vector<std::future<int>> fs;
+    for (int i = 0; i < 20; i++) fs.push_back(pool.submit([i] { return i * i; }));
+    for (int i = 0; i < 20; i++) CHECK_EQ(fs[i].get(), i * i);
+    auto s = pool.submit([](const std::string& a, int n) { return a + std::to_string(n); }, std::string("job"), 7);
+    CHECK_EQ(s.get(), "job7");
+- name: exceptions travel through the future
+  tags:
+  - invalid
+  - single
+  code: |
+    ThreadPool pool(2);
+    auto f = pool.submit([]() -> int { throw std::runtime_error("boom"); });
+    std::string msg;
+    try { f.get(); } catch (const std::runtime_error& e) { msg = e.what(); }
+    CHECK_EQ(msg, "boom");
+    auto ok = pool.submit([] { return 5; });
+    CHECK_EQ(ok.get(), 5);
+- name: void tasks and tasks run off the calling thread
+  tags:
+  - single
+  - concurrency
+  code: |
+    ThreadPool pool(2);
+    std::atomic<int> n{0};
+    auto me = std::this_thread::get_id();
+    auto id = pool.submit([&] { n++; return std::this_thread::get_id(); });
+    CHECK(id.get() != me);
+    auto v = pool.submit([&] { n++; });
+    v.get();
+    CHECK_EQ(n.load(), 2);
+- name: workers really run in parallel
+  tags:
+  - concurrency
+  - scale
+  code: |
+    ThreadPool pool(4);
+    std::mutex m;
+    std::condition_variable cv;
+    int arrived = 0;
+    std::vector<std::future<bool>> fs;
+    for (int i = 0; i < 4; i++) {
+        fs.push_back(pool.submit([&] {
+            std::unique_lock<std::mutex> lock(m);
+            ++arrived;
+            cv.notify_all();
+            return cv.wait_for(lock, std::chrono::seconds(3), [&] { return arrived == 4; });
+        }));
+    }
+    for (auto& f : fs) CHECK(f.get());
+- name: destructor drains the queue
+  tags:
+  - concurrency
+  - state-reuse
+  code: |
+    std::atomic<int> done{0};
+    {
+        ThreadPool pool(2);
+        for (int i = 0; i < 200; i++) pool.submit([&] { done.fetch_add(1); });
+    }
+    CHECK_EQ(done.load(), 200);
+- name: submit after shutdown throws
+  tags:
+  - invalid
+  - concurrency
+  code: |
+    ThreadPool pool(2);
+    auto f = pool.submit([] { return 1; });
+    pool.shutdown();
+    CHECK_EQ(f.get(), 1);
+    CHECK_THROWS(pool.submit([] { return 2; }));
+    pool.shutdown();   // idempotent
+- name: zero threads is rejected
+  hidden: true
+  tags:
+  - zero-capacity
+  - invalid
+  code: |
+    CHECK_THROWS(ThreadPool(0));
+    ThreadPool one(1);
+    CHECK_EQ(one.submit([] { return 3; }).get(), 3);
+- name: move-only callables are accepted
+  hidden: true
+  tags:
+  - single
+  - invalid
+  code: |
+    ThreadPool pool(1);
+    auto p = std::make_unique<int>(41);
+    auto f = pool.submit([q = std::move(p)] { return *q + 1; });
+    CHECK_EQ(f.get(), 42);
+    auto g = pool.submit([](std::unique_ptr<int> x) { return *x * 2; }, std::make_unique<int>(8));
+    CHECK_EQ(g.get(), 16);
+- name: many producers submit concurrently
+  hidden: true
+  tags:
+  - concurrency
+  - scale
+  code: |
+    ThreadPool pool(4);
+    std::atomic<long> sum{0};
+    std::vector<std::thread> producers;
+    std::vector<std::vector<std::future<void>>> futs(4);
+    for (int t = 0; t < 4; t++) {
+        producers.emplace_back([&, t] {
+            for (int i = 1; i <= 250; i++) futs[t].push_back(pool.submit([&sum, i] { sum += i; }));
+        });
+    }
+    for (auto& p : producers) p.join();
+    for (auto& v : futs) for (auto& f : v) f.get();
+    CHECK_EQ(sum.load(), 4L * (250L * 251L / 2));
+- name: single worker keeps FIFO order
+  hidden: true
+  tags:
+  - ordering
+  code: |
+    ThreadPool pool(1);
+    std::vector<int> order;
+    std::vector<std::future<void>> fs;
+    for (int i = 0; i < 50; i++) fs.push_back(pool.submit([&order, i] { order.push_back(i); }));
+    for (auto& f : fs) f.get();
+    std::vector<int> want(50);
+    std::iota(want.begin(), want.end(), 0);
+    CHECK(order == want);
+complexity:
+- op: submit
+  time: O(1) amortized
+  space: O(1)
+- op: shutdown
+  time: O(n)
+  space: O(1)
+- op: pool
+  time: O(1)
+  space: O(n)
+extensions:
+- q: What are the concurrency and lifetime hazards in this design?
+  kind: design
+  key_points:
+  - 'Tasks run after submit returns: captured references must outlive the future, so prefer value captures
+    or join via the future'
+  - A task that blocks waiting on another queued task can deadlock a fixed-size pool (thread starvation)
+  - 'Destroying the pool from a worker thread would join itself: forbid it'
+- q: What is the contention profile and how would you scale it?
+  kind: complexity
+  key_points:
+  - 'One mutex and one queue serializes submit and pop: O(1) per op but all threads contend on one cache
+    line'
+  - Per-worker deques with work stealing cut contention at the cost of complexity
+  - Batch dequeue or lock-free MPMC queues reduce lock hold time; wake-up latency is then dominated by
+    the futex
+- q: Why decay-copy the callable and arguments?
+  kind: reasoning
+  key_points:
+  - The task outlives the submit call, so it must own its arguments, exactly what std::thread and std::async
+    do
+  - Perfect forwarding straight into the queue would store dangling references to temporaries
+  - Use std::ref explicitly when you do mean to pass by reference
+- q: How would you add task priorities or graceful cancellation?
+  kind: design
+  key_points:
+  - Replace std::queue with a priority_queue keyed by (priority, sequence) to stay FIFO within a level
+  - 'Cancellation: a std::stop_token or shared atomic flag checked by long tasks; pending tasks can be
+    dropped on a fast shutdown'
+  - A broken_promise future_error results if a packaged_task is destroyed unrun, which makes dropped tasks
+    observable
+narration: []
+state_aloud:
+- 'Spurious wakeups: always wait with a predicate.'
+- Never run user code while holding the queue mutex (deadlock and serialization).
+- 'Shutdown semantics: drain vs drop; here we drain and reject new work.'
+- 'Exceptions in tasks must not kill the worker thread: packaged_task captures them into the future.'
+walkthrough: |
+  Workers sleep on a condition variable until the queue has work or the pool is stopping, pop a task under the lock and run it outside it; `submit` wraps the call in a `std::packaged_task` (kept in a `shared_ptr` because `std::function` needs copyable callables) so results and exceptions flow into the future. Shutdown sets the stop flag under the mutex and joins, draining the queue first. Python's `ThreadPoolExecutor` does all this for you; the C++ work is move-only task storage, lifetime, and the stop/drain protocol.
+anki_queries: []
+categories:
+- systems-impl

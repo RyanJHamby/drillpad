@@ -1,0 +1,205 @@
+id: weighted-fair-queue
+title: Weighted Fair Queueing
+bar_level: 3
+target_minutes: 35
+patterns:
+- weighted-fair-queueing
+- virtual-time
+- heap
+- fairness
+- multi-tenant
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  A shared inference endpoint serves several tenants (flows) that must receive capacity in proportion
+  to their weights, and a tenant that was idle must not be able to bank credit and then flood the
+  link. Implement a self-clocked weighted fair queue using virtual finish times.
+
+  `WFQ()`:
+  - `add_flow(flow, weight)`: register a flow with a positive weight (`ValueError` otherwise).
+    Re-adding a flow changes the weight used for packets enqueued afterwards.
+  - `enqueue(flow, packet_id, size)`: `KeyError` for an unknown flow, `ValueError` if `size <= 0`.
+    Let `V` be the current virtual time (initially 0). The packet's virtual finish tag is
+    `F = max(V, last_finish[flow]) + size / weight`, and `last_finish[flow]` becomes `F`.
+  - `dequeue() -> packet_id | None`: remove and return the packet with the smallest `F` across all
+    flows (ties: the packet enqueued earlier). Set `V = F` of the packet just served. Return `None` if
+    nothing is queued.
+  - `backlog(flow) -> int`: packets of that flow currently queued.
+
+  Sizes and weights are positive integers in the tests; compute tags exactly (for example with
+  `fractions.Fraction`) so that ties are real ties.
+
+  Example: weight A=1, B=2; A enqueues a1,a2 (size 2), B enqueues b1,b2,b3 (size 2). Tags: a1=2, a2=4,
+  b1=1, b2=2, b3=3. Service order: b1, a1 (tie at 2, a1 arrived first), b2, b3, a2.
+starter: |
+  class WFQ:
+      def __init__(self):
+          pass
+
+      def add_flow(self, flow, weight):
+          pass
+
+      def enqueue(self, flow, packet_id, size):
+          pass
+
+      def dequeue(self):
+          pass
+
+      def backlog(self, flow):
+          pass
+hints:
+- One global min-heap of (finish_tag, arrival_seq, flow, packet_id) is enough; per-flow queues are not
+  needed.
+- The `max(V, last_finish[flow])` term is what stops an idle flow from jumping the line with an ancient
+  tag.
+- Use Fraction (or compare cross-multiplied integers) so size/weight ties are exact.
+follow_ups:
+- Packet-by-packet generalized processor sharing (true GPS virtual time) instead of self-clocked.
+- Weights as token-rate quotas for LLM tenants where the 'size' is output tokens that are unknown up front.
+- Per-flow max queue depth with drop or backpressure.
+tests:
+- name: heavier flow gets proportionally more service
+  code: |
+    w = WFQ()
+    w.add_flow("A", 1); w.add_flow("B", 2)
+    for p in ["a1", "a2"]:
+        w.enqueue("A", p, 2)
+    for p in ["b1", "b2", "b3"]:
+        w.enqueue("B", p, 2)
+    # finish tags: a1=2 a2=4 b1=1 b2=2 b3=3 ; tie at 2 goes to the earlier arrival (a1)
+    assert [w.dequeue() for _ in range(5)] == ["b1", "a1", "b2", "b3", "a2"]
+    assert w.dequeue() is None
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: equal weights interleave equal packets
+  code: |
+    w = WFQ()
+    w.add_flow("x", 1); w.add_flow("y", 1)
+    for i in range(3):
+        w.enqueue("x", f"x{i}", 1)
+    for i in range(3):
+        w.enqueue("y", f"y{i}", 1)
+    assert [w.dequeue() for _ in range(6)] == ["x0", "y0", "x1", "y1", "x2", "y2"]
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: an idle flow does not bank credit
+  code: |
+    w = WFQ()
+    w.add_flow("A", 1); w.add_flow("B", 1)
+    for i in range(1, 5):
+        w.enqueue("A", f"a{i}", 1)
+    assert w.dequeue() == "a1" and w.dequeue() == "a2"      # virtual time is now 2
+    w.enqueue("B", "b1", 1)                                  # start = max(V=2, 0), finish 3
+    assert [w.dequeue() for _ in range(3)] == ["a3", "b1", "a4"]
+  hidden: false
+  tags:
+  - time
+  - state-reuse
+- name: 'size matters: big packets finish later'
+  code: |
+    w = WFQ()
+    w.add_flow("A", 1); w.add_flow("B", 1)
+    w.enqueue("A", "big", 10)
+    w.enqueue("B", "s1", 1); w.enqueue("B", "s2", 1); w.enqueue("B", "s3", 1)
+    assert [w.dequeue() for _ in range(4)] == ["s1", "s2", "s3", "big"]
+  hidden: true
+  tags:
+  - ordering
+- name: backlog counts, empty queue and invalid input
+  code: |
+    w = WFQ()
+    assert w.dequeue() is None
+    for bad in [0, -1]:
+        try:
+            w.add_flow("f", bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError
+    w.add_flow("f", 3)
+    try:
+        w.enqueue("nope", "p", 1)
+    except KeyError:
+        pass
+    else:
+        raise AssertionError
+    try:
+        w.enqueue("f", "p", 0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+    w.enqueue("f", "p", 5)
+    assert w.backlog("f") == 1 and w.dequeue() == "p" and w.backlog("f") == 0
+  hidden: true
+  tags:
+  - empty
+  - invalid
+  - single
+- name: weights 1:2:4 share the link in proportion
+  code: |
+    w = WFQ()
+    for f, wt in [("a", 1), ("b", 2), ("c", 4)]:
+        w.add_flow(f, wt)
+        for i in range(30000):
+            w.enqueue(f, (f, i), 1)
+    served = {"a": 0, "b": 0, "c": 0}
+    for _ in range(35000):
+        served[w.dequeue()[0]] += 1
+    assert 4800 < served["a"] < 5200 and 9800 < served["b"] < 10200 and 19800 < served["c"] < 20200, served
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: enqueue
+  time: O(log N)
+  space: O(N)
+- op: dequeue
+  time: O(log N)
+  space: O(N)
+extensions:
+- q: 'Level 2: add a per-flow queue limit and make `enqueue` return False (reject) when the flow''s backlog
+    is at its limit. What changes in the data structure?'
+  kind: code
+  key_points:
+  - A per-flow backlog counter checked before computing a tag, with no state mutated on rejection
+  - Rejection must not advance last_finish, otherwise the flow is charged for a packet that never ran
+  - Decide between reject, drop-oldest and block, and say which one fits an API gateway
+- q: LLM request cost is unknown at admission (output length is not known). How would you charge fairness?
+  kind: design
+  key_points:
+  - Charge an estimate at enqueue (prompt tokens plus expected output) and true-up with actual tokens
+    when it finishes, adjusting last_finish
+  - Or meter by tokens served per interval and use deficit round robin on those counters
+  - Cap max_new_tokens so one request cannot monopolize a slot
+- q: Compare WFQ with strict priority and with deficit round robin for multi-tenant serving.
+  kind: design
+  key_points:
+  - Strict priority starves low tiers; WFQ guarantees each backlogged flow its weighted share
+  - Deficit round robin is O(1) per packet and approximates WFQ without a heap, at the cost of coarser
+    fairness for small packets
+  - WFQ latency bounds depend on weights and max packet size
+- q: Complexity and why one global heap works.
+  kind: complexity
+  key_points:
+  - O(log N) per enqueue and dequeue for N queued packets
+  - Per-flow FIFO order is preserved because tags increase within a flow (last_finish is monotone)
+  - Space O(N + F) for F flows
+narration: []
+state_aloud:
+- 'Ask: are sizes known at enqueue (yes here) and are weights integers.'
+- Virtual time advances to the finish tag of the packet being served.
+- max(V, last_finish) prevents idle flows from accumulating credit.
+- Ties go to arrival order; exact arithmetic so ties are real.
+- dequeue on empty returns None, not an exception.
+walkthrough: |
+  Every packet gets a virtual finish tag F = max(V, last_finish[flow]) + size/weight where V is the tag of the last packet served (self-clocked fair queueing). A single heap ordered by (F, arrival sequence) always yields the next packet to serve; because last_finish grows per flow, per-flow FIFO order is automatic, and the max with V ensures a flow that was idle restarts at the current virtual time instead of at an old tag. Fractions keep tie behaviour exact. Standard WFQ / SCFQ formulation; the multi-tenant LLM framing is the problem's own.
+categories:
+- ai-infra

@@ -1,0 +1,101 @@
+id: counting-bits
+title: Counting Bits
+bar_level: 1
+target_minutes: 15
+patterns:
+- bit-manipulation
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Given a non-negative integer `n`, return a list `ans` of length `n + 1` where `ans[i]` is the number of `1` bits in the binary representation of `i`.
+
+  Example: `count_bits(5)` returns `[0,1,1,2,1,2]`.
+starter: |
+  def count_bits(n):
+      pass
+hints:
+- Counting each number's bits separately costs O(n log n); look for a relation between i and a smaller number.
+- i >> 1 drops the last bit, so bits(i) = bits(i >> 1) + (i & 1).
+- Fill the array left to right using that recurrence.
+follow_ups:
+- Use the 'highest power of two' or 'clear lowest set bit' recurrence instead.
+- Do it without any built-in popcount.
+tests:
+- name: example
+  tags:
+  - boundary
+  code: |
+    assert count_bits(5) == [0,1,1,2,1,2]
+- name: zero
+  tags:
+  - zero-capacity
+  - boundary
+  code: |
+    assert count_bits(0) == [0]
+- name: one and two
+  tags:
+  - single
+  code: |
+    assert count_bits(1) == [0,1]
+    assert count_bits(2) == [0,1,1]
+- name: powers of two boundary
+  tags:
+  - boundary
+  code: |
+    assert count_bits(16) == [0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4,1]
+- name: length is n + 1 and ends correctly
+  tags:
+  - ordering
+  code: |
+    r=count_bits(1023)
+    assert len(r)==1024 and r[-1]==10 and r[512]==1
+  hidden: true
+- name: all-ones numbers
+  tags:
+  - duplicate
+  code: |
+    r=count_bits(255)
+    assert r[255]==8 and r[127]==7 and r[128]==1
+  hidden: true
+- name: large n
+  tags:
+  - scale
+  code: |
+    n = 1500000
+    r = count_bits(n)
+    assert len(r) == n + 1
+    assert r[n] == bin(n).count('1') and r[2**20] == 1 and r[2**20 - 1] == 20
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Derive the recurrence and why it is O(1) per entry.
+  kind: reasoning
+  key_points:
+  - i has the same bits as i >> 1 plus the lowest bit i & 1
+  - i >> 1 < i, so its answer is already computed
+  - 'Alternative: bits(i) = bits(i & (i - 1)) + 1'
+- q: Time and space versus calling popcount per number.
+  kind: complexity
+  key_points:
+  - 'Per-number popcount: O(n log n) or O(n k)'
+  - 'DP recurrence: O(n) time'
+  - Output array is O(n) space, no extra beyond it
+- q: 'Design: you need counts for arbitrary i, not the whole range.'
+  kind: design
+  key_points:
+  - Compute directly with a popcount using a byte lookup table
+  - Cache a table for 0..255 and combine 4 lookups for 32-bit values
+  - Prefix-sum of the table answers 'total set bits up to n' queries
+narration: []
+state_aloud:
+- n = 0 returns [0].
+- Result length is n + 1.
+- Powers of two have a single bit.
+walkthrough: |
+  Let ans[0] = 0. For each i from 1 to n, the number of set bits is the count for i >> 1 (already computed) plus the lowest bit of i. This builds the whole table in linear time with no per-number loop.

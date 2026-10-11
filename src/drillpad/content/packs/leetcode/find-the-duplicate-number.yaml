@@ -1,0 +1,97 @@
+id: find-the-duplicate-number
+title: Find the Duplicate Number
+bar_level: 2
+target_minutes: 25
+patterns:
+- linked-list
+- two-pointers
+- binary-search
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  You get a list `nums` of `n + 1` integers, each in the range `1..n`. Exactly one value is repeated (it may appear more than twice); every other value appears once. Return the repeated value. Do not modify `nums` and use only O(1) extra space.
+
+  Example: `find_duplicate([1,3,4,2,2])` returns `2`.
+starter: |
+  def find_duplicate(nums):
+      pass
+hints:
+- Sorting or a set is easy but breaks the no-modify or O(1)-space rule.
+- Treat index i as having an edge to nums[i]; a repeated value means two edges enter one node.
+- 'That makes a cycle starting at the duplicate: run Floyd tortoise and hare, then find the cycle entrance.'
+follow_ups:
+- Solve it with binary search on the value range.
+- What if numbers could be 0 or the range were not 1..n?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert find_duplicate([1,3,4,2,2]) == 2
+    assert find_duplicate([3,1,3,4,2]) == 3
+- name: smallest case
+  tags:
+  - boundary
+  code: |
+    assert find_duplicate([1,1]) == 1
+    assert find_duplicate([2,2,1]) == 2
+- name: repeated many times
+  tags:
+  - duplicate
+  code: |
+    assert find_duplicate([2,2,2,2,2]) == 2
+    assert find_duplicate([3,3,3,1,3]) == 3
+- name: duplicate at the ends
+  tags:
+  - ordering
+  code: |
+    assert find_duplicate([4,1,2,3,4]) == 4
+    assert find_duplicate([1,2,3,4,1]) == 1
+- name: input is not modified
+  tags:
+  - state-reuse
+  code: |
+    a = [3,1,3,4,2]
+    assert find_duplicate(a) == 3
+    assert a == [3,1,3,4,2]
+- name: large input
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 200000
+    nums = [(i * 7919) % n + 1 for i in range(n)] + [12345]
+    assert find_duplicate(nums) == 12345
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why does the functional-graph view produce a cycle?
+  kind: reasoning
+  key_points:
+  - Values are in 1..n so every index maps to a valid index
+  - Index 0 is never a target, so it is a tail outside the cycle
+  - A repeated value gives a node two incoming edges, which starts the cycle
+- q: Compare approaches.
+  kind: complexity
+  key_points:
+  - Floyd is O(n) time, O(1) space, no mutation
+  - Binary search on values is O(n log n) time, O(1) space
+  - Set is O(n) time but O(n) space; sorting mutates or costs O(n) space
+- q: Many duplicates or many missing numbers?
+  kind: design
+  key_points:
+  - Floyd needs exactly the pigeonhole guarantee
+  - Counting or bit tricks generalize but cost extra space
+  - Cyclic sort finds all duplicates but mutates the array
+narration: []
+state_aloud:
+- Length is n + 1 with values in 1..n so a duplicate is guaranteed.
+- The duplicate can appear more than twice.
+- The array must not be modified.
+- Constant extra space.
+walkthrough: |
+  Interpret the array as a function mapping index to `nums[index]`. Starting from index 0, follow it with tortoise (one step) and hare (two steps) until they meet inside a cycle. Then restart one pointer from the start and advance both one step at a time; they meet at the cycle entrance, which is the duplicated value. This reads the array only and uses constant memory.

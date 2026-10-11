@@ -1,0 +1,95 @@
+id: coin-change
+title: Coin Change
+bar_level: 2
+target_minutes: 25
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Coin Change (LC 322)"
+statement: |
+  Given coin denominations `coins` (unlimited supply of each) and a target `amount`, return the fewest coins needed to make that exact amount, or `-1` if it is impossible.
+
+  Example: `coin_change([1,2,5], 11)` returns `3` (5 + 5 + 1).
+starter: |
+  def coin_change(coins, amount):
+      pass
+hints:
+- Greedy fails (coins [1,3,4], amount 6). Think about subproblems instead.
+- dp[a] = min over coins c of dp[a - c] + 1, with dp[0] = 0.
+- Initialize unreachable amounts to infinity and map them to -1 at the end.
+follow_ups:
+- Count the number of ways instead (Coin Change II).
+- Can you print the coins used?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert coin_change([1,2,5],11)==3
+- name: impossible
+  tags:
+  - invalid
+  code: |
+    assert coin_change([2],3)==-1
+- name: zero amount
+  tags:
+  - zero-capacity
+  code: |
+    assert coin_change([1],0)==0
+    assert coin_change([],0)==0
+- name: greedy trap
+  tags:
+  - boundary
+  code: |
+    assert coin_change([1,3,4],6)==2
+- name: single coin exact
+  tags:
+  - single
+  code: |
+    assert coin_change([7],14)==2
+- name: no coins
+  tags:
+  - empty
+  code: |
+    assert coin_change([],5)==-1
+- name: large amount
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert coin_change([1,5,10,25,50],10000)==200
+    assert coin_change([186,419,83,408],6249)==20
+complexity:
+- op: overall
+  time: O(amount * n)
+  space: O(amount)
+extensions:
+- q: Complexity and why not greedy
+  kind: complexity
+  key_points:
+  - Table of size amount+1, n coins per cell
+  - O(amount*n) time, O(amount) space
+  - Greedy fails for non-canonical coin systems
+- q: Count combinations (Coin Change II)
+  kind: code
+  key_points:
+  - Iterate coins in the outer loop to count combinations not permutations
+  - dp[a] += dp[a - c]
+  - dp[0] = 1
+- q: Reconstruct the coins
+  kind: design
+  key_points:
+  - Store the last coin chosen per amount
+  - Walk back from amount subtracting that coin
+  - Return the multiset
+narration: []
+state_aloud:
+- Amount 0 needs 0 coins.
+- Unreachable amount returns -1.
+- Empty coin list.
+- Coins larger than the amount.
+walkthrough: |
+  Let `dp[a]` be the fewest coins to make amount `a`, with `dp[0] = 0`. For each amount from 1 to the target, try every coin not exceeding it and take `dp[a - c] + 1`. Unreachable amounts stay infinite, which maps to -1. The nested loops cost O(amount * coins) with an O(amount) table.

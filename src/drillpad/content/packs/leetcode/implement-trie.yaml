@@ -1,0 +1,133 @@
+id: implement-trie
+title: Implement Trie (Prefix Tree)
+bar_level: 2
+target_minutes: 25
+patterns:
+- trie
+firm_tags:
+- ai-infra
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Implement Trie (LC 208)"
+statement: |
+  Implement a `Trie` class with:
+  - `insert(word)` adds a word,
+  - `search(word)` returns `True` only if exactly this word was inserted,
+  - `starts_with(prefix)` returns `True` if any inserted word begins with the prefix.
+
+  Example: after `insert("apple")`, `search("apple")` is `True`, `search("app")` is `False`, and `starts_with("app")` is `True`.
+starter: |
+  class Trie:
+      def __init__(self):
+          pass
+
+      def insert(self, word):
+          pass
+
+      def search(self, word):
+          pass
+
+      def starts_with(self, prefix):
+          pass
+hints:
+- Each node represents a prefix and maps next characters to child nodes.
+- Mark nodes where an inserted word ends; search needs that mark, starts_with does not.
+- Share the walk logic between search and starts_with.
+follow_ups:
+- Delete a word from the trie.
+- How do you reduce memory for sparse tries?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    t=Trie()
+    t.insert('apple')
+    assert t.search('apple') is True
+    assert t.search('app') is False
+    assert t.starts_with('app') is True
+    t.insert('app')
+    assert t.search('app') is True
+- name: missing words
+  tags:
+  - invalid
+  code: |
+    t=Trie()
+    t.insert('cat')
+    assert t.search('dog') is False
+    assert t.starts_with('d') is False
+    assert t.search('cats') is False
+- name: empty trie and empty strings
+  tags:
+  - empty
+  code: |
+    t=Trie()
+    assert t.search('a') is False
+    assert t.starts_with('') is True
+    assert t.search('') is False
+    t.insert('a')
+    assert t.search('a') is True
+- name: single letter words
+  tags:
+  - single
+  code: |
+    t=Trie()
+    t.insert('a')
+    assert t.search('a') is True and t.starts_with('a') is True and t.search('b') is False
+- name: duplicate inserts
+  tags:
+  - duplicate
+  code: |
+    t=Trie()
+    t.insert('go')
+    t.insert('go')
+    assert t.search('go') is True and t.search('g') is False
+- name: prefix of another word
+  tags:
+  - boundary
+  code: |
+    t=Trie()
+    t.insert('hello')
+    assert t.search('hell') is False and t.starts_with('hell') is True and t.starts_with('hello') is True and t.starts_with('hellos') is False
+- name: many words
+  tags:
+  - scale
+  hidden: true
+  code: |
+    t=Trie()
+    ws=[str(i) for i in range(50000)]
+    for w in ws: t.insert(w)
+    assert all(t.search(w) is True for w in ws[::97])
+    assert t.search('50000') is False and t.starts_with('4999') is True
+complexity:
+- op: insert/search/starts_with
+  time: O(L)
+  space: O(L)
+extensions:
+- q: Memory tradeoffs
+  kind: complexity
+  key_points:
+  - Worst-case space O(total characters)
+  - Dict children cost less than 26-slot arrays for sparse tries
+  - Compressed (radix) tries merge single-child chains
+- q: Delete a word
+  kind: code
+  key_points:
+  - Unmark the end flag
+  - Prune nodes bottom-up that have no children and no end flag
+  - Do not prune shared prefixes still used
+- q: 'Design: autocomplete with top suggestions'
+  kind: design
+  key_points:
+  - Store counts or top-k list per node
+  - DFS below the prefix node to collect completions
+  - Cache ranked results at hot nodes
+narration: []
+state_aloud:
+- Empty string handling (state your choice).
+- Word that is a prefix of another.
+- Duplicate inserts.
+- Search must check the end marker.
+walkthrough: |
+  Each node holds a dictionary of children and a flag marking the end of an inserted word. Insert walks (creating nodes as needed) and sets the flag on the last node. A shared helper walks a string and returns the final node or None; `search` also requires the end flag while `starts_with` only requires the node to exist. All operations are O(L) in the word length.

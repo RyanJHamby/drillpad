@@ -1,0 +1,91 @@
+id: top-k-frequent-elements
+title: Top K Frequent Elements
+bar_level: 2
+target_minutes: 20
+patterns:
+- heap-top-k
+- hash-map
+firm_tags:
+- ai-infra
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Top K Frequent Elements (LC 347)"
+statement: |
+  Given a list of integers and `k`, return the `k` most frequent values (any order). The k-th most frequent value is guaranteed to be unambiguous (no ties at the cutoff).
+
+  Example: `top_k_frequent([1,1,1,2,2,3], 2)` returns `[1,2]`.
+starter: |
+  def top_k_frequent(nums, k):
+      pass
+hints:
+- Count frequencies with a hash map first.
+- A min-heap of size k keeps the k largest counts in O(n log k).
+- Alternatively bucket values by frequency (index = count) for O(n).
+follow_ups:
+- Can you beat O(n log k)?
+- How would you do this on a stream with limited memory?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert sorted(top_k_frequent([1,1,1,2,2,3],2))==[1,2]
+- name: single element
+  tags:
+  - single
+  code: |
+    assert top_k_frequent([1],1)==[1]
+- name: k equals number of distinct
+  tags:
+  - boundary
+  code: |
+    assert sorted(top_k_frequent([4,4,5,6,6,6],3))==[4,5,6]
+- name: negatives and duplicates
+  tags:
+  - duplicate
+  code: |
+    assert sorted(top_k_frequent([-1,-1,-1,2,2,0],2))==[-1,2]
+- name: empty input
+  tags:
+  - empty
+  code: |
+    assert top_k_frequent([],0)==[]
+- name: large input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    nums=[i%1000 for i in range(300000)]+[7]*5000+[9]*4000
+    assert sorted(top_k_frequent(nums,2))==[7,9]
+complexity:
+- op: overall
+  time: O(n log k)
+  space: O(n)
+extensions:
+- q: Bucket sort in O(n)
+  kind: complexity
+  key_points:
+  - Frequencies are at most n so use n+1 buckets
+  - Walk buckets from high to low collecting k values
+  - Time O(n), space O(n)
+- q: Streaming top-k with bounded memory
+  kind: design
+  key_points:
+  - Use Count-Min Sketch or Space-Saving (Misra-Gries) for approximate counts
+  - Keep a heap of candidates
+  - Accept approximation error bounds
+- q: Heap size choice
+  kind: reasoning
+  key_points:
+  - Min-heap of size k evicts the smallest count
+  - Size n heap would be O(n log n)
+  - Quickselect gives O(n) average
+narration: []
+state_aloud:
+- Empty input or k=0.
+- k equal to the number of distinct values.
+- Ties at the cutoff (state your tie rule).
+- Negative values are fine since keys are only hashed.
+walkthrough: |
+  Count occurrences in a dictionary, then keep a min-heap of at most k `(count, value)` pairs, popping the smallest whenever it grows past k. What remains are the k most frequent values. The heap bounds each update to O(log k), giving O(n log k) overall; `Counter.most_common` or bucketing by frequency are alternatives.

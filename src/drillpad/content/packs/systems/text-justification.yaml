@@ -1,0 +1,137 @@
+id: text-justification
+title: Text Justification
+bar_level: 3
+target_minutes: 35
+patterns:
+- greedy
+- string-formatting
+- simulation
+firm_tags: []
+statement: |
+  Implement `full_justify(words, max_width)` -> `list[str]` (LeetCode 68). Pack as many words as
+  fit on each line greedily, then format every line to exactly `max_width` characters.
+
+  - Every line except the last: spaces are distributed as evenly as possible between words; if
+    they do not divide evenly the LEFT gaps get one extra space each. A line holding a single
+    word is left-justified and padded with spaces on the right.
+  - The last line is left-justified: words separated by exactly one space, padded on the right.
+  - Each word is non-empty and at most `max_width` long. Empty `words` returns `[]`.
+
+  Example
+  ```python
+  full_justify(["This","is","an","example","of","text","justification."], 16) ==
+      ["This    is    an", "example  of text", "justification.  "]
+  ```
+starter: |
+  def full_justify(words, max_width):
+      pass
+hints:
+- Greedily take words while sum(lengths) + (words - 1) single spaces <= max_width.
+- 'For a normal line: spaces = width - letters; divmod(spaces, gaps) gives base and extra for the left
+  gaps.'
+- 'Special-case the last line and single-word lines: left-justify and pad.'
+follow_ups:
+- How would you right-justify or center?
+- What if words may be longer than max_width?
+tests:
+- name: leetcode example one
+  tags:
+  - ordering
+  - boundary
+  code: |
+    assert full_justify(["This", "is", "an", "example", "of", "text", "justification."], 16) == [
+        "This    is    an", "example  of text", "justification.  "]
+- name: leetcode example two
+  tags:
+  - boundary
+  - single
+  code: |
+    assert full_justify(["What", "must", "be", "acknowledgment", "shall", "be"], 16) == [
+        "What   must   be", "acknowledgment  ", "shall be        "]
+- name: leetcode example three and uneven gaps
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    words = ["Science", "is", "what", "we", "understand", "well", "enough", "to", "explain", "to", "a", "computer.",
+             "Art", "is", "everything", "else", "we", "do"]
+    assert full_justify(words, 20) == [
+        "Science  is  what we", "understand      well", "enough to explain to", "a  computer.  Art is",
+        "everything  else  we", "do                  "]
+- name: empty and single word
+  tags:
+  - empty
+  - single
+  code: |
+    assert full_justify([], 5) == []
+    assert full_justify(["a"], 1) == ["a"]
+    assert full_justify(["abc"], 6) == ["abc   "]
+    assert full_justify(["abcdef"], 6) == ["abcdef"]
+- name: width equals longest word
+  hidden: true
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    out = full_justify(["aa", "bb", "cc"], 2)
+    assert out == ["aa", "bb", "cc"]
+    assert full_justify(["a", "b", "c"], 3) == ["a b", "c  "]
+    assert full_justify(["a", "b"], 5) == ["a b  "]
+- name: all lines have exact width
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    import random
+    r = random.Random(6)
+    words = ["x" * r.randint(1, 12) for _ in range(3000)]
+    out = full_justify(words, 30)
+    assert all(len(l) == 30 for l in out)
+    assert " ".join(l for l in (" ".join(l.split()) for l in out)).split() == words
+    assert out[-1] == " ".join(out[-1].split()).ljust(30)
+    for l in out[:-1]:
+        assert l == l.rstrip() or len(l.split()) == 1
+complexity:
+- op: full_justify
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Time and space in terms of total characters?
+  kind: complexity
+  key_points:
+  - 'Each word is placed once and each output character produced once: O(total characters)'
+  - Output is O(total characters); working space per line is O(line)
+  - Building lines with repeated string concatenation in a loop could degrade; use join
+- q: Support fully justified last line, hyphenation, or minimum raggedness (Knuth-Plass).
+  kind: design
+  key_points:
+  - Greedy is not globally optimal; minimising total badness needs dynamic programming over break points
+  - O(n^2) DP over words (O(n) with the Knuth-Plass total-monotonicity trick)
+  - Hyphenation adds break candidates inside words
+- q: Generalise to variable-width glyphs and unicode text.
+  kind: design
+  key_points:
+  - Measure width with a function (font metrics) instead of len()
+  - Combining characters and CJK width change what 'fits' means
+  - Keep the line-breaking algorithm independent from the measurement function
+- q: Where do off-by-one mistakes happen?
+  kind: reasoning
+  key_points:
+  - Counting the minimum one space between words when deciding if a word fits
+  - 'Single-word lines have zero gaps: avoid dividing by zero'
+  - Distributing remainder spaces to the leftmost gaps
+narration: []
+state_aloud:
+- Single-word line has no gaps.
+- Last line is left-justified with single spaces.
+- Extra spaces go to the left gaps.
+- Empty input returns an empty list.
+walkthrough: 'Words are packed greedily: a word joins the line while the letters plus one mandatory space
+  per gap still fit. For a full line the remaining spaces are split with divmod over the number of gaps,
+  giving each of the leftmost gaps one extra space; the last line and single-word lines are joined with
+  single spaces and padded on the right. Each word is touched a constant number of times so the work is
+  linear in the input size.'
+anki_queries: []
+categories:
+- systems-impl

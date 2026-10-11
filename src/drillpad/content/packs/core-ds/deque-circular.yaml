@@ -1,0 +1,129 @@
+id: deque-circular
+title: Deque on a resizing circular buffer
+bar_level: 2
+target_minutes: 20
+patterns: [circular-buffer, amortized-analysis, modular-indexing]
+firm_tags: [quant-hft, ai-infra]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:7 - *"'
+statement: |
+  Implement `Deque(capacity=8)` as a circular array that doubles when full (and optionally
+  shrinks lazily). API: `push_front(v)`, `push_back(v)`, `pop_front()`, `pop_back()`, `len()`.
+  Popping from an empty deque raises IndexError. All operations O(1) amortized; do not shift
+  elements and do not wrap collections.deque.
+starter: |
+  class Deque:
+      def __init__(self, capacity=8):
+          pass
+hints:
+  - push_front moves the front index backward modulo capacity.
+  - When you grow, copy starting from the front index so logical order is preserved.
+follow_ups:
+  - Why circular indexing instead of shifting elements?
+  - Give the amortized proof for the resize cost.
+  - How would you support random access deque[i]?
+  - Shrink eagerly or lazily, and where is the threshold?
+tests:
+  - name: both ends
+    tags: [ordering]
+    code: |
+      d = Deque()
+      d.push_back(2); d.push_back(3); d.push_front(1); d.push_front(0)
+      assert len(d) == 4
+      assert d.pop_front() == 0 and d.pop_back() == 3
+      assert d.pop_front() == 1 and d.pop_back() == 2
+      assert len(d) == 0
+  - name: grow past capacity from mid-buffer
+    tags: [boundary, ordering, scale]
+    code: |
+      d = Deque(capacity=4)
+      for i in range(3): d.push_back(i)
+      d.pop_front(); d.pop_front()
+      for i in range(3, 20): d.push_back(i)
+      for i in range(-1, -10, -1): d.push_front(i)
+      out = []
+      while len(d): out.append(d.pop_front())
+      assert out == list(range(-9, 0)) + list(range(2, 20))
+  - name: empty raises
+    tags: [empty, invalid]
+    code: |
+      d = Deque()
+      for fn in (d.pop_front, d.pop_back):
+          try: fn()
+          except IndexError: pass
+          else: raise AssertionError("empty should raise IndexError")
+  - name: randomized against collections.deque
+    tags: [scale, ordering, state-reuse]
+    hidden: true
+    code: |
+      import random
+      from collections import deque
+      rng = random.Random(7)
+      d, m = Deque(), deque()
+      for step in range(3000):
+          op = rng.randrange(4) if len(m) else rng.randrange(2)
+          if op == 0: d.push_back(step); m.append(step)
+          elif op == 1: d.push_front(step); m.appendleft(step)
+          elif op == 2: assert d.pop_back() == m.pop()
+          else: assert d.pop_front() == m.popleft()
+          assert len(d) == len(m)
+      while m: assert d.pop_front() == m.popleft()
+  - name: single element from either end
+    tags: [single, boundary, state-reuse]
+    hidden: true
+    code: |
+      d = Deque(capacity=2)
+      for _ in range(5):
+          d.push_front(1); assert d.pop_back() == 1 and len(d) == 0
+          d.push_back(2); assert d.pop_front() == 2 and len(d) == 0
+      d.push_front("x")
+      assert d.pop_front() == "x"
+complexity:
+- op: push/pop at either end
+  time: O(1) amortized
+  space: O(n)
+- op: resize
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why circular indexing instead of shifting elements?
+  kind: reasoning
+  key_points:
+  - Shifting makes front operations O(n)
+  - Modular arithmetic keeps both ends O(1)
+  - push_front uses (front - 1) % capacity; check negative-modulo semantics
+- q: Give the amortized proof for the resize cost.
+  kind: complexity
+  key_points:
+  - Each doubling costs O(n)
+  - It happens only after about n operations since the last resize
+  - 'Geometric-series argument: total copy work O(n) over n ops, so O(1) amortized'
+  - Worst-case single op is still O(n); space O(n) with up to 2x over-allocation
+- q: How would you support random access deque[i]?
+  kind: code
+  key_points:
+  - buf[(front + i) % capacity]
+  - Bounds-check i against size, not capacity
+  - Still O(1)
+- q: Shrink eagerly or lazily, and where is the threshold?
+  kind: design
+  key_points:
+  - 'Lazy: shrink only at 1/4 full'
+  - Eager shrink at 1/2 thrashes on alternating push/pop
+  - Never shrink below initial capacity
+  - When growing, linearize starting at front index not index 0
+narration:
+- I'll back this with a fixed-size array and treat it as circular, using modulo for wraparound, so both ends are O(1) amortized.
+- '[silent] silently write push_back/pop_back'
+- For push_front I have to wrap the index backward — that's the one place modulo needs care.
+- '[silent] silently write push_front/pop_front and resize'
+- Resize copies starting from front so the logical order is preserved after growth.
+- Let me trace push_front then push_back on an empty deque to sanity-check the indices.
+state_aloud:
+- '`push_front` on empty buffer — index math with negative modulo (`(0 - 1) % cap` must yield `cap - 1` in Python, not -1; confirm language semantics).'
+- Growing while front index is mid-buffer — the resize copy must linearize starting at `_front`, not at index 0, or elements reorder incorrectly.
+- Popping down to zero elements then pushing again — front pointer should still be valid, not stale from a previous wrap.
+- Shrink-then-immediately-grow thrashing — guard with a lower bound (e.g. never shrink below initial capacity) to avoid oscillation near the threshold.
+walkthrough: |
+  The deque is backed by a circular array where modulo arithmetic wraps indices at both ends, so push and pop at the front and back avoid O(n) shifts. Push-front needs backward wrapping, and `(0 - 1) % cap` must yield `cap - 1`. When the buffer is full it grows, and the resize copy must start at `_front` so the logical order is preserved. Each doubling costs O(n) but occurs only after about n operations since the last resize, so operations are O(1) amortized and space is O(n). Random access is `buf[(front + i) % cap]`.
+categories: [leetcode, trading, ai-infra]

@@ -1,0 +1,111 @@
+id: jump-game
+title: Jump Game
+bar_level: 2
+target_minutes: 20
+patterns:
+- greedy
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Jump Game (LC 55)"
+statement: |
+  You start at index 0 of a list `nums`. `nums[i]` is the maximum number of steps you may jump forward from index `i` (you may jump any distance from 0 up to that maximum). Return `True` if you can reach the last index, otherwise `False`.
+
+  Example: `can_jump([2,3,1,1,4])` returns `True`; `can_jump([3,2,1,0,4])` returns `False` because every path gets stuck on the `0` at index 3.
+starter: |
+  def can_jump(nums):
+      pass
+hints:
+- Think about which indices are reachable, not about choosing jumps.
+- Track the farthest index reachable so far while scanning left to right.
+- If the scan index ever exceeds the farthest reachable index, you are stuck; if farthest >= last index, return True.
+follow_ups:
+- Return the minimum number of jumps (Jump Game II).
+- Return one actual path of indices.
+tests:
+- name: reachable
+  tags:
+  - ordering
+  code: |
+    assert can_jump([2,3,1,1,4]) is True
+- name: blocked by zero
+  tags:
+  - boundary
+  code: |
+    assert can_jump([3,2,1,0,4]) is False
+- name: single element
+  tags:
+  - single
+  code: |
+    assert can_jump([0]) is True
+- name: zero at the start with more elements
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    assert can_jump([0,1]) is False
+    assert can_jump([1,0]) is True
+- name: always jumping the maximum is wrong
+  tags:
+  - ordering
+  code: |
+    assert can_jump([2,3,0,0,4]) is True
+    assert can_jump([2,5,0,0]) is True
+  hidden: true
+- name: zeros that can be jumped over
+  tags:
+  - duplicate
+  code: |
+    assert can_jump([4,0,0,0,0]) is True
+    assert can_jump([1,1,0,1]) is False
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 500000
+    assert can_jump([1] * n) is True
+    a = [1] * n
+    a[n // 2] = 0
+    assert can_jump(a) is False
+    b = [n - i for i in range(n)]
+    assert can_jump(b) is True
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why is the farthest-reach greedy correct?
+  kind: reasoning
+  key_points:
+  - Reachable indices form a contiguous prefix 0..farthest
+  - If index i is reachable, everything below farthest is reachable, so extending farthest by i + nums[i] is valid
+  - A gap exists only when i > farthest, which means failure
+- q: Compare with the top-down memoised DP and the backward 'goal post' greedy.
+  kind: complexity
+  key_points:
+  - Memoised DP is O(n^2) time worst case and O(n) space
+  - Goal-post greedy moves the target left when an index can reach it; O(n) time, O(1) space
+  - Forward farthest-reach greedy is the same O(n)/O(1)
+- q: 'Prove the greedy by exchange argument or invariant: why can''t a smarter choice of jump beat tracking farthest?'
+  kind: reasoning
+  key_points:
+  - 'Invariant: after processing index i, farthest equals the true max reachable index'
+  - Any real path's positions are all <= farthest, so the greedy never misses a reachable index
+  - Failure is exactly i > farthest, because no earlier reachable index can cover i
+- q: 'Design: the array is huge and read from disk or a stream; what do you need to keep?'
+  kind: design
+  key_points:
+  - Only the single farthest-reach integer
+  - Process sequentially with one pass and early exit once farthest >= last
+  - Early exit on gap is also possible
+narration: []
+state_aloud:
+- Single element is trivially reachable.
+- A zero at the start blocks everything unless it is the only element.
+- Zeros are fine as long as an earlier jump passes over them.
+walkthrough: |
+  Scan left to right while tracking the farthest index reachable so far. If the current index is beyond the farthest, there is a gap and the end is unreachable. Otherwise update farthest with i + nums[i]; once it reaches the last index we are done. Each index is visited once.

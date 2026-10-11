@@ -1,0 +1,113 @@
+id: dynamic-array
+title: Dynamic array with amortized doubling
+bar_level: 1
+target_minutes: 15
+patterns: [amortized-analysis, array-resize]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:1 - *"'
+statement: |
+  Implement `DynamicArray` with `get(i)`, `set(i, v)`, `append(v)`, `pop()` and `len()`.
+  Grow backing storage automatically. Out-of-range access raises IndexError.
+  Target: get/set O(1), append amortized O(1).
+starter: |
+  class DynamicArray:
+      def __init__(self):
+          pass
+hints:
+  - Track capacity separately from size.
+  - Double when size == capacity, before writing the new element.
+follow_ups:
+  - Why double instead of growing by a fixed amount?
+  - Should you ever shrink? Where is the threshold and why not 1/2?
+  - What changes if append is called from multiple threads?
+tests:
+  - name: append and get
+    tags: [scale, boundary]
+    code: |
+      a = DynamicArray()
+      for i in range(100): a.append(i)
+      assert len(a) == 100 and a.get(0) == 0 and a.get(99) == 99
+  - name: set and pop
+    tags: [ordering, empty]
+    code: |
+      a = DynamicArray(); a.append(1); a.append(2); a.set(0, 9)
+      assert a.pop() == 2 and a.pop() == 9 and len(a) == 0
+  - name: out of bounds
+    tags: [invalid, boundary]
+    code: |
+      a = DynamicArray(); a.append(1)
+      for bad in (-1, 1):
+          try: a.get(bad)
+          except IndexError: pass
+          else: raise AssertionError(f"get({bad}) should raise")
+  - name: pop empty
+    tags: [empty, invalid]
+    hidden: true
+    code: |
+      try: DynamicArray().pop()
+      except IndexError: pass
+      else: raise AssertionError("pop on empty should raise")
+  - name: single element then reuse after emptying
+    tags: [single, state-reuse, empty]
+    hidden: true
+    code: |
+      a = DynamicArray(); a.append(5)
+      assert a.pop() == 5 and len(a) == 0
+      try: a.get(0)
+      except IndexError: pass
+      else: raise AssertionError("get on emptied array should raise")
+      a.append(6)
+      assert a.get(0) == 6 and len(a) == 1
+complexity:
+- op: get/set
+  time: O(1)
+  space: O(n)
+- op: append
+  time: O(1) amortized
+  space: O(n)
+- op: pop
+  time: O(1)
+  space: O(n)
+extensions:
+- q: Why double the capacity instead of growing by a fixed amount?
+  kind: reasoning
+  key_points:
+  - Fixed increment k means n/k resizes each copying O(n), so O(n) amortized per append
+  - Doubling gives a geometric series, total copy work O(n) over n appends
+  - Hence O(1) amortized per append
+- q: What is the space cost, and what is the worst-case latency of a single append?
+  kind: complexity
+  key_points:
+  - Storage is O(n) with at most about 2x over-allocation
+  - A single append that triggers a resize is O(n) (copy everything)
+  - Amortized O(1) hides that spike; matters for latency-sensitive paths
+  - Peak memory during resize holds old and new buffers (about 3x elements)
+- q: Should you ever shrink? Where is the threshold and why not 1/2?
+  kind: design
+  key_points:
+  - Shrink for memory-bound uses
+  - Shrink by half when size falls to 1/4 of capacity
+  - 'Shrinking at 1/2 thrashes: alternating push/pop at the boundary resizes every op'
+  - Never shrink below the initial capacity
+- q: What changes if append is called from multiple threads?
+  kind: design
+  key_points:
+  - 'Resize plus write is a check-then-act race: lost writes or torn copy'
+  - Simplest fix is one lock around resize+append
+  - If reads must stay lock-free use read-copy-update (swap in a new buffer)
+  - Note CPython's list gets atomicity from the GIL, not from the algorithm
+narration:
+- I'll back this with a fixed-size array and double capacity when it's full, so append is amortized constant time.
+- '[silent] mostly silent while writing the class'
+- Starting capacity at 1 instead of 0 avoids a special case for the very first append.
+- Doubling here — copying the old n elements into a 2n array.
+- That's get/set/append/pop; happy to add shrink-on-underflow if you want it.
+state_aloud:
+- Append into an empty array (capacity starts at 1, not 0, to avoid a special-cased first doubling).
+- '`get`/`set` out of bounds (`i < 0` or `i >= size`) — distinct from capacity bounds.'
+- Pop down to zero elements — capacity should not need to hit zero.
+- Resize triggered exactly when `size == capacity`, not one element late.
+walkthrough: |
+  Back the array with a fixed-size store and double its capacity whenever `size == capacity`, copying the old n elements into the new one. Doubling gives geometric growth, so total copy work over n appends is O(n) and `append` is amortized O(1), with O(n) only on the resize step itself. `get`/`set` are O(1) and bounds-check against `size`, not capacity. The invariant is that `0 <= size <= capacity` and only the first `size` slots are live. Space stays O(n), at most 2x the capacity needed.
+categories: [leetcode, trading, ai-infra, systems-impl]

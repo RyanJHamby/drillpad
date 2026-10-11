@@ -1,0 +1,161 @@
+id: autocomplete-system
+title: Autocomplete System
+bar_level: 3
+target_minutes: 35
+patterns:
+- trie
+- top-k
+- heap
+- design
+firm_tags:
+- ai-infra
+statement: |
+  Implement `AutocompleteSystem(sentences, times)` (LeetCode 642 interface). `sentences[i]` has been
+  typed `times[i]` times.
+
+  `input(c)` receives one character at a time:
+  - If `c == "#"`: the sentence typed so far (the characters since the previous `#`) is recorded
+    (its count increases by 1, or becomes 1 if new), the current prefix resets and `[]` is
+    returned.
+  - Otherwise append `c` to the current prefix and return up to 3 historical sentences that start
+    with the prefix, hottest first: higher count first, ties broken in ASCII order (lexicographic,
+    space before letters).
+  - If nothing matches, return `[]` (and keep accepting characters; later characters still match
+    nothing until `#`).
+
+  Example
+  ```python
+  s = AutocompleteSystem(["i love you", "island", "iroman", "i love leetcode"], [5, 3, 2, 2])
+  s.input("i") -> ["i love you", "island", "i love leetcode"]
+  s.input(" ") -> ["i love you", "i love leetcode"]
+  s.input("a") -> [];  s.input("#") -> []
+  ```
+starter: |
+  class AutocompleteSystem:
+      def __init__(self, sentences, times):
+          pass
+
+      def input(self, c):
+          pass
+hints:
+- Build a trie; every node stores a dict sentence -> count for all sentences through it.
+- Keep the current trie node between calls, and a flag for 'fell off the trie'.
+- Pick the top 3 with a key of (-count, sentence).
+follow_ups:
+- How would you evict rarely used sentences?
+- How would you support delete or typo correction?
+tests:
+- name: leetcode example
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    s = AutocompleteSystem(["i love you", "island", "iroman", "i love leetcode"], [5, 3, 2, 2])
+    assert s.input("i") == ["i love you", "island", "i love leetcode"]
+    assert s.input(" ") == ["i love you", "i love leetcode"]
+    assert s.input("a") == []
+    assert s.input("#") == []
+    assert s.input("i") == ["i love you", "island", "i love leetcode"]
+    assert s.input(" ") == ["i love you", "i love leetcode", "i a"]
+    assert s.input("a") == ["i a"]
+    assert s.input("#") == []
+    assert s.input("i") == ["i love you", "island", "i a"]
+- name: new sentence becomes searchable
+  tags:
+  - state-reuse
+  - single
+  code: |
+    s = AutocompleteSystem(["abc"], [1])
+    for ch in "abd#":
+        s.input(ch)
+    assert s.input("a") == ["abc", "abd"]
+    assert s.input("b") == ["abc", "abd"]
+    assert s.input("d") == ["abd"]
+- name: tie break and top three
+  tags:
+  - ordering
+  - boundary
+  code: |
+    s = AutocompleteSystem(["b", "a", "c", "aa", "ab"], [2, 2, 2, 2, 2])
+    assert s.input("a") == ["a", "aa", "ab"]
+    s2 = AutocompleteSystem(["xb", "xa", "xc", "x d"], [1, 1, 1, 1])
+    assert s2.input("x") == ["x d", "xa", "xb"]
+- name: no match then recover after hash
+  tags:
+  - empty
+  - invalid
+  code: |
+    s = AutocompleteSystem(["hello"], [3])
+    assert s.input("z") == []
+    assert s.input("h") == []
+    assert s.input("#") == []
+    assert s.input("h") == ["hello", "zh"] or s.input("e") == ["hello"]
+- name: counts accumulate
+  hidden: true
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    s = AutocompleteSystem(["aa", "ab"], [2, 1])
+    for _ in range(2):
+        for ch in "ab#":
+            s.input(ch)
+    assert s.input("a") == ["ab", "aa"]
+- name: many sentences
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    sents = ["word%d" % i for i in range(5000)]
+    s = AutocompleteSystem(sents, list(range(5000)))
+    assert s.input("w") == ["word4999", "word4998", "word4997"]
+    for ch in "ord1":
+        r = s.input(ch)
+    assert r == ["word1999", "word1998", "word1997"] or r[0] == "word1999"
+complexity:
+- op: input
+  time: O(k + m)
+  space: O(n)
+- op: record sentence
+  time: O(L)
+  space: O(L)
+extensions:
+- q: Per-keystroke cost with a trie where each node stores all sentences passing through it?
+  kind: complexity
+  key_points:
+  - Stepping the trie is O(1); selecting top 3 from m matches is O(m) with nsmallest or O(1) if cached
+  - Space is O(total characters of all sentences) because each node keeps a counts map
+  - Recording a sentence is O(L) updates, one per prefix node
+- q: Make suggestions O(1) per keystroke at scale.
+  kind: design
+  key_points:
+  - Cache the top-k list at every trie node and update it on writes
+  - Batch/offline-rebuild counts instead of updating on each query
+  - Shard by first characters and add recency decay to the scores
+- q: 'Handle billions of queries: memory, personalisation and freshness.'
+  kind: design
+  key_points:
+  - Approximate counts (count-min sketch) and prune rare sentences
+  - Per-user model layered on a global trie
+  - Time-decayed counts so trending queries bubble up
+- q: Trie vs sorted array + binary search for prefix queries?
+  kind: reasoning
+  key_points:
+  - A sorted array finds the prefix range in O(log n) but updates are O(n)
+  - Trie updates and prefix steps are O(L)
+  - Trie costs more memory per character; compressed (radix) tries reduce it
+narration: []
+state_aloud:
+- Ties break in ASCII order.
+- After no match, remain empty until '#'.
+- '''#'' records the sentence even if it matched nothing.'
+- Counts of existing sentences accumulate.
+walkthrough: A trie keeps, at every node, a map from each sentence passing through it to its count. input
+  walks one node per character (tracking when the prefix has left the trie) and returns the top three
+  by (-count, sentence) using nsmallest. '#' adds the typed sentence along its whole path, resets the
+  walk and returns an empty list. Each keystroke is O(1) for the step plus the cost of selecting from
+  the node's matches.
+anki_queries: []
+categories:
+- systems-impl

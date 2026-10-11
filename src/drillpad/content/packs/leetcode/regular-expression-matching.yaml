@@ -1,0 +1,111 @@
+id: regular-expression-matching
+title: Regular Expression Matching
+bar_level: 3
+target_minutes: 45
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Regular Expression Match (LC 10)"
+statement: |
+  Implement matching of a whole string `s` against a pattern `p` supporting `.` (any single character) and `*` (zero or more of the preceding element). The match must cover all of `s`. Patterns are valid: `*` is never first and never follows another `*`.
+
+  Example: `is_match("aab", "c*a*b")` returns `True` (`c*` matches nothing, `a*` matches `aa`).
+starter: |
+  def is_match(s, p):
+      pass
+hints:
+- When p[j-1] is '*', either drop the 'x*' pair (zero uses) or consume one char of s that x matches and stay on the same pattern.
+- 'State: ok[i][j] = s[:i] matches p[:j].'
+- ok[0][0] = True; empty s can match patterns like 'a*b*'. Handle '*' as ok[i][j-2] or (match(s[i-1], p[j-2]) and ok[i-1][j]).
+follow_ups:
+- Add '+' and '?'.
+- Wildcard Matching where '*' matches any sequence.
+tests:
+- name: literal mismatch
+  tags:
+  - invalid
+  code: |
+    assert is_match("aa","a")==False
+- name: star repeats
+  tags:
+  - ordering
+  code: |
+    assert is_match("aa","a*")==True
+- name: dot star
+  tags:
+  - boundary
+  code: |
+    assert is_match("ab",".*")==True
+    assert is_match("ab",".*c")==False
+- name: mix
+  tags:
+  - ordering
+  code: |
+    assert is_match("aab","c*a*b")==True
+    assert is_match("mississippi","mis*is*p*.")==False
+- name: both empty
+  tags:
+  - empty
+  code: |
+    assert is_match("","")==True
+- name: empty string star
+  tags:
+  - empty
+  code: |
+    assert is_match("","a*")==True
+    assert is_match("","a*b*")==True
+    assert is_match("","a")==False
+- name: empty pattern
+  tags:
+  - empty
+  code: |
+    assert is_match("a","")==False
+- name: zero copies
+  tags:
+  - boundary
+  code: |
+    assert is_match("a","ab*")==True
+    assert is_match("aaa","ab*a*c*a")==True
+    assert is_match("a",".*..a*")==False
+- name: exponential trap
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert is_match("a"*1000,"a*"*500+"b")==False
+    assert is_match("a"*1000,"a*"*500)==True
+    assert is_match("a"*1000,".*")==True
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(m * n)
+  accepted_space:
+  - O(n)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - m*n states with O(1) transitions
+  - Plain backtracking is exponential on patterns like (a*)*b
+  - Rolling rows reduce space to O(n)
+- q: Add '+' and '?'
+  kind: code
+  key_points:
+  - '''x?'' is zero or one'
+  - '''x+'' is ''x'' followed by ''x*'''
+  - Or extend the transitions directly
+- q: NFA view
+  kind: design
+  key_points:
+  - Pattern compiles to an NFA with epsilon moves for '*'
+  - Simulate by tracking the set of active states
+  - Same O(m*n) bound, no table needed
+narration: []
+state_aloud:
+- Match must consume the whole string.
+- '''x*'' can match zero characters.'
+- Empty string can match 'a*b*'.
+walkthrough: Let `ok[i][j]` mean `s[:i]` matches `p[:j]`, with `ok[0][0] = True`. For a plain character or `.`, `ok[i][j] = ok[i-1][j-1]` if it matches `s[i-1]`. For `x*` at `p[j-2:j]`, either use zero copies (`ok[i][j-2]`) or consume one matching character and stay (`ok[i-1][j]`). Row 0 is seeded so patterns like `a*b*` match the empty string. Time O(m*n), space O(m*n).

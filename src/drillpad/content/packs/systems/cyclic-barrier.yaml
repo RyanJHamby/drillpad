@@ -1,0 +1,257 @@
+id: cyclic-barrier
+title: Barrier / Latch
+bar_level: 4
+target_minutes: 42
+patterns:
+- barrier
+- latch
+- condition-variable
+- generation-counter
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement two synchronisers from `threading.Condition` (do not use `threading.Barrier`):
+
+  `CyclicBarrier(parties, action=None)`
+  - `wait(timeout=None)` -> int: block until `parties` threads have called `wait`. Returns this
+    caller's arrival index: the first arriver gets `parties - 1`, the last gets `0`.
+  - When the last thread arrives it runs `action()` (if given) exactly once, in its own thread,
+    BEFORE any waiter is released.
+  - The barrier is reusable: after all are released it starts a new generation, and threads of
+    one generation must never be released by arrivals of the next.
+  - If `timeout` expires, the barrier is broken: this and all other waiting threads (and any later
+    callers) get `BrokenBarrierError`. `parties < 1` raises `ValueError`.
+
+  `CountDownLatch(count)`
+  - `count_down()`: decrement (never below 0); at 0 all waiters are released.
+  - `wait(timeout=None)` -> `True` once the count is 0, `False` if the timeout expires first.
+  - `get_count()` -> current count.
+
+  Example
+  ```python
+  b = CyclicBarrier(3)          # three threads each call b.wait()
+  l = CountDownLatch(2); l.count_down(); l.count_down(); l.wait() -> True
+  ```
+starter: |
+  import threading
+
+  class BrokenBarrierError(Exception):
+      pass
+
+  class CyclicBarrier:
+      def __init__(self, parties, action=None):
+          pass
+
+      def wait(self, timeout=None):
+          pass
+
+  class CountDownLatch:
+      def __init__(self, count):
+          pass
+
+      def count_down(self):
+          pass
+
+      def wait(self, timeout=None):
+          pass
+
+      def get_count(self):
+          pass
+hints:
+- Use one Condition; count arrivals and keep a generation number that increments each time the barrier
+  trips.
+- Waiters loop until the generation changes (or the barrier is broken), with a deadline for timeouts.
+- arrival index = parties - 1 - number already arrived. Latch is a counter with notify_all at 0.
+follow_ups:
+- How do you make wait interruptible?
+- How would a phaser with dynamic registration differ?
+tests:
+- name: nobody passes before everyone arrives
+  tags:
+  - concurrency
+  - boundary
+  code: |
+    import threading
+    N = 4
+    b = CyclicBarrier(N)
+    arrived = [0]
+    guard = threading.Lock()
+    seen_at_pass = []
+    idx = []
+    errors = []
+    def worker():
+        try:
+            with guard:
+                arrived[0] += 1
+            i = b.wait(timeout=5)
+            with guard:
+                seen_at_pass.append(arrived[0]); idx.append(i)
+        except Exception as e:
+            errors.append(repr(e))
+    ts = [threading.Thread(target=worker, daemon=True) for _ in range(N)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=8)
+    assert not errors, errors
+    assert seen_at_pass == [N] * N
+    assert sorted(idx) == list(range(N))
+- name: action runs once before release
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading
+    log = []
+    b = CyclicBarrier(3, action=lambda: log.append("action"))
+    errors = []
+    def worker():
+        try:
+            b.wait(timeout=5)
+            log.append("released")
+        except Exception as e:
+            errors.append(repr(e))
+    ts = [threading.Thread(target=worker, daemon=True) for _ in range(3)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=8)
+    assert not errors, errors
+    assert log == ["action", "released", "released", "released"], log
+- name: reusable across generations
+  tags:
+  - concurrency
+  - state-reuse
+  code: |
+    import threading
+    N, R = 3, 5
+    b = CyclicBarrier(N)
+    rounds = [0] * R
+    guard = threading.Lock()
+    errors = []
+    def worker():
+        try:
+            for r in range(R):
+                with guard:
+                    rounds[r] += 1
+                b.wait(timeout=5)
+                with guard:
+                    if rounds[r] != N: errors.append("round %d released early" % r)
+        except Exception as e:
+            errors.append(repr(e))
+    ts = [threading.Thread(target=worker, daemon=True) for _ in range(N)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=8)
+    assert not errors, errors
+    assert rounds == [N] * R
+- name: timeout breaks the barrier
+  tags:
+  - time
+  - invalid
+  code: |
+    import threading
+    b = CyclicBarrier(2)
+    try:
+        b.wait(timeout=0.1)
+    except BrokenBarrierError:
+        pass
+    else:
+        raise AssertionError("expected BrokenBarrierError")
+    try:
+        b.wait(timeout=0.1)
+    except BrokenBarrierError:
+        pass
+    else:
+        raise AssertionError("barrier stays broken")
+    try:
+        CyclicBarrier(0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError")
+- name: timeout breaks other waiters too
+  hidden: true
+  tags:
+  - concurrency
+  - time
+  code: |
+    import threading
+    b = CyclicBarrier(3)
+    res = []
+    def waiter():
+        try:
+            b.wait(timeout=5)
+            res.append("passed")
+        except BrokenBarrierError:
+            res.append("broken")
+    t = threading.Thread(target=waiter, daemon=True); t.start()
+    try:
+        b.wait(timeout=0.2)
+    except BrokenBarrierError:
+        pass
+    t.join(timeout=5)
+    assert res == ["broken"], res
+- name: latch counts down
+  hidden: true
+  tags:
+  - concurrency
+  - boundary
+  code: |
+    import threading
+    l = CountDownLatch(3)
+    assert l.get_count() == 3
+    assert l.wait(timeout=0.05) is False
+    out = []
+    t = threading.Thread(target=lambda: out.append(l.wait(timeout=5)), daemon=True); t.start()
+    for _ in range(5):
+        l.count_down()
+    t.join(timeout=5)
+    assert out == [True]
+    assert l.get_count() == 0 and l.wait() is True
+    assert CountDownLatch(0).wait(timeout=0) is True
+complexity:
+- op: wait
+  time: O(1)
+  space: O(1)
+- op: release of all waiters
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Costs of wait and of releasing the group?
+  kind: complexity
+  key_points:
+  - 'Each wait is O(1) under the mutex; the tripping thread does one notify_all that wakes n-1 threads:
+    O(n)'
+  - 'State is O(1): count, generation, broken flag'
+  - No per-thread allocation is needed
+- q: Why a generation counter, and what bug appears without it?
+  kind: design
+  key_points:
+  - Waiters must test 'my generation has advanced', not 'count == 0'
+  - Without it a fast thread can re-enter the next round and a slow waiter wakes on a reset count and
+    sleeps forever
+  - A broken flag lets timeouts/exceptions fail everyone instead of deadlocking them
+- q: Where are barriers and latches used and what are alternatives?
+  kind: design
+  key_points:
+  - 'Barrier: phased parallel algorithms, simulation steps, test synchronisation; latch: one-shot start/finish
+    gates'
+  - 'Alternatives: join threads, Future/Event composition, phasers with dynamic parties'
+  - 'Distributed analogue: a coordination service (ZooKeeper/etcd) barrier node'
+- q: What happens if the barrier action raises?
+  kind: reasoning
+  key_points:
+  - The barrier should be marked broken and all waiters released with BrokenBarrierError
+  - The exception propagates to the thread that ran the action
+  - Running the action before release gives it a consistent view of all threads' work
+narration: []
+state_aloud:
+- Generation counter prevents lost/early wakeups between rounds.
+- Timeout breaks the barrier for everyone.
+- Action runs once, before release.
+- Latch is single-use; barrier is reusable.
+walkthrough: A single Condition protects an arrival count, a generation number and a broken flag. Each
+  caller takes its arrival index and increments the count; the last arrival runs the action, resets the
+  count, bumps the generation and notifies all. Earlier arrivals wait until the generation changes, or
+  raise BrokenBarrierError if a timeout broke the barrier. The latch is a countdown guarded by the same
+  pattern, notifying all waiters at zero.
+anki_queries: []
+categories:
+- systems-impl

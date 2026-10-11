@@ -1,0 +1,98 @@
+id: largest-rectangle-in-histogram
+title: Largest Rectangle in Histogram
+bar_level: 3
+target_minutes: 40
+patterns:
+- stack
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Largest Rectangle Histogram (LC 84)"
+statement: |
+  `heights` describes a histogram of bars, each of width 1. Return the area of the largest axis-aligned rectangle that fits entirely inside the bars.
+
+  Example: `largest_rectangle_area([2,1,5,6,2,3])` returns `10` (the bars of height 5 and 6 give 5 x 2).
+starter: |
+  def largest_rectangle_area(heights):
+      pass
+hints:
+- For each bar, the best rectangle using it as the shortest bar extends left and right until a shorter
+  bar.
+- Finding the nearest smaller bar on each side for every index is a monotonic-stack job.
+- Keep a stack of increasing heights; when a shorter bar arrives pop and compute the area for each popped
+  bar, using the new stack top as the left bound.
+follow_ups:
+- Extend to the maximal rectangle of 1s in a binary matrix.
+- Can you do it with a single pass and a sentinel bar?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert largest_rectangle_area([2,1,5,6,2,3])==10
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert largest_rectangle_area([])==0
+- name: single bar
+  tags:
+  - single
+  code: |
+    assert largest_rectangle_area([4])==4
+- name: increasing then decreasing
+  tags:
+  - boundary
+  code: |
+    assert largest_rectangle_area([1,2,3,4,5])==9
+    assert largest_rectangle_area([5,4,3,2,1])==9
+- name: equal heights
+  tags:
+  - duplicate
+  code: |
+    assert largest_rectangle_area([3,3,3,3])==12
+- name: zeros split the histogram
+  tags:
+  - invalid
+  code: |
+    assert largest_rectangle_area([0,0])==0
+    assert largest_rectangle_area([2,0,2])==2
+- name: long increasing staircase
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=100000
+    h=list(range(1,n+1))
+    assert largest_rectangle_area(h)==max((i+1)*(n-i) for i in range(n))
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why linear despite popping inside a loop?
+  kind: complexity
+  key_points:
+  - Each index is pushed once and popped once
+  - Total stack operations <= 2n
+  - Space O(n) for the stack
+- q: Maximal rectangle in a binary matrix.
+  kind: design
+  key_points:
+  - Treat each row as a histogram of consecutive-ones heights
+  - Run this algorithm per row
+  - O(rows * cols) overall
+- q: Role of the sentinel.
+  kind: reasoning
+  key_points:
+  - Appending a height 0 flushes the stack at the end
+  - Avoids duplicate cleanup code
+  - Width for a popped bar is i - stack[-1] - 1 or i if the stack is empty
+narration: []
+state_aloud:
+- Empty input returns 0.
+- Zero-height bars.
+- Width computation when the stack becomes empty.
+walkthrough: |
+  Maintain a stack of indices with increasing heights. For each new bar (and a final height-0 sentinel), while the top is at least as tall, pop it: its height is the limiting height, its right bound is the current index, and its left bound is the new top (or the start). Area = height x width; track the maximum.

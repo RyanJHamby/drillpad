@@ -1,0 +1,98 @@
+id: word-ladder
+title: Word Ladder
+bar_level: 3
+target_minutes: 38
+patterns:
+- graph-bfs-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Word Ladder (LC 127)"
+statement: |
+  Given a `begin_word`, an `end_word`, and a list of words `word_list`, return the number of words in the shortest transformation sequence from `begin_word` to `end_word`, counting both ends. Each step changes exactly one letter, and every word after the first must be in `word_list`. The begin word does not need to be in the list. Return `0` if no such sequence exists.
+
+  Example: `ladder_length("hit", "cog", ["hot","dot","dog","lot","log","cog"])` is `5` (hit, hot, dot, dog, cog).
+starter: |
+  def ladder_length(begin_word, end_word, word_list):
+      pass
+hints:
+- Treat words as nodes and one-letter differences as edges; shortest path in an unweighted graph is BFS.
+- Comparing every pair of words is too slow; group words by wildcard patterns such as 'h*t'.
+- Words sharing a pattern bucket are neighbours; remove a bucket (or word) once visited so it is processed once.
+follow_ups:
+- Return all shortest sequences.
+- Speed it up with bidirectional BFS.
+tests:
+- name: classic example
+  tags:
+  - boundary
+  code: |
+    assert ladder_length("hit","cog",["hot","dot","dog","lot","log","cog"])==5
+- name: end word missing
+  tags:
+  - invalid
+  code: |
+    assert ladder_length("hit","cog",["hot","dot","dog","lot","log"])==0
+- name: one step
+  tags:
+  - single
+  code: |
+    assert ladder_length("a","c",["c"])==2
+- name: empty list
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert ladder_length("hit","hot",[])==0
+- name: shorter route preferred
+  tags:
+  - ordering
+  hidden: true
+  code: |
+    w=["hot","dot","dog","lot","log","cog","hog"]
+    assert ladder_length("hit","cog",w)==4
+- name: duplicates in list
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    assert ladder_length("hit","hot",["hot","hot"])==2
+- name: dense word space
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import itertools
+    words=["".join(p) for p in itertools.product("abcdef",repeat=5)]
+    assert ladder_length("aaaaa","fffff",words)==6
+complexity:
+- op: overall
+  time: O(N * L^2)
+  space: O(N * L^2)
+extensions:
+- q: Where does N * L^2 come from?
+  kind: complexity
+  key_points:
+  - Each of N words has L wildcard patterns
+  - Building each pattern string costs O(L)
+  - Naive pairwise comparison would be O(N^2 * L)
+- q: Explain bidirectional BFS.
+  kind: code
+  key_points:
+  - Expand the smaller frontier from both begin and end
+  - Stop when frontiers touch
+  - Reduces the explored states from b^d to about 2 b^(d/2)
+- q: How would you build this for a dictionary of millions of words?
+  kind: design
+  key_points:
+  - Precompute the pattern-to-words index once offline
+  - Shard by length since only equal-length words connect
+  - Cache or bidirectionally search per query to bound latency
+narration: []
+state_aloud:
+- End word must be in the list.
+- Return the count of words, not edges.
+- Return 0 when unreachable.
+walkthrough: |
+  Put all words in a set and build a map from each wildcard pattern (a word with one letter replaced by '*') to the words matching it. Run BFS from the begin word with a distance of 1. For each popped word, look at its L patterns, enqueue every unvisited word in those buckets with distance plus one, and return when the end word is reached. Words are marked visited on enqueue, so each is processed once.

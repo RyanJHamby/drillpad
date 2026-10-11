@@ -1,0 +1,130 @@
+id: stack
+title: Stack, array-backed and linked-list-backed
+bar_level: 1
+target_minutes: 15
+patterns: [stack, amortized-analysis, linked-list]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:5 - *"'
+statement: |
+  Implement two stacks with the same API: `ArrayStack` (own backing array that doubles when
+  full, do not just wrap a Python list's append/pop) and `LinkedStack` (singly linked, push/pop
+  at the head). Methods: `push(val)`, `pop()`, `peek()`, `is_empty()`.
+  `pop`/`peek` on an empty stack raise IndexError. Pushing None or other falsy values must work.
+starter: |
+  class ArrayStack:
+      def __init__(self):
+          pass
+
+  class LinkedStack:
+      def __init__(self):
+          pass
+hints:
+  - is_empty should check the size or the top pointer, never the truthiness of the top value.
+  - The array version is the dynamic-array doubling idea again.
+follow_ups:
+  - Which would you pick in production and why?
+  - Implement a queue using two stacks.
+  - Make push/pop thread-safe (one lock, or CAS on the top pointer for the linked version).
+  - Evaluate a postfix expression using this stack.
+tests:
+  - name: lifo order both implementations
+    tags: [ordering]
+    code: |
+      for cls in (ArrayStack, LinkedStack):
+          s = cls()
+          assert s.is_empty()
+          for i in range(20): s.push(i)
+          assert not s.is_empty() and s.peek() == 19
+          assert [s.pop() for _ in range(20)] == list(range(19, -1, -1))
+          assert s.is_empty()
+  - name: empty raises
+    tags: [empty, invalid]
+    code: |
+      for cls in (ArrayStack, LinkedStack):
+          s = cls()
+          for fn in (s.pop, s.peek):
+              try: fn()
+              except IndexError: pass
+              else: raise AssertionError(f"{cls.__name__} should raise on empty")
+  - name: interleaved push pop across resize
+    tags: [scale, boundary]
+    code: |
+      for cls in (ArrayStack, LinkedStack):
+          s = cls()
+          model = []
+          for i in range(200):
+              s.push(i); model.append(i)
+              if i % 3 == 0:
+                  assert s.pop() == model.pop()
+          while model: assert s.pop() == model.pop()
+          assert s.is_empty()
+  - name: falsy values
+    tags: [invalid, boundary]
+    hidden: true
+    code: |
+      for cls in (ArrayStack, LinkedStack):
+          s = cls()
+          for v in (None, 0, "", False): s.push(v)
+          assert not s.is_empty()
+          assert [s.pop() for _ in range(4)] == [False, "", 0, None]
+          assert s.is_empty()
+  - name: single element cycles back to empty
+    tags: [single, state-reuse]
+    hidden: true
+    code: |
+      for cls in (ArrayStack, LinkedStack):
+          s = cls()
+          for v in (1, 2, 3):
+              s.push(v)
+              assert s.peek() == v and s.pop() == v and s.is_empty()
+          try: s.pop()
+          except IndexError: pass
+          else: raise AssertionError("emptied stack should raise")
+complexity:
+- op: push
+  time: O(1) amortized
+  space: O(n)
+- op: pop/peek/is_empty
+  time: O(1)
+  space: O(n)
+extensions:
+- q: Array-backed or linked-list-backed in production, and why?
+  kind: design
+  key_points:
+  - 'Array: cache locality and lower per-element overhead'
+  - 'Linked: O(1) worst-case push (no resize spike) and structural sharing for persistent stacks'
+  - Linked has a pointer of overhead per node
+- q: What are the time and space costs of each implementation?
+  kind: complexity
+  key_points:
+  - push/pop/peek O(1); array push is amortized O(1) because of resizing
+  - Space O(n) for both
+  - Array may over-allocate up to 2x; linked pays a pointer per node
+- q: Make push/pop thread-safe.
+  kind: design
+  key_points:
+  - A single lock around push and pop is simplest
+  - Linked version can use CAS on the top pointer (lock-free)
+  - Mention the ABA problem with CAS on a node pointer
+  - Check-then-pop on is_empty is still racy without the lock
+- q: Implement a queue using two stacks, or evaluate a postfix expression.
+  kind: code
+  key_points:
+  - 'Queue: push to in-stack; on dequeue, if out-stack empty, pour in-stack into it'
+  - Each element moves at most twice so amortized O(1)
+  - 'Postfix: push operands, on operator pop two, apply, push result'
+  - Operand order matters for non-commutative operators
+narration:
+- 'I''ll do both: array-backed reusing the doubling resize from earlier, and linked-list-backed pushing/popping at the head.'
+- '[silent] mostly silent while writing both classes'
+- Both are O(1) per operation — array's amortized due to resize, linked list's exact since there's no resizing at all.
+- Only real gotcha is making empty-pop raise instead of returning None, since None could be a legitimately pushed value.
+state_aloud:
+- Pop or peek on an empty stack — must raise, not return `None` silently (silent `None` masks bugs if `None` is also a valid pushed value).
+- Single-element push/pop cycles back to empty correctly.
+- 'Array version: push crossing a resize boundary mid-sequence of operations.'
+- Pushing `None` or falsy values (0, "", False) — confirms `is_empty` checks size/pointer, not truthiness of top value.
+walkthrough: |
+  Both versions give O(1) `push`/`pop`/`peek`/`is_empty`. The array version reuses the doubling resize from the dynamic array, so its push is amortized O(1); the linked version pushes and pops at the head and never resizes. `pop`/`peek` on an empty stack must raise rather than return `None`, because `None` could be a legitimately pushed value. For the same reason `is_empty` must check size or the head pointer, not the truthiness of the top value. Space is O(n) for both, with per-node pointer overhead for the linked version.
+categories: [leetcode, trading, ai-infra, systems-impl]

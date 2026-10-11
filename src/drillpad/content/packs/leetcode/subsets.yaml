@@ -1,0 +1,98 @@
+id: subsets
+title: Subsets
+bar_level: 2
+target_minutes: 22
+patterns:
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Subsets (LC 78)"
+statement: |
+  Given an array `nums` of distinct integers, return every possible subset (the power set), including the empty subset. The subsets may come back in any order, and the elements inside a subset may be in any order, but no subset may appear twice.
+
+  Example: `subsets([1,2,3])` returns `[[], [1], [2], [3], [1,2], [1,3], [2,3], [1,2,3]]` in some order.
+starter: |
+  def subsets(nums):
+      pass
+hints:
+- Each element is independently in or out, so think of a decision tree of depth n.
+- Keep a growing `path`; at each call record a copy of it, then try adding each later element.
+- Remember to copy the path before storing it, and pass a start index so you never revisit earlier elements.
+follow_ups:
+- Solve it iteratively with bitmasks.
+- What changes if nums contains duplicates?
+tests:
+- name: three elements
+  tags:
+  - ordering
+  code: |
+    r=subsets([1,2,3])
+    assert sorted(sorted(s) for s in r)==[[],[1],[1,2],[1,2,3],[1,3],[2],[2,3],[3]]
+- name: single element
+  tags:
+  - single
+  code: |
+    r=subsets([0])
+    assert sorted(r)==[[],[0]]
+- name: empty input
+  tags:
+  - empty
+  code: |
+    assert subsets([])==[[]]
+- name: negative and zero values
+  tags:
+  - invalid
+  hidden: true
+  code: |
+    r=subsets([-1,0])
+    assert sorted(sorted(s) for s in r)==[[],[-1],[-1,0],[0]]
+- name: results are independent lists
+  tags:
+  - state-reuse
+  hidden: true
+  code: |
+    r=subsets([1,2])
+    for s in r: s.append(99)
+    assert sorted(len(s) for s in r)==[1,2,2,3]
+    r2=subsets([1,2])
+    assert sorted(len(s) for s in r2)==[0,1,1,2]
+- name: sixteen elements
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=subsets(list(range(16)))
+    assert len(r)==65536
+    assert len({tuple(sorted(s)) for s in r})==65536
+complexity:
+- op: overall
+  time: O(n * 2^n)
+  space: O(n)
+extensions:
+- q: Do it without recursion.
+  kind: code
+  key_points:
+  - Start from [[]]
+  - For each number append it to a copy of every existing subset
+  - Or enumerate bitmasks 0..2^n-1 and map set bits to elements
+- q: Why can't this beat n * 2^n?
+  kind: complexity
+  key_points:
+  - There are 2^n subsets
+  - Average subset has n/2 elements so output size is Theta(n 2^n)
+  - Auxiliary space is only the recursion depth and path, O(n)
+- q: What if nums has duplicates and you must not repeat a subset?
+  kind: design
+  key_points:
+  - Sort so equal values are adjacent
+  - Skip a value equal to its predecessor at the same depth
+  - Only the first copy at a level may start a branch
+narration: []
+state_aloud:
+- Distinct elements, so no deduplication is needed.
+- Empty input returns [[]], not [].
+- Copy the path when recording it.
+walkthrough: |
+  Use a recursive helper with a start index. At every node of the recursion the current path is itself a valid subset, so append a copy of it to the answer. Then loop over indices from `start` to the end, push the element, recurse with `i + 1`, and pop. Because the start index only moves forward, each subset is generated exactly once and the total work is proportional to the output size.

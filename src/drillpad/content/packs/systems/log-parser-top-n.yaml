@@ -1,0 +1,186 @@
+id: log-parser-top-n
+title: Log Parser / Top-N
+bar_level: 2
+target_minutes: 22
+patterns:
+- parsing
+- counter
+- heap
+- top-k
+firm_tags:
+- ai-infra
+- distsys
+statement: |
+  Implement `LogAnalyzer`, which ingests log lines of the form
+  `"<epoch_seconds> <LEVEL> <service> <message...>"` (single-space separated; the message is the
+  rest of the line and may contain spaces) and answers top-N queries.
+
+  - `ingest(line)` -> `bool`: parse and record the line; return `False` and count it as malformed
+    if it does not have at least 4 fields, if the timestamp is not a non-negative integer, or if
+    LEVEL is not one of `DEBUG INFO WARN ERROR`. Blank lines are malformed too.
+  - `malformed` property: number of malformed lines so far. `total` property: valid lines.
+  - `top_n(n, by="service", level=None, since=None)` -> list of `(key, count)` for the `n` most
+    frequent keys, sorted by count descending then key ascending. `by` is `"service"` or
+    `"message"`. `level` (if given) keeps only lines of that level; `since` (if given) keeps only
+    lines with timestamp `>= since`. `n <= 0` returns `[]`; `by` of another value raises
+    `ValueError`.
+
+  Example
+  ```python
+  a = LogAnalyzer(); a.ingest("100 ERROR db timeout"); a.ingest("101 INFO web ok"); a.ingest("102 ERROR db timeout")
+  a.top_n(1) == [("db", 2)];  a.top_n(5, by="message", level="ERROR") == [("timeout", 2)]
+  ```
+starter: |
+  class LogAnalyzer:
+      def __init__(self):
+          pass
+
+      def ingest(self, line):
+          pass
+
+      @property
+      def malformed(self):
+          pass
+
+      @property
+      def total(self):
+          pass
+
+      def top_n(self, n, by="service", level=None, since=None):
+          pass
+hints:
+- Split with a maxsplit of 3 so the message keeps its spaces; validate timestamp and level.
+- Store parsed records (or counters) and apply level/since filters at query time.
+- Use a Counter and nsmallest with key (-count, name) for deterministic top-n.
+follow_ups:
+- How would you add a time-bucketed error-rate per service?
+- What if lines can arrive out of order?
+tests:
+- name: counts and ordering
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    a = LogAnalyzer()
+    lines = ["100 ERROR db timeout", "101 INFO web ok", "102 ERROR db timeout", "103 WARN web slow response",
+             "104 INFO api ok", "105 INFO web ok"]
+    assert all(a.ingest(l) for l in lines)
+    assert a.total == 6 and a.malformed == 0
+    assert a.top_n(1) == [("web", 3)]
+    assert a.top_n(10) == [("web", 3), ("db", 2), ("api", 1)]
+    assert a.top_n(2, by="message") == [("ok", 3), ("timeout", 2)]
+- name: tie break is alphabetical
+  tags:
+  - ordering
+  - boundary
+  code: |
+    a = LogAnalyzer()
+    for l in ["1 INFO zeta m", "2 INFO alpha m", "3 INFO mid m", "4 INFO alpha m", "5 INFO zeta m"]:
+        a.ingest(l)
+    assert a.top_n(3) == [("alpha", 2), ("zeta", 2), ("mid", 1)]
+    assert a.top_n(2) == [("alpha", 2), ("zeta", 2)]
+- name: malformed lines
+  tags:
+  - invalid
+  - empty
+  code: |
+    a = LogAnalyzer()
+    assert a.ingest("10 INFO svc hello world") is True
+    bad = ["", "   ", "garbage", "10 INFO svc", "abc INFO svc msg", "-5 INFO svc msg", "10 TRACE svc msg", "10 info svc msg"]
+    assert [a.ingest(b) for b in bad] == [False] * len(bad)
+    assert a.malformed == len(bad) and a.total == 1
+    assert a.top_n(5) == [("svc", 1)] and a.top_n(5, by="message") == [("hello world", 1)]
+- name: level and since filters
+  tags:
+  - time
+  - boundary
+  code: |
+    a = LogAnalyzer()
+    for l in ["10 ERROR db a", "20 ERROR db b", "30 INFO web c", "40 ERROR web d", "50 ERROR web d"]:
+        a.ingest(l)
+    assert a.top_n(5, level="ERROR") == [("db", 2), ("web", 2)]
+    assert a.top_n(5, level="ERROR", since=20) == [("web", 2), ("db", 1)]
+    assert a.top_n(5, since=50) == [("web", 1)]
+    assert a.top_n(5, level="DEBUG") == []
+    assert a.top_n(5, since=999) == []
+- name: n edge cases and bad key
+  hidden: true
+  tags:
+  - invalid
+  - single
+  code: |
+    a = LogAnalyzer()
+    assert a.top_n(3) == []
+    a.ingest("1 INFO s m")
+    assert a.top_n(0) == [] and a.top_n(-1) == []
+    assert a.top_n(100) == [("s", 1)]
+    try:
+        a.top_n(1, by="level")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError")
+- name: large log
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    import random
+    r = random.Random(12)
+    a = LogAnalyzer()
+    weights = {}
+    for i in range(60000):
+        svc = "svc%d" % min(int(r.expovariate(0.15)), 49)
+        weights[svc] = weights.get(svc, 0) + 1
+        assert a.ingest("%d INFO %s request %d" % (i, svc, i % 7))
+    top = a.top_n(3)
+    expect = sorted(weights.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+    assert top == expect and a.total == 60000
+complexity:
+- op: ingest
+  time: O(1)
+  space: O(n)
+- op: top_n
+  time: O(n + k log N)
+  space: O(k)
+extensions:
+- q: Cost of ingest and top_n with N lines, k distinct keys, top n?
+  kind: complexity
+  key_points:
+  - ingest is O(L) in the line length (split); top_n counts in O(N) then selects with a heap in O(k log
+    n)
+  - Space is O(N) for stored records; O(k) for a counter-only design
+  - A full sort would be O(k log k); the bounded heap or nsmallest is O(k log n)
+- q: Make it streaming with bounded memory.
+  kind: design
+  key_points:
+  - Keep counters instead of raw records, bucketed per time window so since= filters sum buckets
+  - Approximate heavy hitters with Count-Min Sketch + a small heap, or Space-Saving / Misra-Gries
+  - Evict old buckets to bound memory
+- q: Process terabytes of logs across machines.
+  kind: design
+  key_points:
+  - 'Map: per-shard local counts; reduce: merge counters (and top-n per shard is not enough for exact
+    global top-n)'
+  - Partition by key so each reducer owns a key range
+  - Parse defensively and quarantine malformed lines with counts and samples for debugging
+- q: How do you parse robustly and fast?
+  kind: reasoning
+  key_points:
+  - split with maxsplit keeps the message intact and avoids regex costs
+  - Validate each field and count (not raise on) malformed lines so one bad line does not abort a run
+  - Define the exact tie-break so results are deterministic
+narration: []
+state_aloud:
+- Malformed lines are counted, not fatal.
+- Deterministic tie-break by key.
+- n <= 0 and empty data return [].
+- Message may contain spaces.
+walkthrough: Each line is split with maxsplit 3 into timestamp, level, service and message and validated;
+  bad lines increment a malformed counter and are skipped. Valid records are stored, and top_n filters
+  by level and since, counts the chosen field with a Counter and uses heapq.nsmallest with key (-count,
+  key) to get a deterministic top n. Ingest is O(line length); a query is O(N + k log n).
+anki_queries: []
+categories:
+- systems-impl

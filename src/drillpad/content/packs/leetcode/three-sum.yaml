@@ -1,0 +1,85 @@
+id: three-sum
+title: 3Sum
+bar_level: 2
+target_minutes: 25
+patterns:
+- two-pointers
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:3Sum (LC 15)"
+statement: |
+  Return all unique triplets `[a, b, c]` from `nums` such that `a + b + c == 0`. Triplets use distinct positions but the result must not contain the same triplet of values twice. Order of the output does not matter.
+
+  Example: `three_sum([-1,0,1,2,-1,-4])` returns `[[-1,-1,2],[-1,0,1]]`.
+starter: |
+  def three_sum(nums):
+      pass
+hints:
+- Sort first so duplicates are adjacent and two pointers become possible.
+- Fix the first element, then solve a sorted two-sum for the remainder with two pointers.
+- Skip equal values for the fixed element and after recording a triplet to avoid duplicates.
+follow_ups:
+- Generalize to k-Sum.
+- How would you find the triplet closest to a target?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert sorted(three_sum([-1,0,1,2,-1,-4]))==[[-1,-1,2],[-1,0,1]]
+- name: no triplet
+  tags:
+  - invalid
+  code: |
+    assert three_sum([1,2,3])==[]
+- name: all zeros duplicates
+  tags:
+  - duplicate
+  code: |
+    assert three_sum([0,0,0,0,0])==[[0,0,0]]
+- name: too short
+  tags:
+  - empty
+  code: |
+    assert three_sum([])==[]
+    assert three_sum([0,0])==[]
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    nums=[(i*37)%201-100 for i in range(2000)]
+    r=three_sum(nums)
+    assert all(a<=b<=c and a+b+c==0 for a,b,c in r) and len({tuple(t) for t in r})==len(r) and len(r)>0
+complexity:
+- op: overall
+  time: O(n^2)
+  space: O(1)
+extensions:
+- q: Why can't it beat O(n^2) easily?
+  kind: complexity
+  key_points:
+  - Sort is O(n log n)
+  - n outer iterations times O(n) two-pointer sweep
+  - Space O(1) beyond output (sorting in place)
+- q: Generalize to k-sum
+  kind: design
+  key_points:
+  - Recurse down to the two-sum base case
+  - Time O(n^(k-1))
+  - Skip duplicates at every level
+- q: Closest-to-target variant
+  kind: code
+  key_points:
+  - Track best absolute difference
+  - Same sort plus two pointers
+  - Early exit when diff is zero
+narration: []
+state_aloud:
+- Fewer than three numbers.
+- Many zeros produce a single [0,0,0].
+- Output must be deduplicated.
+walkthrough: |
+  Sort the array, then iterate the first element of the triplet. For each, run two pointers on the remainder: if the sum is below zero advance the left pointer, if above retreat the right pointer, otherwise record the triplet and move both while skipping equal values. Skipping repeated first elements as well guarantees unique triplets without needing a set.

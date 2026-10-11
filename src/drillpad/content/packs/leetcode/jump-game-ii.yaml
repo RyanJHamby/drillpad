@@ -1,0 +1,108 @@
+id: jump-game-ii
+title: Jump Game II
+bar_level: 2
+target_minutes: 25
+patterns:
+- greedy
+- graph-bfs-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Jump Game II (LC 45)"
+statement: |
+  `nums[i]` is the maximum forward jump length from index `i`. Starting at index 0, return the minimum number of jumps needed to reach the last index. You may assume the last index is always reachable. If there is only one element, the answer is 0.
+
+  Example: `min_jumps([2,3,1,1,4])` returns `2` (index 0 to 1 to 4).
+starter: |
+  def min_jumps(nums):
+      pass
+hints:
+- Treat each index as a node and each jump as an edge of weight 1; this is a shortest path on an unweighted graph.
+- 'BFS by levels: all indices reachable in k jumps form a contiguous range.'
+- Track the end of the current level and the farthest index seen; when you pass the level's end, count a jump and move the end to farthest.
+follow_ups:
+- What if the end may be unreachable?
+- Return the actual sequence of indices used.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert min_jumps([2,3,1,1,4]) == 2
+- name: single element needs no jump
+  tags:
+  - single
+  - boundary
+  code: |
+    assert min_jumps([0]) == 0
+    assert min_jumps([5]) == 0
+- name: two elements
+  tags:
+  - boundary
+  code: |
+    assert min_jumps([1,1]) == 1
+    assert min_jumps([3,0]) == 1
+- name: max-step greedy lands on a dead end
+  tags:
+  - ordering
+  code: |
+    assert min_jumps([2,3,0,1,4]) == 2
+    assert min_jumps([2,3,0,0,4]) == 2
+  hidden: true
+- name: all ones
+  tags:
+  - duplicate
+  code: |
+    assert min_jumps([1,1,1,1,1]) == 4
+- name: one big first jump
+  tags:
+  - boundary
+  code: |
+    assert min_jumps([10,1,1,1,1]) == 1
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 300000
+    assert min_jumps([1] * n) == n - 1
+    assert min_jumps([n - i for i in range(n)]) == 1
+    assert min_jumps([2] * n) == n // 2
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why does the level-by-level greedy give the minimum?
+  kind: reasoning
+  key_points:
+  - Indices reachable within k jumps form a prefix range ending at the level boundary
+  - Taking the farthest of that range after k jumps bounds what k+1 jumps can reach
+  - Counting a jump only when you must leave the current range is BFS depth
+- q: Compare the DP O(n^2), the BFS-with-queue O(n) space, and the range greedy.
+  kind: complexity
+  key_points:
+  - dp[i] = min over j < i reaching i is O(n^2) time, O(n) space
+  - Explicit BFS queue is O(n) time but O(n) space
+  - 'Range greedy keeps two integers: O(n) time, O(1) space'
+- q: Give an exchange-argument sketch for why jumping to the position that maximises i + nums[i] (not the longest jump) is optimal.
+  kind: reasoning
+  key_points:
+  - Any optimal path's k-th landing spot lies within the k-jump reachable range
+  - Replacing it with the spot in that range that reaches farthest never reduces what the next jump can reach
+  - So the greedy's reach after each jump dominates the optimal path's reach by induction
+- q: 'Design: unreachable ends, or return the path. What changes?'
+  kind: design
+  key_points:
+  - 'Unreachable: if the next level end does not advance (farthest <= current end) return -1'
+  - 'Path: record, for each level, the index that achieved the farthest reach, then backtrack'
+  - Validate input shape and non-negative steps first
+narration: []
+state_aloud:
+- 'Single element: zero jumps.'
+- State the reachability assumption.
+- Choose the landing spot by farthest reach (i + nums[i]), not by the largest nums[i].
+walkthrough: |
+  Think of breadth-first search over ranges. The current level ends at `cur_end`; while scanning indices inside it, track `far`, the farthest index any of them can reach. On arriving at `cur_end` we must take a jump, so increment the count and set the new level end to `far`. Stop as soon as the level end reaches the last index. Single pass, constant space.

@@ -1,0 +1,107 @@
+id: missing-number
+title: Missing Number
+bar_level: 1
+target_minutes: 12
+patterns:
+- bit-manipulation
+- math
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  `nums` contains `n` distinct integers taken from the range `[0, n]`, so exactly one number in that range is missing. Return it.
+
+  Example: `missing_number([3,0,1])` returns `2`; `missing_number([0,1])` returns `2`.
+starter: |
+  def missing_number(nums):
+      pass
+hints:
+- The values 0..n have a known sum.
+- Sum formula n(n+1)/2 minus the actual sum gives the missing value. In fixed-width languages this can overflow.
+- 'XOR variant: XOR all indices 0..n with all values; pairs cancel and the missing value remains.'
+follow_ups:
+- Two numbers are missing.
+- What if the array may contain duplicates?
+tests:
+- name: middle missing
+  tags:
+  - boundary
+  code: |
+    assert missing_number([3,0,1]) == 2
+- name: last missing
+  tags:
+  - boundary
+  code: |
+    assert missing_number([0,1]) == 2
+- name: first missing
+  tags:
+  - boundary
+  code: |
+    assert missing_number([1,2,3]) == 0
+    assert missing_number([1]) == 0
+- name: empty means 0 is missing
+  tags:
+  - empty
+  code: |
+    assert missing_number([]) == 0
+- name: single element zero
+  tags:
+  - single
+  code: |
+    assert missing_number([0]) == 1
+- name: unordered
+  tags:
+  - ordering
+  code: |
+    assert missing_number([9,6,4,2,3,5,7,0,1]) == 8
+  hidden: true
+- name: input not mutated
+  tags:
+  - state-reuse
+  code: |
+    a=[2,0]
+    assert missing_number(a)==1
+    assert a==[2,0]
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 1000000
+    a = list(range(n + 1))
+    import random
+    random.Random(2).shuffle(a)
+    a.remove(777777)
+    assert missing_number(a) == 777777
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Compare the sum and XOR approaches.
+  kind: reasoning
+  key_points:
+  - 'Sum: expected n(n+1)/2 minus actual; simple but can overflow in 32-bit languages'
+  - 'XOR: values and indices cancel; no overflow'
+  - Both single pass O(n) time and O(1) space
+- q: Time and space versus alternatives.
+  kind: complexity
+  key_points:
+  - 'Sorting: O(n log n)'
+  - 'Hash set: O(n) time and O(n) space'
+  - 'Cyclic placement in place: O(n) time, O(1) extra space but mutates input'
+- q: 'Design: two missing numbers, or the data does not fit in memory.'
+  kind: design
+  key_points:
+  - 'Two missing: use sum and sum of squares or XOR partitioned by a differing bit'
+  - 'Out-of-core: stream once accumulating the sum/XOR'
+  - A bitmap of n bits works if memory allows
+narration: []
+state_aloud:
+- Empty input means 0 is missing.
+- Missing value may be 0 or n.
+- Values are distinct.
+walkthrough: |
+  XOR every index from 0 to n and every value in the list. Each present number appears twice and cancels, leaving only the missing number. This avoids the overflow risk of the sum formula and runs in one pass with constant space.

@@ -1,0 +1,194 @@
+id: text-editor-undo-redo
+title: Text Editor with Undo/Redo
+bar_level: 2
+target_minutes: 22
+patterns:
+- command-pattern
+- undo-redo
+- two-stacks
+firm_tags:
+- ai-infra
+statement: |
+  Implement a `TextEditor` with unlimited undo/redo using the command pattern.
+
+  - `insert(pos, text)`: insert `text` so it starts at index `pos` (`0 <= pos <= len(text_now)`).
+  - `delete(pos, length)`: delete `length` characters starting at `pos`
+    (`length >= 1`, `pos >= 0`, `pos + length <= len(text_now)`).
+  - Invalid positions/lengths raise `IndexError` and change nothing (and add no undo history).
+    Inserting the empty string is a no-op that adds no history.
+  - `undo()` -> `bool`: reverse the most recent edit; `False` if nothing to undo.
+  - `redo()` -> `bool`: re-apply the most recently undone edit; `False` if nothing to redo.
+  - Any new `insert`/`delete` clears the redo history.
+  - `text` property returns the current string.
+
+  Example
+  ```python
+  e = TextEditor(); e.insert(0, "hello"); e.insert(5, " world"); e.delete(0, 6)
+  e.text == "world"; e.undo(); e.text == "hello world"; e.redo(); e.text == "world"
+  ```
+starter: |
+  class TextEditor:
+      def __init__(self):
+          pass
+
+      @property
+      def text(self):
+          pass
+
+      def insert(self, pos, text):
+          pass
+
+      def delete(self, pos, length):
+          pass
+
+      def undo(self):
+          pass
+
+      def redo(self):
+          pass
+hints:
+- Represent each edit as a command that stores everything needed to invert it (a delete stores the removed
+  text).
+- 'Two stacks: undo and redo; undo pops, applies the inverse and pushes onto redo.'
+- Clear the redo stack on every new edit; validate bounds before recording anything.
+follow_ups:
+- How would you add a cursor and selection?
+- How would you bound memory used by history?
+tests:
+- name: insert delete undo redo
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    e = TextEditor()
+    assert e.text == ""
+    e.insert(0, "hello"); e.insert(5, " world"); e.delete(0, 6)
+    assert e.text == "world"
+    assert e.undo() is True and e.text == "hello world"
+    assert e.undo() is True and e.text == "hello"
+    assert e.redo() is True and e.text == "hello world"
+    assert e.redo() is True and e.text == "world"
+    assert e.redo() is False
+- name: new edit clears redo
+  tags:
+  - state-reuse
+  - duplicate
+  code: |
+    e = TextEditor()
+    e.insert(0, "abc"); e.insert(3, "def")
+    e.undo()
+    e.insert(3, "XYZ")
+    assert e.text == "abcXYZ"
+    assert e.redo() is False
+    assert e.undo() is True and e.text == "abc"
+    assert e.undo() is True and e.text == ""
+    assert e.undo() is False
+- name: invalid operations change nothing
+  tags:
+  - invalid
+  - boundary
+  code: |
+    e = TextEditor()
+    e.insert(0, "abc")
+    for fn in (lambda: e.insert(4, "x"), lambda: e.insert(-1, "x"), lambda: e.delete(2, 2),
+               lambda: e.delete(-1, 1), lambda: e.delete(0, 0), lambda: e.delete(3, 1)):
+        try:
+            fn()
+        except IndexError:
+            pass
+        else:
+            raise AssertionError("expected IndexError")
+    assert e.text == "abc"
+    e.insert(3, "")
+    assert e.undo() is True and e.text == ""      # only the one real edit was recorded
+    assert e.undo() is False
+- name: empty editor undo redo
+  tags:
+  - empty
+  - single
+  code: |
+    e = TextEditor()
+    assert e.undo() is False and e.redo() is False and e.text == ""
+    e.insert(0, "x")
+    assert e.text == "x"
+- name: delete in the middle and boundaries
+  hidden: true
+  tags:
+  - boundary
+  - ordering
+  code: |
+    e = TextEditor()
+    e.insert(0, "0123456789")
+    e.delete(3, 4)
+    assert e.text == "012789"
+    e.delete(0, 6)
+    assert e.text == ""
+    e.undo()
+    assert e.text == "012789"
+    e.undo()
+    assert e.text == "0123456789"
+    e.redo(); e.redo()
+    assert e.text == ""
+- name: long history
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    e = TextEditor()
+    for i in range(2000):
+        e.insert(len(e.text), "ab")
+    assert len(e.text) == 4000
+    for _ in range(2000):
+        assert e.undo()
+    assert e.text == "" and e.undo() is False
+    for _ in range(2000):
+        assert e.redo()
+    assert e.text == "ab" * 2000
+complexity:
+- op: insert/delete
+  time: O(L)
+  space: O(L)
+- op: undo/redo
+  time: O(L)
+  space: O(1)
+extensions:
+- q: Cost of operations with a document of length L and H history entries?
+  kind: complexity
+  key_points:
+  - 'Edits and undos rebuild the string slice: O(L); a gap buffer or rope reduces this to O(edit size)
+    / O(log L)'
+  - History is O(H) commands, each holding only the changed text, not a full snapshot
+  - Undo/redo themselves are O(1) beyond applying the inverse command
+- q: Coalesce typing into word-sized undo steps and support grouped/compound commands.
+  kind: design
+  key_points:
+  - Merge adjacent single-char inserts at consecutive positions into one command
+  - Composite command (macro) with begin_group/end_group so one undo reverts the whole group
+  - Cap history length or memory by dropping the oldest commands
+- q: Extend this to collaborative editing with multiple users.
+  kind: design
+  key_points:
+  - Undo must be selective (undo my edits only), which needs operational transformation or CRDTs
+  - Transform inverse operations against concurrent remote ops
+  - Keep per-user undo stacks over a shared operation log
+- q: Command inverse vs full-state snapshots?
+  kind: reasoning
+  key_points:
+  - Snapshots are trivial but cost O(L) memory per step
+  - Inverse commands store only deltas but each command must be exactly invertible (delete stores the
+    removed text)
+  - 'Hybrid: periodic snapshots plus deltas bound replay cost'
+narration: []
+state_aloud:
+- Validate before mutating so errors leave no history.
+- A new edit invalidates redo.
+- Delete command must remember the deleted text.
+- Empty insert is a no-op without a history entry.
+walkthrough: Each edit is stored as a command (kind, position, text); a delete stores the removed text
+  so it can be inverted. undo pops from the undo stack, applies the inverse and pushes the command on
+  the redo stack; redo does the reverse; any new edit clears the redo stack. Inputs are validated before
+  any mutation, so invalid calls leave both text and history untouched.
+anki_queries: []
+categories:
+- systems-impl

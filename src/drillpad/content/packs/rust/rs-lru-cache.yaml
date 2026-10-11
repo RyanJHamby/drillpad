@@ -1,0 +1,254 @@
+title: LRU Cache (HashMap + index-based list)
+target_minutes: 40
+patterns:
+- lru
+- hashmap-plus-linked-list
+- slab-arena
+- index-links
+- no-unsafe
+firm_tags:
+- ai-infra
+- distsys
+categories:
+- systems-impl
+- leetcode
+statement: |2
+
+  Implement a fixed-capacity least-recently-used cache with O(1) `get` and `put` **in safe Rust**. A doubly linked list
+  of owned nodes needs `Rc<RefCell<..>>` or `unsafe`; instead keep the nodes in a `Vec` (a slab) and link them with
+  `usize` indices, with a `HashMap<K, usize>` from key to slot.
+
+  ```rust
+  use std::collections::HashMap;
+  use std::hash::Hash;
+
+  struct LruCache<K, V> { /* ... */ }
+
+  impl<K: Hash + Eq + Clone, V> LruCache<K, V> {
+      fn new(capacity: usize) -> Self;
+      fn get(&mut self, key: &K) -> Option<&V>;          // a hit makes the key most recently used
+      fn peek(&self, key: &K) -> Option<&V>;             // read without touching recency
+      fn put(&mut self, key: K, value: V) -> Option<(K, V)>;
+      fn contains(&self, key: &K) -> bool;               // no recency change
+      fn len(&self) -> usize;
+      fn keys_mru_first(&self) -> Vec<K>;                // keys from most to least recently used
+  }
+  ```
+
+  `put` semantics: if the key exists, replace its value, mark it most recently used and return `None`. Otherwise insert it
+  as most recently used; if that exceeds capacity, evict the least recently used entry and return it as `Some((key, value))`.
+  With capacity 0 nothing is ever stored and `put` immediately hands the pair back as `Some((key, value))`.
+
+  Example (capacity 2): `put(1,"a"); put(2,"b"); get(&1); put(3,"c")` evicts key 2 and returns `Some((2, "b"))`.
+starter: |2
+
+  use std::collections::HashMap;
+  use std::hash::Hash;
+
+  struct LruCache<K, V> {
+      map: HashMap<K, usize>,
+      capacity: usize,
+      // TODO: slab of nodes linked by usize indices, plus head and tail
+      marker: std::marker::PhantomData<V>,
+  }
+
+  impl<K: Hash + Eq + Clone, V> LruCache<K, V> {
+      fn new(capacity: usize) -> Self {
+          todo!()
+      }
+
+      fn get(&mut self, key: &K) -> Option<&V> {
+          todo!()
+      }
+
+      fn peek(&self, key: &K) -> Option<&V> {
+          todo!()
+      }
+
+      fn put(&mut self, key: K, value: V) -> Option<(K, V)> {
+          todo!()
+      }
+
+      fn contains(&self, key: &K) -> bool {
+          todo!()
+      }
+
+      fn len(&self) -> usize {
+          todo!()
+      }
+
+      fn keys_mru_first(&self) -> Vec<K> {
+          todo!()
+      }
+  }
+hints:
+- 'Slab node: `struct Entry<K, V> { key: K, val: V, prev: usize, next: usize }` with a sentinel `const NIL: usize = usize::MAX`. Store `entries: Vec<Entry<K, V>>`, `head` (MRU) and `tail` (LRU). Indices are `Copy`, so unlike references they never fight the borrow checker.'
+- 'Write two private helpers, `detach(&mut self, i)` and `attach_front(&mut self, i)`, that only rewire `prev`/`next`/`head`/`tail`. `get` = lookup index, detach, attach_front, return `&self.entries[i].val`. Never hold a reference into `entries` while calling a `&mut self` helper: copy the index out first.'
+- 'Because there is no remove operation, the slab never needs a free list: when full, reuse the tail''s slot. Detach the tail, `std::mem::replace` its key and value with the new ones (that gives you the evicted pair to return), fix the HashMap, and attach the slot at the front.'
+follow_ups:
+- Why can't you write this with Box<Node> and plain references, and what do Rc<RefCell<>> or unsafe cost you?
+- How would you add a remove(&K) operation? What does the slab then need (free list)?
+- Why does get take &mut self and what does that mean for sharing the cache across threads?
+- How would you add per-entry TTL or a weight-based capacity?
+tests:
+- name: evicts least recently used
+  tags:
+  - ordering
+  - boundary
+  code: |
+    let mut c = LruCache::new(2);
+    assert_eq!(c.put(1, "a"), None);
+    assert_eq!(c.put(2, "b"), None);
+    assert_eq!(c.get(&1), Some(&"a"));
+    assert_eq!(c.put(3, "c"), Some((2, "b")));
+    assert_eq!(c.get(&2), None);
+    assert_eq!(c.get(&1), Some(&"a"));
+    assert_eq!(c.get(&3), Some(&"c"));
+    assert_eq!(c.len(), 2);
+  hidden: false
+- name: empty cache and missing keys
+  tags:
+  - empty
+  - invalid
+  code: |
+    let mut c: LruCache<String, i32> = LruCache::new(3);
+    assert_eq!(c.len(), 0);
+    assert_eq!(c.get(&"x".to_string()), None);
+    assert_eq!(c.peek(&"x".to_string()), None);
+    assert!(!c.contains(&"x".to_string()));
+    assert!(c.keys_mru_first().is_empty());
+  hidden: false
+- name: update refreshes value and recency
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    let mut c = LruCache::new(2);
+    c.put("a", 1);
+    c.put("b", 2);
+    assert_eq!(c.put("a", 10), None); // update: no eviction
+    assert_eq!(c.len(), 2);
+    assert_eq!(c.keys_mru_first(), vec!["a", "b"]);
+    assert_eq!(c.put("c", 3), Some(("b", 2)));
+    assert_eq!(c.get(&"a"), Some(&10));
+    assert_eq!(c.keys_mru_first(), vec!["a", "c"]);
+  hidden: false
+- name: peek and contains do not change recency
+  tags:
+  - ordering
+  - state-reuse
+  code: |
+    let mut c = LruCache::new(3);
+    c.put(1, 'a'); c.put(2, 'b'); c.put(3, 'c');
+    assert_eq!(c.peek(&1), Some(&'a'));
+    assert!(c.contains(&1));
+    assert_eq!(c.keys_mru_first(), vec![3, 2, 1]);
+    assert_eq!(c.put(4, 'd'), Some((1, 'a'))); // 1 was still LRU
+    assert_eq!(c.keys_mru_first(), vec![4, 3, 2]);
+    c.get(&2);
+    assert_eq!(c.keys_mru_first(), vec![2, 4, 3]);
+  hidden: false
+- name: capacity zero and one
+  tags:
+  - zero-capacity
+  - single
+  hidden: true
+  code: |
+    let mut z = LruCache::new(0);
+    assert_eq!(z.put(1, "x"), Some((1, "x")));
+    assert_eq!(z.len(), 0);
+    assert_eq!(z.get(&1), None);
+    let mut o = LruCache::new(1);
+    assert_eq!(o.put(1, "a"), None);
+    assert_eq!(o.put(1, "b"), None);
+    assert_eq!(o.get(&1), Some(&"b"));
+    assert_eq!(o.put(2, "c"), Some((1, "b")));
+    assert_eq!(o.keys_mru_first(), vec![2]);
+    assert_eq!(o.len(), 1);
+- name: values need no Clone and are dropped on eviction
+  tags:
+  - duplicate
+  - state-reuse
+  hidden: true
+  code: |
+    use std::rc::Rc;
+    struct NoClone(Rc<()>);
+    let token = Rc::new(());
+    let mut c = LruCache::new(2);
+    c.put("a", NoClone(Rc::clone(&token)));
+    c.put("b", NoClone(Rc::clone(&token)));
+    assert_eq!(Rc::strong_count(&token), 3);
+    let evicted = c.put("c", NoClone(Rc::clone(&token)));
+    assert!(evicted.is_some());
+    assert_eq!(Rc::strong_count(&token), 4); // returned to the caller, not dropped inside
+    drop(evicted);
+    assert_eq!(Rc::strong_count(&token), 3);
+    c.put("b", NoClone(Rc::clone(&token))); // overwrite drops the old value
+    assert_eq!(Rc::strong_count(&token), 3);
+    drop(c);
+    assert_eq!(Rc::strong_count(&token), 1);
+- name: large workload stays O(1)
+  tags:
+  - scale
+  hidden: true
+  code: |
+    let mut c = LruCache::new(1000);
+    for i in 0..200_000u64 {
+        c.put(i, i * 2);
+        if i % 3 == 0 { c.get(&(i / 2)); }
+    }
+    assert_eq!(c.len(), 1000);
+    assert_eq!(c.peek(&199_999), Some(&399_998));
+    assert_eq!(c.peek(&0), None);
+    let keys = c.keys_mru_first();
+    assert_eq!(keys.len(), 1000);
+    assert_eq!(keys[0], 199_999);
+complexity:
+- op: get / put / peek / contains
+  time: O(1) expected
+  space: O(1)
+- op: keys_mru_first
+  time: O(n)
+  space: O(n)
+- op: cache overall
+  time: O(1) expected
+  space: O(capacity)
+extensions:
+- q: Why use Vec indices instead of Rc<RefCell<Node>> or raw pointers for the linked list?
+  kind: design
+  key_points:
+  - A doubly linked list gives every node two owners (prev and next), which Box/&-references cannot express; Rc<RefCell<>> needs runtime borrow checks and Weak to avoid cycles
+  - 'Indices into a Vec are plain Copy integers: no aliasing, no unsafe, better cache locality, and one allocation for all nodes'
+  - 'Tradeoff: an index can go stale after a removal (needs a generation counter or free list discipline), which the compiler cannot check'
+- q: What is the time and memory cost of this design?
+  kind: complexity
+  key_points:
+  - HashMap lookup is O(1) expected; detach/attach are a constant number of index writes
+  - 'Space O(capacity): one slab entry plus one map entry per key; requiring K: Clone stores each key twice'
+  - Avoiding the K clone needs either Rc<K> keys or a raw-entry/hashbrown API that hashes through the slab
+- q: How would you make this cache usable from many threads?
+  kind: design
+  key_points:
+  - 'get mutates recency, so even reads need exclusive access: wrap in Mutex<LruCache> (Arc<Mutex<..>>) which requires K and V to be Send'
+  - 'A single lock is a bottleneck: shard by hash(key) % N into N independent mutex-guarded caches'
+  - 'Return values are borrows tied to &mut self, so across a lock boundary you clone (V: Clone) or return Arc<V> instead of &V'
+- q: How would you add a remove(&K) operation?
+  kind: code
+  key_points:
+  - Look up the slot, detach it, remove the key from the map
+  - 'Slab slots are now holes: keep a free list of vacated indices (or Vec<Option<Entry>>) and reuse them on insert'
+  - 'swap_remove would move another entry and require patching its neighbors'' links and the map: usually not worth it'
+state_aloud:
+- 'Capacity 0: put stores nothing and returns the pair back; capacity 1: every new key evicts the old one.'
+- Updating an existing key must not evict anything and must refresh recency.
+- peek and contains must not change recency; get must.
+- 'Never hold a reference into the slab across a &mut self call: copy the usize index out first.'
+- 'Head and tail bookkeeping when the list has one element: both point at the same slot.'
+walkthrough: |2
+
+  Nodes live in a `Vec<Entry>` and link to each other by `usize` index, with a `HashMap<K, usize>` giving O(1) lookup; moving a node to the front is just detaching it and re-attaching it at the head by rewriting a few indices. Indices are `Copy`, so the borrow checker has nothing to complain about, and no `Rc<RefCell<..>>` or `unsafe` is needed. When the cache is full, the tail slot is reused: `mem::replace` swaps the new key and value in and returns the evicted pair. In Python you would reach for `OrderedDict`; here the arena-plus-indices pattern is the standard safe answer to cyclic structures.
+id: rs-lru-cache
+language: rust
+bar_level: 3
+narration: []
+anki_queries: []

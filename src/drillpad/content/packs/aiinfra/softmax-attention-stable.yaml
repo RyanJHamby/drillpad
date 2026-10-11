@@ -1,0 +1,245 @@
+id: softmax-attention-stable
+title: Numerically Stable Softmax + Attention
+bar_level: 3
+target_minutes: 35
+patterns:
+- softmax
+- attention
+- numerical-stability
+- matrix-math
+- causal-mask
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Implement softmax and single-head scaled dot-product attention with plain Python lists (no numpy).
+
+  - `softmax(xs) -> list[float]`: `exp(x_i) / sum(exp(x_j))`, computed so it never overflows:
+    subtract `max(xs)` first. `[]` returns `[]`. An entry of `-inf` gets probability exactly `0.0`
+    (that is how masked positions are expressed). If every entry is `-inf`, raise `ValueError`.
+  - `attention(Q, K, V, causal=False) -> list[list[float]]`: `Q` is `n x d`, `K` is `m x d`, `V` is
+    `m x dv` (lists of lists). For each query row `i`: scores `s_j = (q_i . k_j) / sqrt(d)`, weights
+    `softmax(s)`, output `sum_j w_j * v_j`. With `causal=True` (requires `n == m`) query `i` may only
+    attend to keys `j <= i`; the masked scores must be excluded (or set to `-inf`) before softmax.
+    `n == 0` returns `[]`.
+    `ValueError` if `len(V) != len(K)`, `K` is empty while `Q` is not, row lengths of Q and K differ, or
+    `causal=True` with `n != m`.
+
+  Compare floats with a tolerance. Both functions must be linear-time per row in the number of keys (do
+  not recompute the normalising sum for every element).
+
+  Example: `softmax([1000.0, 1000.0, 999.0])` must work (the naive `math.exp(1000.0)` overflows).
+starter: |
+  def softmax(xs):
+      pass
+
+
+  def attention(Q, K, V, causal=False):
+      pass
+hints:
+- softmax(x) == softmax(x - c) for any constant c; choose c = max(x) so the largest exponent is exp(0)
+  = 1.
+- Compute the exponentials once, sum them once, then divide. The one-liner that sums inside the comprehension
+  is O(n^2).
+- 'Causal masking: score only keys[:i+1] instead of building a full matrix and masking, it is both simpler
+  and faster.'
+follow_ups:
+- Online (streaming) softmax with a running max and sum, as used by FlashAttention.
+- Multi-head attention with a projection per head.
+- Add a key-padding mask and an additive bias such as ALiBi.
+tests:
+- name: softmax basics
+  code: |
+    def close(a, b, tol=1e-9):
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
+        return abs(a - b) <= tol
+    import math
+    assert close(softmax([0.0, 0.0]), [0.5, 0.5])
+    assert close(softmax([1.0]), [1.0])
+    e = math.e
+    assert close(softmax([1.0, 0.0]), [e / (e + 1), 1 / (e + 1)])
+    assert softmax([]) == []
+  hidden: false
+  tags:
+  - boundary
+  - single
+- name: large logits do not overflow
+  code: |
+    def close(a, b, tol=1e-9):
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
+        return abs(a - b) <= tol
+    p = softmax([1000.0, 1000.0, 999.0])
+    assert abs(sum(p) - 1.0) < 1e-12 and p[0] == p[1] and p[0] > p[2]
+    q = softmax([-1000.0, -1001.0])
+    assert abs(sum(q) - 1.0) < 1e-12 and q[0] > q[1]
+    assert close(softmax([1000.0, 0.0]), [1.0, 0.0])
+  hidden: false
+  tags:
+  - boundary
+  - invalid
+- name: softmax is shift invariant and -inf means probability zero
+  code: |
+    def close(a, b, tol=1e-9):
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
+        return abs(a - b) <= tol
+    xs = [0.3, -2.0, 5.5, 1.0]
+    assert close(softmax(xs), softmax([x + 1234.5 for x in xs]), 1e-9)
+    p = softmax([0.0, float("-inf"), 0.0])
+    assert p == [0.5, 0.0, 0.5]
+    try:
+        softmax([float("-inf"), float("-inf")])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("fully masked row must raise ValueError")
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: attention on a hand-computed example
+  code: |
+    def close(a, b, tol=1e-9):
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
+        return abs(a - b) <= tol
+    import math
+    Q = [[1.0, 0.0]]
+    K = [[1.0, 0.0], [0.0, 1.0]]
+    V = [[10.0, 0.0], [0.0, 10.0]]
+    s = 1 / math.sqrt(2)
+    w0 = math.exp(s) / (math.exp(s) + 1)
+    out = attention(Q, K, V)
+    assert close(out, [[10 * w0, 10 * (1 - w0)]])
+  hidden: false
+  tags:
+  - single
+  - boundary
+- name: causal attention hides the future
+  code: |
+    def close(a, b, tol=1e-9):
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
+        return abs(a - b) <= tol
+    Q = [[1.0], [1.0], [1.0]]
+    K = [[0.0], [5.0], [9.0]]
+    V = [[1.0], [2.0], [3.0]]
+    out = attention(Q, K, V, causal=True)
+    assert close(out[0], [1.0]), "first position can only see itself"
+    full = attention(Q, K, V)
+    assert not close(out[1], full[1]) and close(out[2], full[2])
+  hidden: true
+  tags:
+  - ordering
+  - boundary
+- name: shape errors and empty input
+  code: |
+    def close(a, b, tol=1e-9):
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
+        return abs(a - b) <= tol
+    assert attention([], [[1.0]], [[2.0]]) == []
+    for args in [([[1.0, 2.0]], [[1.0]], [[3.0]]), ([[1.0]], [[1.0], [2.0]], [[1.0]]), ([[1.0]], [], [])]:
+        try:
+            attention(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    try:
+        attention([[1.0], [1.0]], [[1.0]], [[1.0]], causal=True)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+  hidden: true
+  tags:
+  - invalid
+  - empty
+- name: rows are convex combinations of V
+  code: |
+    def close(a, b, tol=1e-9):
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
+        return abs(a - b) <= tol
+    import random
+    rng = random.Random(0)
+    Q = [[rng.uniform(-30, 30) for _ in range(4)] for _ in range(6)]
+    K = [[rng.uniform(-30, 30) for _ in range(4)] for _ in range(6)]
+    V = [[1.0, 2.0] for _ in range(6)]
+    for row in attention(Q, K, V):
+        assert close(row, [1.0, 2.0], 1e-9)
+  hidden: true
+  tags:
+  - duplicate
+  - ordering
+- name: softmax over 20k logits and attention over 64 positions
+  code: |
+    def close(a, b, tol=1e-9):
+        if isinstance(a, (list, tuple)):
+            return len(a) == len(b) and all(close(x, y, tol) for x, y in zip(a, b))
+        return abs(a - b) <= tol
+    import random
+    rng = random.Random(2)
+    xs = [rng.uniform(-50, 50) for _ in range(20000)]
+    p = softmax(xs)
+    assert abs(sum(p) - 1.0) < 1e-9 and p.index(max(p)) == xs.index(max(xs))
+    Q = [[rng.random() for _ in range(32)] for _ in range(64)]
+    out = attention(Q, Q, Q, causal=True)
+    assert len(out) == 64 and len(out[0]) == 32
+    assert close(out[0], Q[0], 1e-12)
+    big = [1e4 * rng.random() for _ in range(300000)]
+    assert abs(sum(softmax(big)) - 1.0) < 1e-9
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: softmax
+  time: O(n)
+  space: O(n)
+- op: attention
+  time: O(n * m * (d + dv))
+  space: O(m)
+extensions:
+- q: 'Level 2: implement online softmax over a stream of scores in one pass (running max m and running
+    sum s), and use it to compute an attention row without storing all scores.'
+  kind: code
+  key_points:
+  - 'On a new x: m'' = max(m, x); s = s * exp(m - m'') + exp(x - m''); the output accumulator is rescaled
+    by the same factor'
+  - Initial m = -inf, s = 0; guard the first element so exp(-inf - -inf) is not NaN
+  - Final result equals the two-pass version up to rounding
+- q: Why does FlashAttention-style tiling rely on the online softmax, and what is the memory benefit?
+  kind: design
+  key_points:
+  - 'The full n x n score matrix never needs to exist in slow memory: process K/V in tiles and keep per-row
+    running max, sum and output'
+  - Memory goes from O(n^2) to O(n) per head for the intermediate scores
+  - The rescaling trick is what makes tiles composable
+- q: Why divide by sqrt(d), and what goes wrong in low precision?
+  kind: reasoning
+  key_points:
+  - Dot products of d random unit-variance components have variance d, so large d saturates softmax and
+    kills gradients
+  - In fp16/bf16 exp overflows quickly, so max-subtraction and accumulating in fp32 matter
+  - Fully masked rows give 0/0; define the behaviour (error or zeros) explicitly
+- q: State time and space of one attention call and of softmax; where does a naive version blow up?
+  kind: complexity
+  key_points:
+  - O(n * m * d) for scores plus O(n * m * dv) for the weighted sum
+  - Scratch space is O(m) per row when rows are processed one at a time, O(n * m) if the score matrix
+    is materialised
+  - A softmax that recomputes sum(exp) per element is O(n^2) per row
+narration: []
+state_aloud:
+- Subtract the max before exponentiating; say why (overflow, shift invariance).
+- -inf entries mean masked; an all-masked row is an error here.
+- Scale by 1/sqrt(d) where d is the key dimension.
+- Causal needs square shapes in this problem; validate shapes up front.
+- 'Floats: compare with a tolerance.'
+walkthrough: |
+  softmax subtracts the row maximum, exponentiates once, sums once and divides; -inf entries naturally become exp(-inf) = 0 and an all -inf row is rejected before it can produce NaN. attention loops over queries, scores each against the visible keys (all of them, or the first i+1 when causal), scales by 1/sqrt(d), applies softmax and accumulates the weighted V rows. Slicing the keys for causal attention avoids materialising a mask. Standard formulation; the stability argument is the shift-invariance of softmax.
+categories:
+- ai-infra

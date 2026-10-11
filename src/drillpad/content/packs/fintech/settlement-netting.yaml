@@ -1,0 +1,139 @@
+id: settlement-netting
+title: 'Bank settlement netting: minimum transfers, then central-bank routing'
+bar_level: 3
+target_minutes: 30
+patterns:
+- net-balances
+- bitmask-dp
+- backtracking
+- hub-and-spoke
+firm_tags:
+- distsys
+anki_queries: []
+statement: |
+  `debts` is a list of `(from_bank, to_bank, amount)` meaning `from_bank` owes `to_bank` a
+  positive int `amount`. Banks are strings.
+
+  1. `min_transfers(debts) -> int`: the minimum number of transfers `(payer, payee, amount)`
+     that settles all obligations (every bank ends at net 0). Obligations may be netted
+     arbitrarily across banks; you only count transfers. Up to 16 banks have a non-zero net.
+  2. `central_bank_transfers(debts) -> list`: instead route everything through a hub named
+     `"CENTRAL_BANK"`: each bank with a negative net balance pays `-net` to the hub as
+     `(bank, "CENTRAL_BANK", amount)`, each with a positive net receives
+     `("CENTRAL_BANK", bank, amount)`. Banks with net 0 produce nothing. Return the transfers
+     ordered by bank name (string order of the non-hub bank).
+starter: |
+  def min_transfers(debts):
+      pass
+
+
+  def central_bank_transfers(debts):
+      pass
+hints:
+- First compute every bank's net balance; only non-zero nets matter.
+- Minimum transfers = (number of non-zero balances) - (maximum number of disjoint zero-sum groups).
+- 'Zero-sum groups: bitmask DP over subsets, or backtracking that settles one balance against opposite-signed
+  ones.'
+follow_ups:
+- Why is the peer-to-peer version NP-hard and what is the practical bound on n?
+- Why do real payment rails use a central counterparty even though it costs more transfers?
+- Reconstruct the actual transfers, not just their count.
+- Handle multiple currencies.
+tests:
+- name: classic examples
+  tags:
+  - single
+  - ordering
+  code: |
+    assert min_transfers([("A", "B", 10), ("C", "A", 5)]) == 2
+    assert min_transfers([("A", "B", 10), ("B", "A", 1), ("B", "C", 5), ("C", "A", 5)]) == 1
+- name: empty and already settled
+  tags:
+  - empty
+  - boundary
+  code: |
+    assert min_transfers([]) == 0
+    assert min_transfers([("A", "B", 5), ("B", "A", 5)]) == 0, "net zero needs no transfer"
+    assert min_transfers([("A", "B", 5), ("B", "C", 5), ("C", "A", 5)]) == 0
+    assert central_bank_transfers([]) == []
+    assert central_bank_transfers([("A", "B", 5), ("B", "A", 5)]) == []
+- name: netting groups that cancel exactly
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    # net: A -4, B -3, C +4, D +3  -> two independent pairs, 2 transfers (not 3)
+    d = [("A", "C", 4), ("B", "D", 3)]
+    assert min_transfers(d) == 2
+    # net: A -5, B +2, C +3 (one group of 3) -> 2 transfers
+    assert min_transfers([("A", "B", 2), ("A", "C", 3)]) == 2
+- name: central bank routes everyone through the hub
+  tags:
+  - ordering
+  code: |
+    d = [("B", "A", 30), ("C", "A", 20), ("A", "D", 10)]
+    out = central_bank_transfers(d)
+    assert out == [("CENTRAL_BANK", "A", 40), ("B", "CENTRAL_BANK", 30), ("C", "CENTRAL_BANK", 20), ("CENTRAL_BANK", "D", 10)], out
+    assert sum(a for f, t, a in out if f == "CENTRAL_BANK") == sum(a for f, t, a in out if t == "CENTRAL_BANK")
+- name: peer-to-peer is never worse than the hub
+  tags:
+  - state-reuse
+  - boundary
+  hidden: true
+  code: |
+    d = [("A", "B", 7), ("B", "C", 3), ("C", "D", 9), ("D", "A", 2), ("E", "A", 4)]
+    assert min_transfers(d) <= len(central_bank_transfers(d))
+    assert min_transfers(d) == 3
+- name: sixteen unsettled banks
+  tags:
+  - scale
+  hidden: true
+  code: |
+    d = [(f"b{i}", f"b{i + 8}", 7 * (i + 1)) for i in range(8)]
+    assert min_transfers(d) == 8
+    d2 = d + [("b0", "b1", 1), ("b1", "b0", 1)]
+    assert min_transfers(d2) == 8
+    assert len(central_bank_transfers(d)) == 16
+complexity:
+- op: min_transfers
+  time: O(2^n * n)
+  space: O(2^n)
+- op: central_bank_transfers
+  time: O(B log B)
+  space: O(B)
+extensions:
+- q: 'Level 2: return the actual transfers for the minimum solution, not just the count.'
+  kind: code
+  key_points:
+  - Backtrack or reconstruct the zero-sum groups; each group of size m needs m - 1 transfers
+  - Within a group settle greedily payer to payee, preserving amounts exactly
+  - Verify every bank ends at net 0
+- q: 'Level 3: add a cost per transfer (fee) and choose between hub routing and netting per group.'
+  kind: code
+  key_points:
+  - Compare the hub cost 2 * (non-zero banks) transfers against the group-netting transfer count
+  - A group can use the hub only if routing it is cheaper after fees
+  - Keep the result deterministic
+- q: Why do payment systems use a central ledger instead of peer netting?
+  kind: design
+  key_points:
+  - Hub routing turns an NP-hard partition problem into an O(n) pass at the price of more transfers
+  - A central counterparty reduces credit exposure and simplifies auditing
+  - 'State the tradeoff: fewer transfers versus trivial computation and predictable behavior'
+- q: Cost of the subset DP versus naive backtracking?
+  kind: complexity
+  key_points:
+  - Subset DP is O(2^n * n) time and O(2^n) space for n non-zero balances
+  - Naive backtracking is factorial in the worst case; pruning to opposite-signed partners helps in practice
+  - The hub version is a single O(B) pass plus an O(B log B) sort
+narration: []
+state_aloud:
+- 'Net first: only each bank''s net balance matters, zero nets are discarded.'
+- The peer problem reduces to maximising zero-sum groups (NP-hard); n is small so exponential is acceptable,
+  and I say so.
+- Hub routing trades optimality for an O(n) pass.
+- Amounts are ints so there is no rounding.
+walkthrough: |
+  Compute net balances per bank and drop zeros. A group of m banks whose nets sum to zero can be settled in m - 1 transfers, so the answer is (non-zero banks) - (maximum number of disjoint zero-sum groups). The solution precomputes every subset's sum with a lowbit recurrence and runs dp[mask] = max over removing one element, plus one if the subset sums to zero. The central-bank variant is one pass over sorted nets. Source: standard formulation.
+categories:
+- fintech

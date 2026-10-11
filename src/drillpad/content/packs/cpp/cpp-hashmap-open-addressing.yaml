@@ -1,0 +1,280 @@
+id: cpp-hashmap-open-addressing
+title: Open-addressing Hash Map (templates)
+language: cpp
+bar_level: 3
+target_minutes: 45
+patterns:
+- open-addressing
+- linear-probing
+- tombstones
+- rehash
+- templates
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Implement `template <class K, class V, class Hash = std::hash<K>> class HashMap` (C++20): a hash table using
+  open addressing with linear probing in one flat array (no `std::unordered_map`, no chaining, no per-entry heap
+  allocation). `K` is equality comparable; `V` may be move-only.
+
+  API:
+  - `explicit HashMap(size_t initial_buckets = 8)`: bucket count is `max(8, initial_buckets)` rounded up to a power of two
+  - `bool insert_or_assign(const K&, V)`: true if inserted, false if an existing value was overwritten
+  - `V* find(const K&)` and `const V* find(const K&) const`: pointer to the value or `nullptr` (valid until the next insert or rehash)
+  - `bool contains(const K&) const`, `bool erase(const K&)`, `void clear()` (keeps capacity)
+  - `size()`, `empty()`, `bucket_count()`
+
+  Requirements:
+  - Deleting must use tombstones so other keys' probe chains stay intact; a lookup stops only at a never-used slot.
+  - Count tombstones toward the load factor: after every insert `(live + tombstones) / buckets <= 0.75`. When the table
+    is crowded mostly by tombstones, rehash at the same size instead of doubling.
+  - The bucket count is always a power of two. Mix the hash before masking so strided keys (multiples of 4096) do not cluster.
+  - Inserting an existing key must overwrite it, even if tombstones sit earlier in its probe chain (never create duplicates).
+
+  Example:
+  ```cpp
+  HashMap<std::string, int> m;
+  m.insert_or_assign("a", 1);
+  *m.find("a") += 1;   // 2
+  ```
+starter: |
+  template <class K, class V, class Hash = std::hash<K>>
+  class HashMap {
+  public:
+      // Bucket count starts at max(8, initial_buckets rounded up to a power of two).
+      explicit HashMap(std::size_t initial_buckets = 8) { (void)initial_buckets; }
+      // Returns true if the key was newly inserted, false if an existing value was overwritten.
+      bool insert_or_assign(const K& key, V value) { (void)key; (void)value; return false; }
+      V* find(const K& key) { (void)key; return nullptr; }
+      const V* find(const K& key) const { (void)key; return nullptr; }
+      bool contains(const K& key) const { (void)key; return false; }
+      bool erase(const K& key) { (void)key; return false; }
+      void clear() {}
+      std::size_t size() const { return 0; }
+      bool empty() const { return true; }
+      std::size_t bucket_count() const { return 0; }
+  };
+prelude: |
+  struct ConstantHash { std::size_t operator()(int) const { return 42; } };      // every key collides
+  struct Mod4Hash { std::size_t operator()(int k) const { return static_cast<std::size_t>(k) % 4; } };
+hints:
+- 'Slot = {state: Empty|Full|Tomb, optional<pair<K,V>>}. Lookup probes until Empty; Full slots compare
+  keys; Tomb slots are skipped but not stopping points.'
+- 'Insert: first look the key up. Only if it''s absent, claim the first Empty-or-Tomb slot. Track used_
+  = full + tombstones, and trigger a rehash when (used_+1)/cap would exceed 0.75.'
+- 'Rehash target: double if live entries need it ((size+1)*2 > cap), otherwise same size (purges tombstones).
+  Mix the hash with a multiply and xor-shift before `& (cap-1)`.'
+follow_ups:
+- Why do tombstones count toward the load factor?
+- Compare linear probing, quadratic probing, Robin Hood and swiss tables on cache behaviour and worst-case
+  probe length.
+- How can erase avoid tombstones entirely (backward-shift deletion)?
+- Why is power-of-two sizing with masking fast, and why does it make hash quality matter?
+tests:
+- name: insert find update
+  tags:
+  - single
+  - duplicate
+  - empty
+  code: |
+    HashMap<int, std::string> m;
+    CHECK(m.empty());
+    CHECK(m.find(1) == nullptr);
+    CHECK(!m.erase(1));
+    CHECK(m.insert_or_assign(1, "one"));
+    CHECK(m.insert_or_assign(2, "two"));
+    CHECK(!m.insert_or_assign(1, "uno"));
+    CHECK_EQ(m.size(), 2u);
+    CHECK_EQ(*m.find(1), "uno");
+    CHECK_EQ(*m.find(2), "two");
+    CHECK(m.contains(2) && !m.contains(3));
+- name: erase present and absent
+  tags:
+  - invalid
+  - single
+  code: |
+    HashMap<int, int> m;
+    for (int i = 0; i < 5; i++) m.insert_or_assign(i, i * 10);
+    CHECK(m.erase(3));
+    CHECK(!m.erase(3));
+    CHECK(!m.erase(77));
+    CHECK_EQ(m.size(), 4u);
+    CHECK(m.find(3) == nullptr);
+    CHECK_EQ(*m.find(4), 40);
+- name: grows and keeps the load factor bounded
+  tags:
+  - scale
+  - boundary
+  code: |
+    HashMap<int, int> m;
+    for (int i = 0; i < 10000; i++) m.insert_or_assign(i, i + 1);
+    CHECK_EQ(m.size(), 10000u);
+    for (int i = 0; i < 10000; i++) { int* p = m.find(i); CHECK(p != nullptr); CHECK_EQ(*p, i + 1); }
+    std::size_t b = m.bucket_count();
+    CHECK((b & (b - 1)) == 0);                // power of two
+    CHECK(m.size() * 4 <= b * 3);             // load factor <= 0.75
+    CHECK(m.size() * 8 >= b / 2 * 1);         // and not absurdly oversized
+    CHECK(m.find(10000) == nullptr);
+- name: all keys collide
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    HashMap<int, int, ConstantHash> m;
+    for (int i = 0; i < 500; i++) CHECK(m.insert_or_assign(i, i));
+    for (int i = 0; i < 500; i++) CHECK_EQ(*m.find(i), i);
+    CHECK(m.find(500) == nullptr);
+    CHECK(!m.insert_or_assign(250, -1));
+    CHECK_EQ(*m.find(250), -1);
+    CHECK_EQ(m.size(), 500u);
+- name: erase then reinsert across a probe chain
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    HashMap<int, int, ConstantHash> m;
+    for (int i = 0; i < 20; i++) m.insert_or_assign(i, i);
+    CHECK(m.erase(3));
+    CHECK(m.erase(4));
+    for (int i = 5; i < 20; i++) CHECK_EQ(*m.find(i), i);    // keys behind the tombstones must stay reachable
+    CHECK(!m.insert_or_assign(10, 100));                      // must not create a duplicate in a tombstone
+    CHECK_EQ(m.size(), 18u);
+    CHECK_EQ(*m.find(10), 100);
+    CHECK(m.insert_or_assign(3, 33));
+    CHECK_EQ(*m.find(3), 33);
+    CHECK_EQ(m.size(), 19u);
+    CHECK(m.erase(10));
+    CHECK(m.find(10) == nullptr);
+- name: tombstone churn does not fill the table
+  tags:
+  - state-reuse
+  - scale
+  code: |
+    HashMap<int, int> m;
+    m.insert_or_assign(-1, -1);
+    for (int i = 0; i < 100000; i++) {
+        CHECK(m.insert_or_assign(i, i));
+        CHECK(m.erase(i));
+    }
+    CHECK_EQ(m.size(), 1u);
+    CHECK(m.find(123456) == nullptr);        // would loop forever if no Empty slot is left
+    CHECK(m.bucket_count() <= 64);
+    CHECK_EQ(*m.find(-1), -1);
+- name: initial buckets and clear
+  tags:
+  - zero-capacity
+  - state-reuse
+  code: |
+    HashMap<int, int> a(0);
+    CHECK_EQ(a.bucket_count(), 8u);
+    HashMap<int, int> b(100);
+    CHECK_EQ(b.bucket_count(), 128u);
+    for (int i = 0; i < 50; i++) b.insert_or_assign(i, i);
+    b.clear();
+    CHECK(b.empty());
+    CHECK_EQ(b.bucket_count(), 128u);
+    CHECK(b.find(7) == nullptr);
+    b.insert_or_assign(7, 70);
+    CHECK_EQ(*b.find(7), 70);
+- name: string keys and move-only values
+  hidden: true
+  tags:
+  - single
+  - invalid
+  code: |
+    HashMap<std::string, std::unique_ptr<int>> m;
+    for (int i = 0; i < 200; i++) m.insert_or_assign("key" + std::to_string(i), std::make_unique<int>(i));
+    CHECK_EQ(m.size(), 200u);
+    CHECK_EQ(**m.find("key57"), 57);
+    CHECK(m.erase("key57"));
+    CHECK(m.find("key57") == nullptr);
+    m.insert_or_assign("key57", std::make_unique<int>(-57));
+    CHECK_EQ(**m.find("key57"), -57);
+- name: mod-4 hasher with interleaved erase
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    HashMap<int, int, Mod4Hash> m;
+    for (int i = 0; i < 400; i++) m.insert_or_assign(i, i);
+    for (int i = 0; i < 400; i += 2) CHECK(m.erase(i));
+    for (int i = 0; i < 400; i++) CHECK_EQ(m.contains(i), i % 2 == 1);
+    for (int i = 0; i < 400; i += 2) CHECK(m.insert_or_assign(i, -i));
+    CHECK_EQ(m.size(), 400u);
+    CHECK_EQ(*m.find(398), -398);
+    CHECK_EQ(*m.find(399), 399);
+- name: strided keys need a mixed hash
+  hidden: true
+  tags:
+  - scale
+  code: |
+    HashMap<std::uint64_t, int> m;
+    for (int i = 0; i < 60000; i++) m.insert_or_assign(static_cast<std::uint64_t>(i) * 4096, i);
+    CHECK_EQ(m.size(), 60000u);
+    for (int i = 0; i < 60000; i += 7) CHECK_EQ(*m.find(static_cast<std::uint64_t>(i) * 4096), i);
+- name: find returns a writable pointer
+  hidden: true
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    HashMap<int, int> m;
+    m.insert_or_assign(5, 1);
+    *m.find(5) += 41;
+    CHECK_EQ(*m.find(5), 42);
+    const HashMap<int, int>& cm = m;
+    CHECK_EQ(*cm.find(5), 42);
+    CHECK(cm.find(6) == nullptr);
+complexity:
+- op: find / insert / erase
+  time: O(1) expected
+  space: O(1)
+- op: rehash
+  time: O(n)
+  space: O(n)
+- op: pathological hash (all collide)
+  time: O(n)
+  space: O(n)
+extensions:
+- q: What are the cost model and worst cases?
+  kind: complexity
+  key_points:
+  - 'Expected O(1) at load factor <= 0.75 with a good hash: expected probes ~ 1/(1-a)^2 for a miss in
+    linear probing'
+  - All keys colliding degrades every operation to O(n); a rehash is O(n) amortized away by geometric
+    growth
+  - 'Linear probing is cache friendly: probes touch adjacent slots, one cache line often covers the chain'
+- q: How do you remove tombstones without rehashing?
+  kind: design
+  key_points:
+  - 'Backward-shift deletion: after removing, shift later entries of the cluster back if their home position
+    allows'
+  - Marking Empty when the next slot is Empty is a cheap partial fix
+  - 'Trade-off: deletion costs O(cluster size) but lookups never see dead slots'
+- q: How would you make it concurrent?
+  kind: design
+  key_points:
+  - Readers-writer lock, or sharded tables with a lock per shard
+  - 'Lock-free open addressing needs atomic slots and a cooperative rehash: complex, usually avoided'
+  - Returning V* is incompatible with concurrent rehash; return copies or use handles
+- q: Why mix the hash and what does std::hash<int> being the identity imply?
+  kind: reasoning
+  key_points:
+  - 'With power-of-two masking only the low bits select the bucket: strided or aligned keys all land in
+    a few buckets'
+  - A multiplicative (Fibonacci) mix spreads entropy into the bits you keep
+  - Prime-sized tables avoid the issue with a modulo at the cost of a slow division
+narration: []
+state_aloud:
+- 'Tombstones: a lookup may only stop at a never-used slot; an erased slot must not cut a probe chain.'
+- Load factor includes tombstones, otherwise churn fills the table and a miss lookup loops forever.
+- 'Insert-or-assign: look up first so an earlier tombstone is not reused while the key still exists later
+  in the chain.'
+- Power-of-two capacity with a mixed hash; pointers from find() die on rehash.
+walkthrough: |
+  A flat vector of slots with three states: lookups probe linearly until a never-used slot, erase leaves a tombstone so other chains stay connected, and insert checks for the key first and then takes the first free-or-tombstone slot. The load factor counts tombstones, and a crowded-by-tombstones table is rehashed at the same size. Python's `dict` is an open-addressing table too but hides all of this; here the probe invariants, hash mixing and rehash policy are yours.
+anki_queries: []
+categories:
+- systems-impl
+- leetcode

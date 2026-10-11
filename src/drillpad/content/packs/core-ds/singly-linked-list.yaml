@@ -1,0 +1,136 @@
+id: singly-linked-list
+title: Singly linked list with insert, delete and reverse
+bar_level: 1
+target_minutes: 15
+patterns: [linked-list, pointer-manipulation, in-place-reversal]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:2 - *"'
+statement: |
+  Implement `SinglyLinkedList` (with your own `Node` class) supporting:
+  `insert_at_head(val)`, `insert_at_index(index, val)`, `delete_at_index(index)`,
+  `reverse()` (in place, O(1) extra space) and `to_list()` (values head to tail).
+  `insert_at_index(len, v)` appends; any other out-of-range index raises IndexError,
+  as does deleting from an empty list or past the last element.
+starter: |
+  class Node:
+      def __init__(self, val, next=None):
+          pass
+
+  class SinglyLinkedList:
+      def __init__(self):
+          pass
+hints:
+  - To insert or delete at index i you need the node at index i-1; index 0 is a special case.
+  - Reverse with three pointers; save `next` before you overwrite it.
+follow_ups:
+  - Detect a cycle (Floyd's tortoise and hare, O(n) time and O(1) space).
+  - Find the middle node in one pass (slow/fast pointers).
+  - Reverse only a sublist from position m to n.
+  - Why not just use a doubly linked list for everything?
+tests:
+  - name: insert head and index
+    tags: [ordering, boundary]
+    code: |
+      l = SinglyLinkedList()
+      l.insert_at_head(2); l.insert_at_head(1)
+      l.insert_at_index(2, 4); l.insert_at_index(2, 3)
+      assert l.to_list() == [1, 2, 3, 4]
+  - name: delete head middle tail
+    tags: [boundary, ordering]
+    code: |
+      l = SinglyLinkedList()
+      for v in (5, 4, 3, 2, 1): l.insert_at_head(v)
+      l.delete_at_index(0); l.delete_at_index(1); l.delete_at_index(2)
+      assert l.to_list() == [2, 4]
+  - name: reverse
+    tags: [ordering]
+    code: |
+      l = SinglyLinkedList()
+      for v in (3, 2, 1): l.insert_at_head(v)
+      l.reverse()
+      assert l.to_list() == [3, 2, 1]
+      l.reverse()
+      assert l.to_list() == [1, 2, 3]
+  - name: empty and single node
+    tags: [empty, single]
+    hidden: true
+    code: |
+      l = SinglyLinkedList()
+      l.reverse()
+      assert l.to_list() == []
+      try: l.delete_at_index(0)
+      except IndexError: pass
+      else: raise AssertionError("delete from empty should raise")
+      l.insert_at_head(7); l.reverse()
+      assert l.to_list() == [7]
+      l.delete_at_index(0)
+      assert l.to_list() == []
+  - name: out of range
+    tags: [invalid, boundary]
+    hidden: true
+    code: |
+      l = SinglyLinkedList()
+      l.insert_at_head(1)
+      for fn in (lambda: l.insert_at_index(5, 9), lambda: l.delete_at_index(1), lambda: l.delete_at_index(4)):
+          try: fn()
+          except IndexError: pass
+          else: raise AssertionError("expected IndexError")
+      assert l.to_list() == [1]
+complexity:
+- op: insert/delete at head
+  time: O(1)
+  space: O(n)
+- op: insert/delete at index
+  time: O(n)
+  space: O(n)
+- op: reverse
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Detect a cycle in a linked list.
+  kind: code
+  key_points:
+  - 'Floyd tortoise and hare: slow moves 1, fast moves 2'
+  - They meet iff there is a cycle
+  - O(n) time, O(1) space
+  - Contrast with a visited-set approach (O(n) space)
+- q: Find the middle node in one pass.
+  kind: code
+  key_points:
+  - Slow/fast pointers; slow is at the middle when fast reaches the end
+  - Decide which middle for even lengths
+  - Handle empty and single-node lists
+- q: What are the costs of each operation and the space of reverse?
+  kind: complexity
+  key_points:
+  - Head insert/delete O(1); index or tail O(n) because of traversal
+  - Reverse O(n) time with three pointers, O(1) extra space
+  - With a node reference and known predecessor, insert/delete is O(1)
+  - Storage O(n)
+- q: Reverse only a sublist from position m to n.
+  kind: code
+  key_points:
+  - Same three-pointer reversal over the sublist
+  - Keep references to the node before m and the node after n to reconnect
+  - Handle m = 0 (head changes), so a dummy head helps
+- q: Why not use a doubly linked list for everything?
+  kind: design
+  key_points:
+  - Extra prev pointer per node costs memory
+  - Worth it only when O(1) removal given a node or backward traversal is needed (e.g. LRU)
+  - Singly linked suffices for stacks, queues and head-biased workloads
+narration:
+- I'll use a Node class with just a next pointer, and handle head-insert/delete as O(1) special cases.
+- '[silent] mostly silent while writing insert/delete'
+- For reverse I'm doing the classic three-pointer walk — save next before I overwrite it, that's the part people get wrong.
+- Let me trace it on a 3-node example to convince us both it terminates with head at the old tail.
+state_aloud:
+- 'Empty list: delete/reverse on `head is None` must not crash.'
+- 'Single-node list: reverse should be a no-op that still works through the loop.'
+- Delete/insert at index 0 (head) vs. delete at the last valid index (tail).
+- Index out of range on insert/delete (index == len is valid for insert-at-end; index > len is not).
+- Reversing twice should return the original list (good self-check).
+walkthrough: |
+  Each node holds only a `next` pointer, so head insert/delete is O(1) while tail or indexed operations must traverse in O(n). Reverse is the classic three-pointer walk: save `next` before overwriting it, flip the link, then advance, finishing with head at the old tail. That is O(n) time and O(1) extra space. The invariants are that empty and single-node lists must not crash and that insert at `index == len` is valid but `index > len` is not.
+categories: [leetcode, trading, ai-infra, systems-impl]

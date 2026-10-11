@@ -1,0 +1,163 @@
+id: basic-calculator
+title: Basic Calculator (parser)
+bar_level: 3
+target_minutes: 35
+patterns:
+- recursive-descent
+- parsing
+- operator-precedence
+- tokenizer
+firm_tags:
+- quant-hft
+statement: |
+  Implement `evaluate(expr)` -> number using your own recursive-descent parser (do not call
+  `eval`, `ast` or `compile`).
+
+  Grammar (whitespace between tokens is ignored)
+  ```
+  expr   := term (('+' | '-') term)*
+  term   := factor (('*' | '/') factor)*
+  factor := ('+' | '-') factor | NUMBER | '(' expr ')'
+  NUMBER := digits ['.' digits]          e.g. 3, 42, 3.5   (no exponent, no leading '.')
+  ```
+  - `*` and `/` bind tighter than `+` and `-`; all binary operators are left associative;
+    unary `+`/`-` bind tighter than binary operators (`-2*3 == -6`, `--3 == 3`).
+  - `/` is true division (`7/2 == 3.5`). Division by zero raises `ZeroDivisionError`.
+  - Integer literals yield `int`, decimal literals yield `float`.
+  - Anything else raises `ValueError`: empty/blank input, unknown characters, unbalanced
+    parentheses, a missing operand (`"1+"`, `"*2"`), two numbers in a row (`"1 2"`), trailing junk.
+
+  Example
+  ```python
+  evaluate("2 + 3 * (4 - 1)") == 11;  evaluate("-(2+3)*2") == -10;  evaluate("10/4") == 2.5
+  ```
+starter: |
+  def evaluate(expr):
+      pass
+hints:
+- 'Write the grammar first: one function per precedence level, looping for left associativity.'
+- Tokenize up front, turning digits into int or float tokens and rejecting anything unknown.
+- After parsing the top-level expr, require that all tokens were consumed.
+follow_ups:
+- How would you add error positions?
+- How do you avoid recursion for huge inputs?
+tests:
+- name: precedence and associativity
+  tags:
+  - ordering
+  - boundary
+  code: |
+    assert evaluate("1+2*3") == 7
+    assert evaluate("2 + 3 * (4 - 1)") == 11
+    assert evaluate("10 - 4 - 3") == 3
+    assert evaluate("100 / 10 / 5") == 2
+    assert evaluate("2*3+4*5") == 26
+    assert evaluate("8/2*4") == 16
+- name: unary and parentheses
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    assert evaluate("-2*3") == -6
+    assert evaluate("--3") == 3
+    assert evaluate("-(2+3)*2") == -10
+    assert evaluate("2*-3") == -6
+    assert evaluate("+4") == 4
+    assert evaluate("((((7))))") == 7
+    assert evaluate("3-(-2)") == 5
+- name: division and number types
+  tags:
+  - boundary
+  - single
+  code: |
+    assert evaluate("7/2") == 3.5 and evaluate("6/3") == 2
+    assert evaluate("1.5*4") == 6.0 and isinstance(evaluate("1.5*4"), float)
+    assert isinstance(evaluate("2+3"), int)
+    assert abs(evaluate("0.1+0.2") - 0.3) < 1e-9
+    assert evaluate("  42  ") == 42
+    try:
+        evaluate("1/0")
+    except ZeroDivisionError:
+        pass
+    else:
+        raise AssertionError("expected ZeroDivisionError")
+    try:
+        evaluate("5/(2-2)")
+    except ZeroDivisionError:
+        pass
+    else:
+        raise AssertionError("expected ZeroDivisionError")
+- name: syntax errors
+  tags:
+  - invalid
+  - empty
+  code: |
+    assert evaluate("1+1") == 2
+    for bad in ("", "   ", "1+", "*2", "(1+2", "1+2)", "()", "1 2", "1..2", "1.", ".5", "2 $ 3", "1+*2", "abc", "1e3"):
+        try:
+            evaluate(bad)
+        except ValueError:
+            continue
+        raise AssertionError("expected ValueError for %r" % bad)
+- name: no eval
+  hidden: true
+  tags:
+  - invalid
+  - single
+  code: |
+    import inspect
+    src = inspect.getsource(evaluate)
+    assert "eval(" not in src and "compile(" not in src and "ast." not in src
+    assert evaluate("1") == 1
+- name: long and deep expressions
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    assert evaluate("+".join(["1"] * 20000)) == 20000
+    assert evaluate("(" * 200 + "5" + ")" * 200) == 5
+    assert evaluate("2" + "*1" * 5000) == 2
+complexity:
+- op: evaluate
+  time: O(n)
+  space: O(d)
+extensions:
+- q: Time and space of the parser, and the recursion-depth risk?
+  kind: complexity
+  key_points:
+  - 'Single left-to-right pass: O(n) time with one token per character at worst'
+  - Space is O(n) for tokens plus O(d) call stack for parenthesis nesting depth d
+  - Deeply nested parentheses can hit the recursion limit; an explicit stack (shunting-yard) avoids that
+- q: Add exponentiation (right associative), variables and functions like max(a, b).
+  kind: design
+  key_points:
+  - 'Add a precedence level above unary minus: power := unary (''^'' power)?'
+  - Environment dict for variables; function-call production factor := NAME '(' args ')'
+  - Report errors with token positions for usable messages
+- q: Structure the code as lexer, parser (AST) and evaluator. Why?
+  kind: design
+  key_points:
+  - An AST can be evaluated, pretty-printed, optimised (constant folding) or compiled
+  - Separation lets you test each stage and add features (variables) without touching the others
+  - Visitor/pattern-matching evaluator over node types
+- q: Compare recursive descent with shunting-yard and precedence climbing.
+  kind: reasoning
+  key_points:
+  - Recursive descent mirrors the grammar and is easy to extend
+  - Shunting-yard is iterative with an operator stack, no recursion limit
+  - Precedence climbing handles many levels compactly with a table
+narration: []
+state_aloud:
+- Left associativity of - and /.
+- Unary operators and double negatives.
+- Division by zero raises, malformed input raises ValueError.
+- Trailing junk and unbalanced parentheses are errors.
+walkthrough: 'A tokenizer turns the string into numbers and operator tokens, then three mutually recursive
+  functions implement the grammar: expr loops over + and -, term loops over * and /, and factor handles
+  unary signs, numbers and parenthesised expressions. Each loop folds left to give left associativity.
+  After parsing, leftover tokens are an error. Runtime is O(n) with stack depth equal to the parenthesis
+  nesting.'
+anki_queries: []
+categories:
+- systems-impl

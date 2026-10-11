@@ -1,0 +1,180 @@
+id: web-crawler-concurrent
+title: Concurrent Web Crawler
+bar_level: 3
+target_minutes: 35
+patterns:
+- bfs
+- thread-pool
+- visited-set
+- futures
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement `crawl(start_url, fetch, max_workers=4)` -> `set[str]`.
+
+  - `fetch(url)` -> `list[str]` of links found on the page (injected; no network). It may raise
+    any `Exception` for a broken page.
+  - Starting from `start_url`, discover every URL reachable by following links, but only crawl
+    URLs on the same host as `start_url` (compare `urllib.parse.urlparse(u).netloc`). Links to
+    other hosts are not fetched and not returned.
+  - Each URL is fetched exactly once even though pages are fetched concurrently by up to
+    `max_workers` threads (use a thread pool or your own workers; no busy waiting). Cycles are
+    fine.
+  - Return the set of URLs that were fetched successfully. A URL whose fetch raised is not
+    returned, is not retried, and must not stop the crawl.
+  - Calls must overlap: with `max_workers >= 2`, two independent pages must be fetched at the same
+    time.
+
+  Example
+  ```python
+  graph = {"http://a/": ["http://a/x", "http://b/y"], "http://a/x": ["http://a/"]}
+  crawl("http://a/", lambda u: graph.get(u, [])) == {"http://a/", "http://a/x"}
+  ```
+starter: |
+  from urllib.parse import urlparse
+  from concurrent.futures import ThreadPoolExecutor
+
+  def crawl(start_url, fetch, max_workers=4):
+      pass
+hints:
+- Mark URLs as seen when they are enqueued, not when fetched, otherwise two workers can fetch the same
+  URL.
+- Let one coordinator loop wait on futures with FIRST_COMPLETED and submit newly discovered links.
+- Catch exceptions from future.result() and only add successes to the output.
+follow_ups:
+- How do you cap total pages crawled?
+- How would you do this with asyncio instead of threads?
+tests:
+- name: follows links on same host only
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    graph = {
+        "http://a/": ["http://a/x", "http://b/y", "http://a/y"],
+        "http://a/x": ["http://a/", "http://a/z"],
+        "http://a/y": ["http://a/z", "http://c/q"],
+        "http://a/z": [],
+    }
+    got = crawl("http://a/", lambda u: graph.get(u, []))
+    assert got == {"http://a/", "http://a/x", "http://a/y", "http://a/z"}
+- name: each url fetched exactly once
+  tags:
+  - duplicate
+  - concurrency
+  code: |
+    import threading
+    graph = {"http://h/%d" % i: ["http://h/%d" % j for j in range(12)] for i in range(12)}
+    calls = {}
+    guard = threading.Lock()
+    def fetch(u):
+        with guard:
+            calls[u] = calls.get(u, 0) + 1
+        return graph[u]
+    got = crawl("http://h/0", fetch, max_workers=6)
+    assert got == set(graph)
+    assert all(c == 1 for c in calls.values()) and len(calls) == 12
+- name: single page and failing pages
+  tags:
+  - single
+  - invalid
+  code: |
+    assert crawl("http://a/", lambda u: []) == {"http://a/"}
+    def fetch(u):
+        if u == "http://a/bad":
+            raise IOError("500")
+        return {"http://a/": ["http://a/bad", "http://a/ok"], "http://a/ok": ["http://a/bad"]}.get(u, [])
+    assert crawl("http://a/", fetch) == {"http://a/", "http://a/ok"}
+    def dead(u): raise RuntimeError()
+    assert crawl("http://a/", dead) == set()
+- name: pages are fetched concurrently
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading
+    b = threading.Barrier(2, timeout=5)
+    graph = {"http://a/": ["http://a/p", "http://a/q"], "http://a/p": [], "http://a/q": []}
+    def fetch(u):
+        if u in ("http://a/p", "http://a/q"):
+            b.wait()          # only passes if p and q are in flight at the same time
+        return graph[u]
+    res = []
+    t = threading.Thread(target=lambda: res.append(crawl("http://a/", fetch, max_workers=2)), daemon=True)
+    t.start(); t.join(timeout=10)
+    assert not t.is_alive()
+    assert res == [set(graph)]
+- name: never exceeds max workers
+  hidden: true
+  tags:
+  - concurrency
+  - boundary
+  code: |
+    import threading, time
+    graph = {"http://s/0": ["http://s/%d" % i for i in range(1, 30)]}
+    for i in range(1, 30): graph["http://s/%d" % i] = []
+    cur = [0]; peak = [0]; guard = threading.Lock()
+    def fetch(u):
+        with guard:
+            cur[0] += 1; peak[0] = max(peak[0], cur[0])
+        time.sleep(0.002)
+        with guard:
+            cur[0] -= 1
+        return graph[u]
+    got = crawl("http://s/0", fetch, max_workers=3)
+    assert len(got) == 30 and 2 <= peak[0] <= 3, peak
+- name: deep chain and cycles
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    N = 1500
+    def fetch(u):
+        i = int(u.rsplit("/", 1)[1])
+        return ["http://c/%d" % ((i + 1) % N), "http://c/%d" % ((i * 2) % N)]
+    got = crawl("http://c/0", fetch, max_workers=8)
+    assert len(got) == N
+complexity:
+- op: crawl
+  time: O(V + E)
+  space: O(V)
+extensions:
+- q: Total work and memory for V pages and E links?
+  kind: complexity
+  key_points:
+  - 'Each page is fetched once and each link examined once: O(V + E) plus fetch latency / workers'
+  - Wall time is roughly (V * latency) / max_workers when the frontier is wide
+  - Space O(V) for the seen set and in-flight frontier
+- q: Politeness and robustness in a real crawler.
+  kind: design
+  key_points:
+  - Per-host rate limit and robots.txt; bounded retries with backoff for transient errors
+  - Normalise URLs (fragments, trailing slash, case) before the seen check
+  - Depth/page limits and timeouts so spider traps cannot run forever
+- q: Scale to many machines.
+  kind: design
+  key_points:
+  - Partition URLs by host hash so each host is crawled by one worker (politeness and local dedup)
+  - Distributed frontier queue plus a shared seen set (Bloom filter or sharded store)
+  - Checkpoint the frontier for crash recovery; make fetch idempotent
+- q: Why is a single coordinating thread owning the visited set a good design?
+  kind: reasoning
+  key_points:
+  - 'No locks needed on the set: only the coordinator touches it'
+  - Workers do only the blocking I/O and return results via futures
+  - Alternative is a shared set with a lock around check-and-add
+narration: []
+state_aloud:
+- Mark seen at enqueue time.
+- Same-host filter by netloc.
+- A failing fetch is skipped, not retried, not returned.
+- No busy waiting; terminate when no work is pending.
+walkthrough: A coordinating thread keeps the seen set and a dict of in-flight futures. It submits the
+  start URL to a ThreadPoolExecutor, waits for FIRST_COMPLETED, and for each finished page records success
+  (or skips failures) and submits same-host links that are not yet seen, marking them seen at submit time.
+  The crawl ends when no futures remain. Work is O(V+E) with fetches overlapping across workers.
+anki_queries: []
+categories:
+- systems-impl

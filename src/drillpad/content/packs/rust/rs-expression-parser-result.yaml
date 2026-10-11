@@ -1,0 +1,225 @@
+title: Expression Parser with Result and Enums
+target_minutes: 30
+patterns:
+- tokenizer
+- recursive-descent
+- result-error-enum
+- pattern-matching
+- question-mark-operator
+firm_tags: []
+categories:
+- systems-impl
+statement: |2
+
+  Evaluate arithmetic expressions with `+ - * /`, parentheses, unary minus and decimal numbers, returning errors as
+  values instead of panicking. These two enums are **already defined for you** (do not redefine them):
+
+  ```rust
+  #[derive(Debug, Clone, Copy, PartialEq)]
+  enum Token { Num(f64), Plus, Minus, Star, Slash, LParen, RParen }
+
+  #[derive(Debug, Clone, PartialEq)]
+  enum ParseError {
+      UnexpectedChar(char),     // tokenizer met a char that cannot start a token, e.g. 'x' or '$'
+      InvalidNumber(String),    // a run of digits/dots that is not an f64, e.g. "1.2.3" or "."
+      UnexpectedEnd,            // input ended where more was required: "", "1 +", "2 *"
+      UnexpectedToken(Token),   // a token in the wrong place: "1 2" -> Num(2.0), "*3" -> Star, "()" -> RParen
+      UnmatchedParen,           // "(1 + 2" (missing close) or "1 + 2)" (extra close)
+      DivisionByZero,           // divisor equals 0.0
+  }
+  ```
+
+  Write:
+
+  ```rust
+  fn tokenize(input: &str) -> Result<Vec<Token>, ParseError>;
+  fn evaluate(input: &str) -> Result<f64, ParseError>;
+  ```
+
+  Whitespace is skipped. A number is a maximal run of ASCII digits and `.`; parse it with `str::parse::<f64>`
+  (a failure is `InvalidNumber(text)`). Precedence: `*` and `/` bind tighter than `+` and `-`, all left associative;
+  unary minus (`-3`, `--3`, `2 * -3`) binds tighter than `*`. There is no unary plus. A successful `evaluate` must
+  consume every token.
+
+  Error details the tests check: `evaluate("")` is `UnexpectedEnd`; inside parentheses, a missing `)` at end of input is
+  `UnmatchedParen` while a wrong token there is `UnexpectedToken(tok)`; a leftover `)` after a complete expression is
+  `UnmatchedParen`; any other leftover token is `UnexpectedToken(tok)`. Tokenizer errors are reported before any parse
+  error. Example: `evaluate("2 * (3 + 4)")` is `Ok(14.0)`.
+prelude: |2
+
+  #[derive(Debug, Clone, Copy, PartialEq)]
+  enum Token {
+      Num(f64),
+      Plus,
+      Minus,
+      Star,
+      Slash,
+      LParen,
+      RParen,
+  }
+
+  #[derive(Debug, Clone, PartialEq)]
+  enum ParseError {
+      UnexpectedChar(char),
+      InvalidNumber(String),
+      UnexpectedEnd,
+      UnexpectedToken(Token),
+      UnmatchedParen,
+      DivisionByZero,
+  }
+starter: |2
+
+  fn tokenize(input: &str) -> Result<Vec<Token>, ParseError> {
+      todo!()
+  }
+
+  fn evaluate(input: &str) -> Result<f64, ParseError> {
+      todo!()
+  }
+hints:
+- 'Split the work: `tokenize` walks `input.chars().peekable()` and builds `Vec<Token>`; the parser then walks a `&[Token]` with an index. Every fallible step returns `Result` so you can chain with `?` instead of unwrapping.'
+- 'Recursive descent: `expr` loops over `+ -` calling `term`; `term` loops over `* /` calling `unary`; `unary` handles a leading `-` by recursing, otherwise calls `primary`; `primary` matches `Num` or `(` expr `)`. A small `struct Parser { tokens: Vec<Token>, pos: usize }` with `&mut self` methods keeps the cursor out of every signature.'
+- 'Use `match self.peek()` over the `Option<Token>`: `None` means end of input (`UnexpectedEnd` or `UnmatchedParen` depending on context), `Some(Token::Plus)` etc. are the operators. `Token` is `Copy`, so peeking by value avoids borrow fights with `&mut self`.'
+follow_ups:
+- Why model errors as an enum with data instead of returning strings?
+- How does the ? operator convert errors, and what would From<ParseFloatError> for ParseError buy you?
+- How would you add exponentiation (right associative) and function calls like sqrt(x)?
+- How would you produce error positions (byte offsets) for good diagnostics?
+tests:
+- name: tokenize basics
+  tags:
+  - single
+  - ordering
+  code: |
+    assert_eq!(tokenize("1+2").unwrap(), vec![Token::Num(1.0), Token::Plus, Token::Num(2.0)]);
+    assert_eq!(
+        tokenize(" ( 3.5 * 2 ) / x1").unwrap_err(),
+        ParseError::UnexpectedChar('x')
+    );
+    assert_eq!(
+        tokenize("(3.5*2)-4/1").unwrap(),
+        vec![Token::LParen, Token::Num(3.5), Token::Star, Token::Num(2.0), Token::RParen,
+             Token::Minus, Token::Num(4.0), Token::Slash, Token::Num(1.0)]
+    );
+    assert_eq!(tokenize("").unwrap(), vec![]);
+  hidden: false
+- name: precedence and associativity
+  tags:
+  - ordering
+  - single
+  code: |
+    assert_eq!(evaluate("1 + 2 * 3"), Ok(7.0));
+    assert_eq!(evaluate("(1 + 2) * 3"), Ok(9.0));
+    assert_eq!(evaluate("10 - 4 - 3"), Ok(3.0));
+    assert_eq!(evaluate("100 / 10 / 5"), Ok(2.0));
+    assert_eq!(evaluate("2 * (3 + 4)"), Ok(14.0));
+    assert_eq!(evaluate("2 + 3 * 4 - 6 / 3"), Ok(12.0));
+    assert_eq!(evaluate("42"), Ok(42.0));
+    assert_eq!(evaluate("((7))"), Ok(7.0));
+    assert_eq!(evaluate(" 1.5 + .5 "), Ok(2.0));
+  hidden: false
+- name: unary minus
+  tags:
+  - boundary
+  - single
+  code: |
+    assert_eq!(evaluate("-3"), Ok(-3.0));
+    assert_eq!(evaluate("--3"), Ok(3.0));
+    assert_eq!(evaluate("2 * -3"), Ok(-6.0));
+    assert_eq!(evaluate("-(1 + 2) * 2"), Ok(-6.0));
+    assert_eq!(evaluate("4 - -4"), Ok(8.0));
+    assert_eq!(evaluate("-2 * -2"), Ok(4.0));
+  hidden: false
+- name: empty and truncated input
+  tags:
+  - empty
+  - invalid
+  code: |
+    assert_eq!(evaluate(""), Err(ParseError::UnexpectedEnd));
+    assert_eq!(evaluate("   "), Err(ParseError::UnexpectedEnd));
+    assert_eq!(evaluate("1 +"), Err(ParseError::UnexpectedEnd));
+    assert_eq!(evaluate("2 *"), Err(ParseError::UnexpectedEnd));
+    assert_eq!(evaluate("-"), Err(ParseError::UnexpectedEnd));
+  hidden: false
+- name: division by zero is an error value
+  tags:
+  - invalid
+  - boundary
+  code: |
+    assert_eq!(evaluate("1 / 0"), Err(ParseError::DivisionByZero));
+    assert_eq!(evaluate("5 / (3 - 3)"), Err(ParseError::DivisionByZero));
+    assert_eq!(evaluate("0 / 5"), Ok(0.0));
+    assert_eq!(evaluate("1 / 0.0"), Err(ParseError::DivisionByZero));
+  hidden: false
+- name: unexpected tokens and characters
+  tags:
+  - invalid
+  hidden: true
+  code: |
+    assert_eq!(evaluate("1 2"), Err(ParseError::UnexpectedToken(Token::Num(2.0))));
+    assert_eq!(evaluate("*3"), Err(ParseError::UnexpectedToken(Token::Star)));
+    assert_eq!(evaluate("()"), Err(ParseError::UnexpectedToken(Token::RParen)));
+    assert_eq!(evaluate("(1 2)"), Err(ParseError::UnexpectedToken(Token::Num(2.0))));
+    assert_eq!(evaluate("3 $ 4"), Err(ParseError::UnexpectedChar('$')));
+    assert_eq!(evaluate("1.2.3 + 1"), Err(ParseError::InvalidNumber("1.2.3".to_string())));
+    assert_eq!(evaluate("."), Err(ParseError::InvalidNumber(".".to_string())));
+- name: unmatched parentheses
+  tags:
+  - invalid
+  - boundary
+  hidden: true
+  code: |
+    assert_eq!(evaluate("(1 + 2"), Err(ParseError::UnmatchedParen));
+    assert_eq!(evaluate("1 + 2)"), Err(ParseError::UnmatchedParen));
+    assert_eq!(evaluate("((1)"), Err(ParseError::UnmatchedParen));
+    assert_eq!(evaluate("("), Err(ParseError::UnexpectedEnd));
+    assert_eq!(evaluate("1 + (2 * 3))"), Err(ParseError::UnmatchedParen));
+- name: deep nesting and long chains
+  tags:
+  - scale
+  hidden: true
+  code: |
+    let deep = format!("{}1{}", "(".repeat(2000), ")".repeat(2000));
+    assert_eq!(evaluate(&deep), Ok(1.0));
+    let long = vec!["1"; 50_000].join("+");
+    assert_eq!(evaluate(&long), Ok(50_000.0));
+complexity:
+- op: tokenize
+  time: O(n)
+  space: O(n)
+- op: evaluate (recursive descent)
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why is an error enum with data better than String errors, and how do ? and From fit together?
+  kind: design
+  key_points:
+  - Callers can match exhaustively on variants and the compiler flags unhandled cases; strings force parsing
+  - '`?` returns early with Err(e.into()), so a `From<ParseFloatError> for ParseError` impl lets numeric parse failures convert automatically'
+  - Implement Display and std::error::Error so it composes with Box<dyn Error> and anyhow-style code
+- q: What is the time and stack cost of recursive descent, and what happens with deeply nested parentheses?
+  kind: complexity
+  key_points:
+  - 'Each token is consumed once: O(n) time overall'
+  - Recursion depth equals nesting depth, so stack space is O(depth) up to O(n)
+  - 'Very deep input can overflow the stack: cap depth and return an error, or use a shunting-yard algorithm with an explicit Vec stack'
+- q: How would you add right-associative exponentiation and function calls like sqrt(x), min(a, b)?
+  kind: design
+  key_points:
+  - 'Add a precedence level between unary and primary: power = primary (''^'' unary_or_power)? recursing on the right for right associativity'
+  - Add Token::Ident(String), Comma and an arity-checking dispatch with new ParseError variants (UnknownFunction, WrongArity)
+  - Keep tokenizer and parser separate so each new token type is a local change
+state_aloud:
+- Empty or whitespace-only input is UnexpectedEnd, not a panic or Ok(0).
+- Division by zero is an error value; check the divisor before dividing since f64 would give inf.
+- 'Precedence and left associativity: 10 - 4 - 3 is 3, not 9.'
+- 'Unary minus can stack: --3 and 2 * -3 must work.'
+- 'Never unwrap: every failure path returns Err so one bad input cannot crash the caller.'
+walkthrough: |2
+
+  `tokenize` scans the characters once and produces a `Vec<Token>` or the first `ParseError`; a small recursive-descent `Parser` then implements one function per precedence level (`expr`, `term`, `unary`, `primary`) and matches on the next `Token`, using `?` to bubble errors up. Errors are an enum with data, so callers (and tests) match on exactly what went wrong, unlike Python where you would raise exceptions of various types. Division checks for a zero divisor before dividing, and `evaluate` verifies no tokens are left over, mapping a stray `)` to `UnmatchedParen`.
+id: rs-expression-parser-result
+language: rust
+bar_level: 2
+narration: []
+anki_queries: []

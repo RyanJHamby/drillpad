@@ -1,0 +1,89 @@
+id: house-robber
+title: House Robber
+bar_level: 2
+target_minutes: 15
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:House Robber (LC 198)"
+statement: |
+  Houses along a street hold `nums[i]` dollars. You cannot rob two adjacent houses. Return the maximum amount you can steal.
+
+  Example: `rob([2,7,9,3,1])` returns `12` (houses 0, 2 and 4).
+starter: |
+  def rob(nums):
+      pass
+hints:
+- For house i you either skip it or rob it plus the best from i-2.
+- Let best[i] = max(best[i-1], best[i-2] + nums[i]).
+- Only the last two values are needed, so use two variables.
+follow_ups:
+- Houses arranged in a circle.
+- Return which houses to rob.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert rob([2,7,9,3,1])==12
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert rob([])==0
+- name: single house
+  tags:
+  - single
+  code: |
+    assert rob([5])==5
+- name: two houses pick the larger
+  tags:
+  - boundary
+  code: |
+    assert rob([2,9])==9
+    assert rob([9,2])==9
+- name: equal values
+  tags:
+  - duplicate
+  code: |
+    assert rob([4,4,4,4,4])==12
+- name: big input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert rob([1]*100000)==50000
+    assert rob([5,1]*50000)==250000
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Circular street
+  kind: design
+  key_points:
+  - Either the first or the last house is excluded
+  - Run the linear solution twice on nums[1:] and nums[:-1]
+  - Take the max; handle n == 1 separately
+- q: Space optimization
+  kind: complexity
+  key_points:
+  - Table is O(n) but only two previous cells are read
+  - Rolling variables give O(1) space
+  - Time stays O(n)
+- q: Recover the chosen houses
+  kind: code
+  key_points:
+  - Keep the full dp table
+  - 'Walk back: if dp[i] != dp[i-1] then house i was robbed, jump to i-2'
+  - Else move to i-1
+narration: []
+state_aloud:
+- Empty street.
+- One or two houses.
+- All values equal.
+walkthrough: |
+  Define the best haul over the first i houses as `max(skip, take)`: skipping keeps the previous best, taking adds the current house to the best from two houses back. Since each step depends only on the previous two results, two rolling variables replace the table. The answer is the final best value.

@@ -1,0 +1,316 @@
+id: provider-pool-failover
+title: LLM provider pool with priority failover and circuit breaker
+bar_level: 2
+target_minutes: 25
+patterns:
+- failover
+- circuit-breaker
+- injected-clock
+- health-tracking
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Implement `ProviderPool(providers, max_fails=3, cooldown=30.0)` that routes requests across
+  LLM providers. `providers` is a list of provider names in priority order (first = most
+  preferred). The pool never reads a clock: every time-dependent method takes `now` (float).
+
+  - `call(request, send, now) -> (provider_name, result)`: try the HEALTHY providers in
+    priority order. `send(name, request)` returns a result or raises an exception. On success
+    return `(name, result)` immediately (do not touch lower-priority providers). On an exception
+    record a failure and try the next healthy provider. If none succeeds raise `RuntimeError`.
+    Each provider is tried at most once per call.
+  - A provider is HEALTHY at `now` if `now >= down_until` for it. After `max_fails`
+    CONSECUTIVE failures its circuit opens: it is unhealthy until `now + cooldown` (measured
+    from the time of the failing call) and its failure count restarts at 0. A success resets
+    the consecutive-failure count.
+  - `healthy(now) -> [names]` in priority order.
+starter: |
+  class ProviderPool:
+      def __init__(self, providers, max_fails=3, cooldown=30.0):
+          pass
+hints:
+- 'Per-provider state: consecutive fail count and down_until timestamp.'
+- Filter by healthy(now) first, then loop in priority order; keep provider bookkeeping separate from the
+  call loop.
+- Inject time through `now` so tests are deterministic.
+follow_ups:
+- 'Add a half-open state: after cooldown allow exactly one trial request.'
+- Add retries with exponential backoff and jitter within a provider.
+- Weighted/EWMA latency routing within a priority tier; hedged requests.
+- Make it thread-safe; make it asyncio with per-request timeouts.
+tests:
+- name: highest priority healthy provider wins
+  tags:
+  - single
+  - ordering
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool(["a", "b"])
+    send = make({"a": "A!", "b": "B!"})
+    assert pool.call("q", send, now=0) == ("a", "A!")
+    assert calls == ["a"], "must not touch lower priority providers on success"
+    assert pool.healthy(0) == ["a", "b"]
+- name: fails over to the next provider
+  tags:
+  - ordering
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool(["a", "b", "c"])
+    send = make({"a": ConnectionError("x"), "b": TimeoutError("y"), "c": "C!"})
+    assert pool.call("q", send, now=0) == ("c", "C!")
+    assert calls == ["a", "b", "c"]
+- name: raises when every provider fails
+  tags:
+  - invalid
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool(["a", "b"])
+    send = make({"a": ValueError("x"), "b": ValueError("y")})
+    try:
+        pool.call("q", send, now=0)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError")
+    assert calls == ["a", "b"], "each provider tried exactly once per call"
+- name: circuit opens after max_fails consecutive failures
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool(["a", "b"], max_fails=3, cooldown=30)
+    send = make({"a": RuntimeError("down"), "b": "B"})
+    for i in range(2):
+        pool.call("q", send, now=i)
+    assert pool.healthy(2) == ["a", "b"], "two failures is below the threshold"
+    pool.call("q", send, now=2)                 # third consecutive failure
+    assert pool.healthy(2) == ["b"]
+    del calls[:]
+    assert pool.call("q", send, now=3) == ("b", "B")
+    assert calls == ["b"], "open circuit: provider a is skipped, not called"
+- name: provider returns after cooldown
+  tags:
+  - time
+  - boundary
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool(["a", "b"], max_fails=1, cooldown=30)
+    plan = {"a": RuntimeError("down"), "b": "B"}
+    send = make(plan)
+    pool.call("q", send, now=100)               # a fails, circuit opens until 130
+    assert pool.healthy(129.9) == ["b"]
+    assert pool.healthy(130) == ["a", "b"], "healthy again when now >= down_until"
+    plan["a"] = "A"
+    assert pool.call("q", send, now=130) == ("a", "A")
+- name: success resets the consecutive failure count
+  tags:
+  - state-reuse
+  - duplicate
+  hidden: true
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool(["a", "b"], max_fails=3)
+    plan = {"a": RuntimeError("x"), "b": "B"}
+    send = make(plan)
+    pool.call("q", send, now=0); pool.call("q", send, now=0)    # 2 failures
+    plan["a"] = "A"; pool.call("q", send, now=0)                # success resets
+    plan["a"] = RuntimeError("x")
+    pool.call("q", send, now=0); pool.call("q", send, now=0)    # 2 more, not 4 in a row
+    assert pool.healthy(0) == ["a", "b"]
+    pool.call("q", send, now=0)
+    assert pool.healthy(0) == ["b"]
+- name: everything cooling down fails without calling out
+  tags:
+  - invalid
+  - time
+  hidden: true
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool(["a", "b"], max_fails=1, cooldown=10)
+    send = make({"a": RuntimeError("x"), "b": RuntimeError("y")})
+    try:
+        pool.call("q", send, now=0)
+    except RuntimeError:
+        pass
+    n = len(calls)
+    try:
+        pool.call("q", send, now=5)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError")
+    assert len(calls) == n, "no provider may be called while all circuits are open"
+    assert pool.healthy(10) == ["a", "b"]
+- name: no providers
+  tags:
+  - empty
+  - zero-capacity
+  hidden: true
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool([])
+    assert pool.healthy(0) == []
+    try:
+        pool.call("q", make({}), now=0)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError")
+- name: many calls with flapping provider
+  tags:
+  - scale
+  - time
+  hidden: true
+  code: |
+    calls = []
+    def make(plan):
+        # plan: name -> callable(request) or exception instance to raise
+        def send(name, req):
+            calls.append(name)
+            r = plan[name]
+            if isinstance(r, Exception):
+                raise r
+            return r(req) if callable(r) else r
+        return send
+
+    pool = ProviderPool(["a", "b", "c"], max_fails=2, cooldown=5)
+    state = {"n": 0}
+    def flaky(req):
+        state["n"] += 1
+        if (state["n"] // 7) % 2 == 0:
+            raise OSError("flap")
+        return "A"
+    send = make({"a": flaky, "b": "B", "c": "C"})
+    served = {"a": 0, "b": 0, "c": 0}
+    for t in range(20000):
+        name, _ = pool.call("q", send, now=float(t))
+        served[name] += 1
+    assert sum(served.values()) == 20000 and served["c"] == 0 and served["a"] > 0 and served["b"] > 0
+complexity:
+- op: call
+  time: O(P)
+  space: O(P)
+- op: healthy
+  time: O(P)
+  space: O(P)
+extensions:
+- q: 'Level 2: make the breaker half-open: after cooldown, let ONE trial call through.'
+  kind: code
+  key_points:
+  - 'Three states per provider: closed, open (until down_until), half-open'
+  - A single failure in half-open reopens the circuit (optionally with doubled cooldown); success closes
+    it and resets counters
+  - Only one in-flight trial in half-open; concurrent callers skip the provider
+- q: 'Level 3: add per-provider retries with exponential backoff before failing over.'
+  kind: code
+  key_points:
+  - Delay = min(base * 2**attempt, cap); the clock/sleep is injected
+  - Retry only retryable errors (timeouts, 5xx, rate limits), never auth or validation errors
+  - Jitter avoids synchronized retry storms; total latency budget bounds the retries
+- q: How would you route beyond strict priority (cost, latency, rate limits)?
+  kind: design
+  key_points:
+  - Weighted choice or EWMA latency within a tier, with health and per-provider rate-limit state
+  - Hedged requests after a p95 timeout, cancelling the loser, only for idempotent calls
+  - Per-provider metrics (error rate, latency, circuit state) for observability
+- q: What does a call cost and what state is kept?
+  kind: complexity
+  key_points:
+  - O(P) per call over P providers in the worst case, O(1) per provider operation
+  - 'State is O(P): a counter and a timestamp per provider'
+  - Failure bookkeeping is O(1) per attempt
+narration: []
+state_aloud:
+- 'Ask the contract: return value shape, exception type when all fail, whether send may raise non-Exception
+  errors.'
+- Failures are CONSECUTIVE; a success resets the count.
+- 'Boundary: healthy again when now >= down_until.'
+- Time is injected through `now`; no wall-clock reads inside the pool.
+walkthrough: |
+  Each provider carries a consecutive-failure counter and a down_until timestamp. call() filters to healthy providers for the supplied now, tries them in priority order, and returns on the first success after resetting that provider's counter. A raised exception increments the counter and, at max_fails, opens the circuit until now + cooldown and resets the counter; the loop moves on. If the loop is exhausted the pool raises. Keeping the per-provider bookkeeping in _report and taking `now` as a parameter keeps the later half-open and retry extensions local. Source: standard formulation.
+categories:
+- ai-infra
+- systems-impl

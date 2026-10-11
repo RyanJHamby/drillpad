@@ -1,0 +1,213 @@
+id: risk-limit-checker
+title: Pre-trade Risk Limit Checker
+bar_level: 2
+target_minutes: 25
+patterns:
+- risk-checks
+- hash-map-state
+- invariants
+- in-process-gate
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement the pre-trade risk gate that every outgoing order passes through.
+  `RiskChecker(max_position, max_order_qty, max_order_notional, band_bps)` (all ints).
+
+  `check(symbol, side, qty, price) -> str` returns `"OK"` or the FIRST failing reason, evaluated in this order:
+
+  1. `"BAD_ORDER"`: side not `buy`/`sell`, or qty or price not a positive int.
+  2. `"MAX_ORDER_QTY"`: `qty > max_order_qty`.
+  3. `"MAX_NOTIONAL"`: `qty * price > max_order_notional`.
+  4. `"FAT_FINGER"`: a reference price was set for the symbol (`set_ref(symbol, price)`) and
+     `|price - ref| * 10000 > band_bps * ref` (strictly greater; integer math only). No reference means no check.
+  5. `"MAX_POSITION"`: the worst-case position after ALL working orders fill would breach the limit. For a buy:
+     `position + open_buy + qty > max_position`; for a sell: `position - open_sell - qty < -max_position`.
+     Exactly at the limit is allowed.
+
+  `check` never changes state. `submit(...)` is `check` plus, when the result is `"OK"`, reserving the quantity as
+  open (working) order quantity; it returns the same string. `fill(symbol, side, qty)` converts open quantity into
+  position (buys add, sells subtract); `cancel(symbol, side, qty)` releases open quantity. Both raise `ValueError`
+  if `qty` is non-positive or exceeds the open quantity of that side. Also `position(symbol)` and
+  `open_qty(symbol, side)`.
+
+  Open buys and open sells are tracked separately and do not net against each other.
+starter: |
+  class RiskChecker:
+      def __init__(self, max_position, max_order_qty, max_order_notional, band_bps):
+          pass
+hints:
+- Put each check in its own early return, in the documented order, so the first failing reason wins and
+  the hot path is a handful of integer comparisons.
+- Worst-case position = filled position + working orders on the same side + this order. Track open buys
+  and open sells separately and do not net them.
+- Keep check() pure; submit() = check + reserve; fill() moves open into position; cancel() releases. Compare
+  |price - ref| * 10000 > band * ref to stay in integers.
+follow_ups:
+- Which of these checks would you move into FPGA / hardware, and why?
+- How do you add an orders-per-second limit and a kill switch?
+- How would aggregate (cross-symbol) notional limits work without a global lock?
+tests:
+- name: ok and each rejection reason
+  code: |
+    r = RiskChecker(max_position=100, max_order_qty=50, max_order_notional=1_000_000, band_bps=500)
+    r.set_ref("X", 1000)
+    assert r.check("X", "buy", 10, 1000) == "OK"
+    assert r.check("X", "hold", 10, 1000) == "BAD_ORDER"
+    assert r.check("X", "buy", 0, 1000) == "BAD_ORDER"
+    assert r.check("X", "buy", 10, -5) == "BAD_ORDER"
+    assert r.check("X", "buy", 51, 1000) == "MAX_ORDER_QTY"
+    assert r.check("X", "buy", 50, 20001) == "MAX_NOTIONAL"
+    assert r.check("X", "buy", 10, 1060) == "FAT_FINGER"
+    assert r.check("X", "sell", 10, 940) == "FAT_FINGER"
+  hidden: false
+  tags:
+  - invalid
+  - boundary
+- name: limits are inclusive at the boundary
+  code: |
+    r = RiskChecker(100, 50, 50_000, 500)
+    r.set_ref("X", 1000)
+    assert r.check("X", "buy", 50, 1000) == "OK", "qty == max and notional == max"
+    assert r.check("X", "buy", 10, 1050) == "OK", "exactly 5% away"
+    assert r.check("X", "buy", 10, 950) == "OK"
+    assert r.check("X", "buy", 10, 1051) == "FAT_FINGER"
+    assert r.check("Y", "buy", 10, 4000) == "OK", "no reference price means no fat-finger check"
+  hidden: false
+  tags:
+  - boundary
+  - single
+- name: 'check order: first failing reason wins'
+  code: |
+    r = RiskChecker(10, 5, 100, 100)
+    r.set_ref("X", 10)
+    assert r.check("X", "buy", 6, 1000) == "MAX_ORDER_QTY", "qty before notional, fat finger, position"
+    assert r.check("X", "buy", 5, 1000) == "MAX_NOTIONAL"
+    assert r.check("X", "buy", 5, 20) == "FAT_FINGER"
+    assert r.check("X", "buy", 0, 20) == "BAD_ORDER"
+  hidden: false
+  tags:
+  - ordering
+- name: position limit counts working orders
+  code: |
+    r = RiskChecker(100, 100, 10**9, 10**6)
+    assert r.submit("X", "buy", 60, 10) == "OK"
+    assert r.submit("X", "buy", 40, 10) == "OK", "60 open + 40 = exactly 100"
+    assert r.check("X", "buy", 1, 10) == "MAX_POSITION"
+    assert r.open_qty("X", "buy") == 100 and r.position("X") == 0
+    r.cancel("X", "buy", 40)
+    assert r.check("X", "buy", 40, 10) == "OK"
+    r.fill("X", "buy", 60)
+    assert r.position("X") == 60 and r.open_qty("X", "buy") == 0
+    assert r.check("X", "buy", 41, 10) == "MAX_POSITION"
+  hidden: false
+  tags:
+  - state-reuse
+  - boundary
+- name: short side and no netting of open orders
+  code: |
+    r = RiskChecker(50, 100, 10**9, 10**6)
+    assert r.submit("X", "sell", 50, 10) == "OK"
+    assert r.check("X", "sell", 1, 10) == "MAX_POSITION"
+    assert r.check("X", "buy", 100, 10) == "MAX_POSITION", "open sells do not offset the buy-side check: 0+0+100 > 50"
+    assert r.check("X", "buy", 50, 10) == "OK"
+    r.fill("X", "sell", 30)
+    assert r.position("X") == -30 and r.open_qty("X", "sell") == 20
+    assert r.check("X", "sell", 1, 10) == "MAX_POSITION", "-30 - 20 open already at the -50 limit"
+    r.cancel("X", "sell", 20)
+    assert r.check("X", "sell", 21, 10) == "MAX_POSITION"
+    assert r.check("X", "sell", 20, 10) == "OK"
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: check does not mutate and symbols are independent
+  code: |
+    r = RiskChecker(10, 10, 10**9, 10**6)
+    for _ in range(5):
+        assert r.check("A", "buy", 10, 5) == "OK"
+    assert r.open_qty("A", "buy") == 0
+    assert r.submit("A", "buy", 10, 5) == "OK"
+    assert r.check("A", "buy", 1, 5) == "MAX_POSITION"
+    assert r.check("B", "buy", 10, 5) == "OK"
+    assert r.submit("A", "buy", 99, 5) == "MAX_ORDER_QTY"
+    assert r.open_qty("A", "buy") == 10, "rejected submits reserve nothing"
+  hidden: true
+  tags:
+  - state-reuse
+  - duplicate
+- name: fill and cancel validation
+  code: |
+    r = RiskChecker(100, 100, 10**9, 10**6)
+    r.submit("X", "buy", 10, 5)
+    for fn, args in [(r.fill, ("X", "buy", 11)), (r.fill, ("X", "buy", 0)), (r.cancel, ("X", "sell", 1)),
+                     (r.cancel, ("X", "buy", -1))]:
+        try:
+            fn(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    assert r.open_qty("X", "buy") == 10 and r.position("X") == 0
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: 'scale: 300k order lifecycle events'
+  code: |
+    r = RiskChecker(10**7, 100, 10**9, 1000)
+    for s in range(100):
+        r.set_ref(f"S{s}", 1000)
+    ok = 0
+    for i in range(300000):
+        sym = f"S{i % 100}"
+        side = "buy" if i % 3 else "sell"
+        if r.submit(sym, side, 1 + i % 10, 1000 + i % 50) == "OK":
+            ok += 1
+            if i % 2:
+                r.fill(sym, side, 1)
+    assert ok > 250000
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: check/submit/fill/cancel
+  time: O(1)
+  space: O(S)
+extensions:
+- q: 'Level 2: add a per-account kill switch and a gross notional limit across all symbols.'
+  key_points:
+  - Kill switch is checked first and rejects everything until explicitly re-enabled
+  - Gross notional = sum over symbols of |position| * ref + open order notional, maintained incrementally
+  - Rejections still do not mutate state; reasons stay deterministic
+  kind: code
+- q: 'Level 3: add an orders-per-second limit using injected timestamps.'
+  key_points:
+  - Sliding window or token bucket keyed by timestamp passed into check, no wall clock
+  - Place the rate check at a documented position in the reason order
+  - Rejected orders do not consume rate budget (or document the opposite)
+  kind: code
+- q: Cost of the checks and what dominates in the hot path.
+  key_points:
+  - All checks are O(1) dict lookups and int comparisons
+  - Memory is O(symbols) for position and open-order state
+  - In production the symbol map becomes a fixed array indexed by symbol id to avoid hashing
+  kind: complexity
+- q: 'Design: why must this be in-process, and how do fills race with checks?'
+  key_points:
+  - A network hop (10-100us) dwarfs the latency budget, so the risk engine is a library on the order path
+    
+  - Single-threaded strategy loop serializes check and fill updates, or fill updates are atomic with relaxed
+    ordering
+  - 'Defense in depth: software limits per strategy plus exchange-side or hardware kill switches'
+  kind: design
+narration: []
+state_aloud:
+- Checks run in a fixed order and the first failure is the reason returned.
+- Position limit uses worst case including working orders; exactly at the limit is allowed.
+- check() has no side effects; integer arithmetic only (bps via cross-multiplication).
+walkthrough: |
+  The engine here adds working-order exposure so the position check is the worst case, and defines a fixed check order so rejections are deterministic. The doc's rate-limit check is covered by the order-throttle problem. Source: standard formulation.
+categories:
+- trading

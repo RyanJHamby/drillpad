@@ -1,0 +1,94 @@
+id: course-schedule-ii
+title: Course Schedule II
+bar_level: 2
+target_minutes: 25
+patterns:
+- topological-sort
+firm_tags:
+- ai-infra
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Course Schedule II (LC 210)"
+statement: |
+  Same setup as Course Schedule: `n` courses, and each `[a, b]` means `b` must come before `a`. Return any valid order in which all courses can be taken, or an empty list if that is impossible.
+
+  Example: `find_order(4, [[1,0],[2,0],[3,1],[3,2]])` may return `[0,1,2,3]` or `[0,2,1,3]`.
+starter: |
+  def find_order(n, prereqs):
+      pass
+hints:
+- This is a topological sort; any valid ordering is accepted.
+- Kahn's algorithm naturally produces the order in which nodes are removed.
+- If the produced order has fewer than n nodes there is a cycle, so return [].
+follow_ups:
+- Return the lexicographically smallest order.
+- Group the order into parallel 'waves'.
+tests:
+- name: diamond
+  tags:
+  - ordering
+  code: |
+    o=find_order(4,[[1,0],[2,0],[3,1],[3,2]])
+    pos={c:i for i,c in enumerate(o)}
+    assert sorted(o)==[0,1,2,3] and all(pos[b]<pos[a] for a,b in [[1,0],[2,0],[3,1],[3,2]])
+- name: cycle returns empty
+  tags:
+  - invalid
+  code: |
+    assert find_order(2,[[0,1],[1,0]])==[]
+- name: no courses
+  tags:
+  - empty
+  code: |
+    assert find_order(0,[])==[]
+    assert find_order(1,[])==[0]
+- name: no prerequisites keeps all courses
+  tags:
+  - single
+  code: |
+    assert sorted(find_order(4,[]))==[0,1,2,3]
+- name: duplicate edges
+  tags:
+  - duplicate
+  code: |
+    assert find_order(2,[[1,0],[1,0]])==[0,1]
+- name: long chain forces unique order
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=50000
+    assert find_order(n,[[i+1,i] for i in range(n-1)])==list(range(n))
+complexity:
+- op: overall
+  time: O(V + E)
+  space: O(V + E)
+extensions:
+- q: Lexicographically smallest order
+  kind: code
+  key_points:
+  - Replace the queue with a min-heap
+  - Time becomes O((V+E) log V)
+  - Same cycle detection rule
+- q: Parallel waves
+  kind: design
+  key_points:
+  - Process all indegree-0 nodes as one level
+  - Number of waves is the longest path length
+  - Useful for CI pipelines and job schedulers
+- q: Why is the result length the cycle check?
+  kind: complexity
+  key_points:
+  - Nodes on or after a cycle never reach indegree 0
+  - So the output is shorter than n
+  - Linear time overall
+narration: []
+state_aloud:
+- n = 0 returns [].
+- Cycle returns [] rather than a partial order.
+- Courses with no edges must still appear.
+- Duplicate edges.
+walkthrough: |
+  Compute indegrees and an adjacency list, then repeatedly emit a course with indegree 0 and decrement its dependents. The emission order is a valid topological order. If fewer than n courses are emitted a cycle exists and the function returns an empty list instead of a partial schedule.

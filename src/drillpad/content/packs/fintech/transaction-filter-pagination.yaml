@@ -1,0 +1,236 @@
+id: transaction-filter-pagination
+title: Transaction Filter + Cursor Pagination
+bar_level: 2
+target_minutes: 25
+patterns:
+- predicate-pipeline
+- cursor-pagination
+- binary-search
+- keyset
+firm_tags:
+- distsys
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `TransactionStore`, a read API over transactions with composable filters and stable cursor
+  pagination.
+
+  Each transaction is a dict `{"id": int, "user": str, "currency": str, "amount": int, "ts": int}`
+  (`amount` in minor units, ids unique). `TransactionStore(txns)` accepts an initial list; `add(txn)` inserts
+  one more at any time.
+
+  `query(limit, cursor=None, **filters)` returns `(rows, next_cursor)`:
+
+  * Supported filters (all optional, combined with AND): `user`, `currency` (equality), `min_amount`,
+    `max_amount` (both inclusive), `start_ts` (inclusive), `end_ts` (EXCLUSIVE). Any other keyword raises
+    `ValueError`.
+  * Rows are ordered by `(ts, id)` descending (newest first, id breaks ties), so the order is total.
+  * `limit` must be an int >= 1, else `ValueError`.
+  * `rows` are the matching transactions (the stored dict objects) following the cursor, at most `limit`.
+  * `next_cursor` is an opaque string to pass back as `cursor`, or `None` when no matching row remains after
+    this page (so a client never gets a trailing empty page). A cursor encodes the `(ts, id)` of the last row
+    returned; the next page contains rows strictly after that position in the ordering, whether or not that
+    row still exists. A malformed cursor raises `ValueError`.
+  * Pagination must be stable under inserts: a row added between page requests appears on a later page if it
+    sorts after the cursor and is never shown twice or skipped.
+
+  Walking all pages of a store with hundreds of thousands of rows must be fast: do not re-sort or
+  re-filter from scratch for every page.
+starter: |
+  class TransactionStore:
+      def __init__(self, txns=()):
+          pass
+
+      def add(self, txn):
+          pass
+
+      def query(self, limit, cursor=None, **filters):
+          pass
+hints:
+- Keep rows in a list sorted by key (-ts, -id) so the required order is simply ascending order of that
+  key.
+- A cursor is just the last (ts, id); bisect_right on the key list finds the resume position in O(log
+  n) even if that row was deleted.
+- Build the filters as a list of small predicates once per query, scan forward from the resume position,
+  and stop after limit + 1 matches so you know whether more remain.
+follow_ups:
+- Why is offset pagination wrong when rows are inserted between pages, and why is it slow?
+- What index serves (user, ts desc, id desc) queries in a database, and how do you write the keyset WHERE
+  clause?
+- Why should the cursor be opaque and signed?
+tests:
+- name: filters combine with AND and boundaries
+  tags:
+  - boundary
+  - empty
+  code: |
+    def tx(i, ts, user="u1", cur="USD", amt=100):
+        return {"id": i, "user": user, "currency": cur, "amount": amt, "ts": ts}
+
+    rows = [tx(1, 10, amt=50), tx(2, 20, amt=100), tx(3, 30, user="u2", amt=100), tx(4, 40, cur="EUR", amt=500),
+            tx(5, 50, amt=100)]
+    s = TransactionStore(rows)
+    ids = lambda **f: [r["id"] for r in s.query(100, **f)[0]]
+    assert ids() == [5, 4, 3, 2, 1]
+    assert ids(user="u1") == [5, 4, 2, 1]
+    assert ids(user="u1", currency="USD") == [5, 2, 1]
+    assert ids(min_amount=100, max_amount=100) == [5, 3, 2], "both bounds inclusive"
+    assert ids(start_ts=20, end_ts=50) == [4, 3, 2], "start inclusive, end exclusive"
+    assert ids(user="nobody") == []
+- name: pages walk the data without gaps
+  tags:
+  - ordering
+  - boundary
+  code: |
+    def tx(i, ts, user="u1", cur="USD", amt=100):
+        return {"id": i, "user": user, "currency": cur, "amount": amt, "ts": ts}
+
+    s = TransactionStore([tx(i, i // 3) for i in range(10)])
+    seen, cur = [], None
+    while True:
+        rows, cur = s.query(4, cursor=cur)
+        seen += [r["id"] for r in rows]
+        if cur is None:
+            break
+    assert seen == list(range(9, -1, -1)), "ts ties are ordered by id descending"
+    rows, cur = s.query(10)
+    assert len(rows) == 10 and cur is None, "no trailing empty page"
+    rows, cur = s.query(5)
+    assert len(rows) == 5 and cur is not None and isinstance(cur, str)
+- name: single row and empty store
+  tags:
+  - empty
+  - single
+  code: |
+    def tx(i, ts, user="u1", cur="USD", amt=100):
+        return {"id": i, "user": user, "currency": cur, "amount": amt, "ts": ts}
+
+    s = TransactionStore()
+    assert s.query(5) == ([], None)
+    s.add(tx(1, 1))
+    rows, cur = s.query(1)
+    assert [r["id"] for r in rows] == [1] and cur is None
+    assert s.query(1, user="x") == ([], None)
+- name: invalid arguments
+  tags:
+  - invalid
+  code: |
+    def tx(i, ts, user="u1", cur="USD", amt=100):
+        return {"id": i, "user": user, "currency": cur, "amount": amt, "ts": ts}
+
+    s = TransactionStore([tx(1, 1)])
+    for bad in (0, -1, None, 1.5):
+        try:
+            s.query(bad)
+            assert False
+        except ValueError:
+            pass
+    try:
+        s.query(1, colour="red")
+        assert False
+    except ValueError:
+        pass
+    try:
+        s.query(1, cursor="garbage")
+        assert False
+    except ValueError:
+        pass
+    assert len(s.query(1)[0]) == 1
+- name: inserts between pages never duplicate or skip
+  tags:
+  - state-reuse
+  - ordering
+  hidden: true
+  code: |
+    def tx(i, ts, user="u1", cur="USD", amt=100):
+        return {"id": i, "user": user, "currency": cur, "amount": amt, "ts": ts}
+
+    s = TransactionStore([tx(i, i * 10) for i in range(1, 11)])
+    rows, cur = s.query(3)
+    assert [r["id"] for r in rows] == [10, 9, 8]
+    s.add(tx(100, 1000))
+    s.add(tx(101, 75))
+    s.add(tx(102, 55))
+    rows2, cur2 = s.query(3, cursor=cur)
+    seen = [r["id"] for r in rows] + [r["id"] for r in rows2]
+    while cur2:
+        more, cur2 = s.query(3, cursor=cur2)
+        seen += [r["id"] for r in more]
+    assert seen == [10, 9, 8, 101, 7, 6, 102, 5, 4, 3, 2, 1], "100 sorts before the cursor (already past); 101 and 102 sort after it"
+- name: rows are the stored objects and ties sort by id
+  tags:
+  - duplicate
+  - ordering
+  hidden: true
+  code: |
+    def tx(i, ts, user="u1", cur="USD", amt=100):
+        return {"id": i, "user": user, "currency": cur, "amount": amt, "ts": ts}
+
+    a, b, c = tx(5, 7), tx(9, 7), tx(2, 7)
+    s = TransactionStore([a, b, c])
+    rows, cur = s.query(2)
+    assert rows[0] is b and rows[1] is a
+    rows, cur = s.query(2, cursor=cur)
+    assert rows == [c] and cur is None
+- name: walk a large store page by page
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def tx(i, ts, user="u1", cur="USD", amt=100):
+        return {"id": i, "user": user, "currency": cur, "amount": amt, "ts": ts}
+
+    n = 250000
+    s = TransactionStore([tx(i, i // 2, user="u%d" % (i % 5), cur="USD" if i % 3 else "EUR", amt=i % 1000) for i in range(n)])
+    cur, total, pages = None, 0, 0
+    while True:
+        rows, cur = s.query(250, cursor=cur, currency="USD", min_amount=100)
+        total += len(rows)
+        pages += 1
+        if cur is None:
+            break
+    expected = sum(1 for i in range(n) if i % 3 and i % 1000 >= 100)
+    assert total == expected and pages > 100
+complexity:
+- op: query (one page)
+  time: O(log n + s)
+  space: O(limit)
+- op: add
+  time: O(n)
+  space: O(1)
+extensions:
+- q: 'Level 2: support sort_by amount (desc) with the same cursor guarantees.'
+  kind: code
+  key_points:
+  - The cursor must carry the full sort key (amount, ts, id), not just the id
+  - Keep a second sorted index per supported sort order
+  - Filters scan the chosen index; ties still end at the unique id
+- q: 'Level 3: support OR groups and a `users` set filter without rewriting the pipeline.'
+  kind: code
+  key_points:
+  - Represent each filter as a predicate; compose with any()/all()
+  - Keep predicates cheap and ordered by selectivity
+  - Document how an unknown filter or empty set behaves
+- q: 'Design the database side: indexes and the keyset query.'
+  kind: design
+  key_points:
+  - Composite index (user, ts DESC, id DESC) serves the user filter plus ordering without a sort
+  - WHERE (ts, id) < (:ts, :id) ORDER BY ts DESC, id DESC LIMIT :n+1
+  - Return an opaque, signed cursor; random page jumps are the trade-off
+- q: What does a page cost and why is this better than offset pagination?
+  kind: complexity
+  key_points:
+  - bisect finds the resume point in O(log n); scanning costs the rows examined until limit+1 matches
+  - Offset must skip O(offset) rows and shifts when rows are inserted, causing duplicates or gaps
+  - Sparse filters can examine many rows per page; a secondary index per filter removes that
+narration: []
+state_aloud:
+- 'Order must be total: (ts, id) descending, otherwise equal timestamps can be skipped or repeated across
+  pages.'
+- Cursor is a position, not a row id lookup, so it keeps working if that row disappears.
+- Fetch limit + 1 matches to know if another page exists, so there is no empty trailing page.
+- end_ts is exclusive and start_ts inclusive; amount bounds are inclusive; amounts are integer cents.
+- Validate limit, filters and cursor up front and raise ValueError.
+walkthrough: |
+  Store rows sorted ascending by the key (-ts, -id), which is the required newest-first order. The cursor string is "ts:id"; decoding it and calling bisect_right on the keys gives the resume index in O(log n), which stays correct under inserts and deletions. query builds a list of predicates from the filters, scans forward collecting matches until limit + 1 are found, returns the first limit and a cursor for the last row only if an extra match proves more remain. Source: standard formulation.

@@ -1,0 +1,312 @@
+id: cpp-unique-ptr
+title: unique_ptr from Scratch
+language: cpp
+bar_level: 2
+target_minutes: 25
+patterns:
+- raii
+- move-only
+- ownership
+- ebo
+- templates
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Implement `template <class T, class D = std::default_delete<T>> class UniquePtr` (C++20). You may not use
+  `std::unique_ptr` (or `std::shared_ptr`) in the implementation. It is an owning, move-only smart pointer.
+
+  API:
+  - Constructors: default and `nullptr` (empty), `explicit UniquePtr(T*)`, `UniquePtr(T*, D)`
+  - Copying is deleted; move construction and move assignment transfer ownership, are `noexcept`, and leave the source empty.
+    Move assignment destroys whatever the target previously owned; self-move-assignment must be safe.
+  - `get()`, `release()` (give up ownership without deleting), `reset(T* = nullptr)` (delete old, adopt new), `swap`
+  - `operator*`, `operator->`, `explicit operator bool`, `get_deleter()`
+  - Converting move constructor from `UniquePtr<U, E>` when `U*` converts to `T*` (derived to base)
+  - `make_unique_ptr<T>(args...)` forwarding the arguments to `T`'s constructor
+  - The deleter is called exactly once per owned object. With an empty deleter, `sizeof(UniquePtr<T>) == sizeof(T*)`.
+
+  Example:
+  ```cpp
+  UniquePtr<Shape> s = UniquePtr<Square>(new Square);   // derived -> base conversion
+  auto buf = make_unique_ptr<std::string>(3, 'x');      // "xxx"
+  ```
+starter: |
+  // Move-only owning pointer. Do not use std::unique_ptr.
+  template <class T, class D = std::default_delete<T>>
+  class UniquePtr {
+      T* ptr_ = nullptr;   // TODO: deleter storage, ownership semantics
+  public:
+      UniquePtr() noexcept = default;
+      UniquePtr(std::nullptr_t) noexcept {}
+      explicit UniquePtr(T* p) noexcept { (void)p; }
+      UniquePtr(T* p, D d) noexcept { (void)p; (void)d; }
+      template <class U, class E>
+      UniquePtr(UniquePtr<U, E>&& other) noexcept { (void)other; }
+
+      T* get() const noexcept { return nullptr; }
+      T* release() noexcept { return nullptr; }
+      void reset(T* p = nullptr) noexcept { (void)p; }
+      void swap(UniquePtr& other) noexcept { (void)other; }
+      T& operator*() const { throw std::logic_error("TODO"); }
+      T* operator->() const noexcept { return nullptr; }
+      explicit operator bool() const noexcept { return false; }
+      D& get_deleter() noexcept { throw std::logic_error("TODO"); }
+  };
+
+  template <class T, class... Args>
+  UniquePtr<T> make_unique_ptr(Args&&... args) { return UniquePtr<T>(); }
+prelude: |
+  struct Probe {
+      static inline int live = 0, dtors = 0;
+      int id;
+      explicit Probe(int i = 0) : id(i) { ++live; }
+      Probe(const Probe&) = delete;
+      ~Probe() { --live; ++dtors; }
+  };
+  struct Shape {
+      Shape() { ++Probe::live; }
+      virtual ~Shape() { --Probe::live; ++Probe::dtors; }
+      virtual int sides() const { return 0; }
+  };
+  struct Square : Shape { int sides() const override { return 4; } };
+  struct CountingDeleter {
+      static inline int calls = 0;
+      void operator()(int* p) const { ++calls; delete p; }
+  };
+hints:
+- 'Delete the copy operations and write the move operations in terms of release(): `ptr_(o.release())`.'
+- Store the deleter with [[no_unique_address]] so a stateless deleter takes no space.
+- reset(p) should swap in the new pointer BEFORE invoking the deleter on the old one (std::exchange),
+  so a deleter that throws or re-enters sees consistent state. The converting constructor needs `requires
+  std::is_convertible_v<U*, T*>`.
+follow_ups:
+- Why is the move constructor noexcept and why does that matter for std::vector<UniquePtr<T>>?
+- What breaks if reset(p) deletes the old pointer first and the deleter re-enters this object?
+- Why does unique_ptr<T[]> need a separate specialization?
+- Why can unique_ptr to an incomplete type be fine while shared_ptr construction already captured the
+  deleter?
+tests:
+- name: owns and destroys exactly once
+  tags:
+  - single
+  - state-reuse
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        UniquePtr<Probe> p(new Probe(7));
+        CHECK(p);
+        CHECK_EQ(p->id, 7);
+        CHECK_EQ((*p).id, 7);
+        CHECK_EQ(Probe::live, 1);
+        CHECK_EQ(Probe::dtors, 0);
+    }
+    CHECK_EQ(Probe::live, 0);
+    CHECK_EQ(Probe::dtors, 1);
+- name: default and nullptr are empty
+  tags:
+  - empty
+  code: |
+    UniquePtr<int> a;
+    UniquePtr<int> b(nullptr);
+    CHECK(!a);
+    CHECK(!b);
+    CHECK(a.get() == nullptr);
+    UniquePtr<int> c(new int(5));
+    CHECK(c);
+    CHECK_EQ(*c, 5);
+- name: move constructor transfers ownership
+  tags:
+  - single
+  - state-reuse
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        UniquePtr<Probe> a(new Probe(1));
+        Probe* raw = a.get();
+        UniquePtr<Probe> b(std::move(a));
+        CHECK(!a);
+        CHECK(a.get() == nullptr);
+        CHECK(b.get() == raw);
+        CHECK_EQ(Probe::live, 1);
+    }
+    CHECK_EQ(Probe::dtors, 1);
+- name: move assignment destroys the old target
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        UniquePtr<Probe> a(new Probe(1));
+        UniquePtr<Probe> b(new Probe(2));
+        b = std::move(a);
+        CHECK_EQ(Probe::dtors, 1);
+        CHECK_EQ(b->id, 1);
+        CHECK(!a);
+        CHECK_EQ(Probe::live, 1);
+    }
+    CHECK_EQ(Probe::live, 0);
+    CHECK_EQ(Probe::dtors, 2);
+- name: not copyable but movable
+  tags:
+  - invalid
+  code: |
+    using P = UniquePtr<int>;
+    CHECK(!std::is_copy_constructible_v<P>);
+    CHECK(!std::is_copy_assignable_v<P>);
+    CHECK(std::is_nothrow_move_constructible_v<P>);
+    CHECK(std::is_nothrow_move_assignable_v<P>);
+    P p(new int(3));
+    CHECK(p);
+- name: release gives up ownership
+  tags:
+  - boundary
+  - single
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    Probe* raw = nullptr;
+    {
+        UniquePtr<Probe> p(new Probe(4));
+        raw = p.release();
+        CHECK(!p);
+        CHECK(raw != nullptr);
+    }
+    CHECK_EQ(Probe::dtors, 0);
+    CHECK_EQ(raw->id, 4);
+    delete raw;
+    CHECK_EQ(Probe::dtors, 1);
+    UniquePtr<int> empty;
+    CHECK(empty.release() == nullptr);
+- name: reset replaces and clears
+  tags:
+  - duplicate
+  - empty
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    UniquePtr<Probe> p(new Probe(1));
+    p.reset(new Probe(2));
+    CHECK_EQ(Probe::dtors, 1);
+    CHECK_EQ(p->id, 2);
+    p.reset();
+    CHECK(!p);
+    CHECK_EQ(Probe::dtors, 2);
+    CHECK_EQ(Probe::live, 0);
+    p.reset();
+    CHECK_EQ(Probe::dtors, 2);
+- name: swap exchanges pointees
+  tags:
+  - ordering
+  code: |
+    UniquePtr<int> a(new int(1)), b(new int(2)), c;
+    int* pa = a.get(); int* pb = b.get();
+    a.swap(b);
+    CHECK(a.get() == pb && b.get() == pa);
+    CHECK_EQ(*a, 2);
+    a.swap(c);
+    CHECK(!a);
+    CHECK_EQ(*c, 2);
+- name: custom deleter is called
+  hidden: true
+  tags:
+  - invalid
+  - single
+  code: |
+    CountingDeleter::calls = 0;
+    {
+        UniquePtr<int, CountingDeleter> p(new int(9));
+        CHECK_EQ(*p, 9);
+        UniquePtr<int, CountingDeleter> q(std::move(p));
+        CHECK_EQ(CountingDeleter::calls, 0);
+    }
+    CHECK_EQ(CountingDeleter::calls, 1);
+    auto lambda_del = [](int* x) { delete x; };
+    UniquePtr<int, decltype(lambda_del)> r(new int(1), lambda_del);
+    CHECK_EQ(*r, 1);
+- name: derived converts to base and deletes through vtable
+  hidden: true
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        UniquePtr<Square> sq(new Square);
+        UniquePtr<Shape> sh(std::move(sq));
+        CHECK(!sq);
+        CHECK_EQ(sh->sides(), 4);
+        CHECK_EQ(Probe::live, 1);
+    }
+    CHECK_EQ(Probe::live, 0);
+    CHECK_EQ(Probe::dtors, 1);
+- name: self move assignment is safe
+  hidden: true
+  tags:
+  - duplicate
+  - boundary
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        UniquePtr<Probe> p(new Probe(3));
+        UniquePtr<Probe>& alias = p;
+        p = std::move(alias);
+        CHECK(p);
+        CHECK_EQ(p->id, 3);
+        CHECK_EQ(Probe::dtors, 0);
+    }
+    CHECK_EQ(Probe::dtors, 1);
+- name: zero overhead and make_unique_ptr
+  hidden: true
+  tags:
+  - boundary
+  - single
+  code: |
+    CHECK_EQ(sizeof(UniquePtr<int>), sizeof(int*));
+    CHECK_EQ(sizeof(UniquePtr<int, CountingDeleter>), sizeof(int*));
+    auto p = make_unique_ptr<std::pair<int, std::string>>(4, "four");
+    CHECK_EQ(p->first, 4);
+    CHECK_EQ(p->second, "four");
+complexity:
+- op: move / release / reset / swap
+  time: O(1)
+  space: O(1)
+- op: destruction
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Why does unique_ptr have zero overhead over a raw pointer?
+  kind: complexity
+  key_points:
+  - 'No control block or counter: ownership is static, tracked by the type system'
+  - Empty deleter is stored with [[no_unique_address]] or EBO so sizeof stays one pointer
+  - All operations are O(1) and inline to plain pointer moves
+- q: How does unique_ptr interact with polymorphism and what is the base-class destructor rule?
+  kind: design
+  key_points:
+  - Converting move constructor allows UniquePtr<Base> from UniquePtr<Derived>
+  - With the default deleter the base destructor must be virtual or deleting through Base* is UB
+  - A shared_ptr hides this because its deleter is captured at construction with the real type
+- q: What is the ABI/perf cost of a non-trivial destructor on a unique_ptr parameter?
+  kind: design
+  key_points:
+  - Types with non-trivial destructors are passed by invisible reference in the Itanium ABI, not in a
+    register
+  - A raw pointer parameter is passed in a register
+  - Pass T* or T& for non-owning use, UniquePtr&& only for ownership transfer
+- q: How do you use it to store move-only types in containers?
+  kind: reasoning
+  key_points:
+  - std::vector<UniquePtr<T>> works because the move constructor is noexcept so reallocation moves
+  - Copy operations deleted means the container as a whole becomes move-only
+  - Never pass UniquePtr by const reference to transfer ownership
+narration: []
+state_aloud:
+- 'Ownership transfers on move: say the moved-from object is empty, not dangling.'
+- Self-move-assignment and reset(get()) are the classic double-free traps.
+- Destructor must call the deleter only if non-null; deleter exactly once.
+- Mark move operations noexcept so containers choose move over copy.
+walkthrough: |
+  One raw pointer plus a deleter, with the copy operations deleted so the compiler enforces single ownership and the moves implemented via `release()` so the source is left empty. `[[no_unique_address]]` keeps the object the size of a pointer, and a constrained converting constructor allows derived-to-base moves. Python's refcounting/GC hides ownership entirely; in C++ the type itself says who frees the object, and the compiler rejects an accidental copy.
+anki_queries: []
+categories:
+- systems-impl

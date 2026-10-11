@@ -1,0 +1,233 @@
+id: load-balancer-least-conn
+title: Load Balancer (least-connections / P2C)
+bar_level: 2
+target_minutes: 25
+patterns:
+- load-balancing
+- least-connections
+- power-of-two-choices
+- heap
+- lazy-deletion
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Implement a load balancer over inference replicas with two selection policies.
+
+  `LoadBalancer(backends, rng=None)`: `backends` is a list of names (the list order is the tie-break
+  order). `rng` is a `random.Random` (only needed for `pick_p2c`).
+  - `pick_least_conn() -> name`: the healthy backend with the fewest active connections; ties go to the
+    one earliest in the list. The connection is counted as opened (`active += 1`) by the pick.
+    `RuntimeError` if no backend is healthy (including an empty list).
+  - `pick_p2c() -> name`: power of two choices. Let `healthy` be the healthy backends in list order.
+    If there is exactly one, use it. Otherwise `a, b = rng.sample(healthy, 2)` (exactly this call) and
+    take the one with fewer active connections, preferring `a` on a tie. Count the connection.
+    `RuntimeError` if none are healthy.
+  - `release(name)`: a connection ended (`active -= 1`); `ValueError` if the count is already 0.
+  - `active(name) -> int`.
+  - `set_healthy(name, healthy)`: unhealthy backends are never picked; their existing connections still
+    count and can be released. Backends start healthy.
+
+  `pick_least_conn` must stay fast with thousands of backends and hundreds of thousands of picks: do not
+  scan every backend each time.
+starter: |
+  class LoadBalancer:
+      def __init__(self, backends, rng=None):
+          pass
+
+      def pick_least_conn(self):
+          pass
+
+      def pick_p2c(self):
+          pass
+
+      def release(self, name):
+          pass
+
+      def active(self, name):
+          pass
+
+      def set_healthy(self, name, healthy):
+          pass
+hints:
+- 'Least-conn: a min-heap of (active, index) with lazy deletion. An entry is valid only if the backend
+  is healthy and its active count still equals the entry''s.'
+- Push a fresh entry whenever a count changes (pick, release) or a backend becomes healthy again.
+- 'P2C only needs the counts of two backends: O(1) after sampling.'
+follow_ups:
+- Weighted least-connections and slow start for new replicas.
+- Use EWMA latency or outstanding tokens instead of connection count for LLM replicas.
+- Add `pick_p2c` with sticky preference for a replica that holds the prompt prefix.
+tests:
+- name: least-connections picks the idlest, ties go to list order
+  code: |
+    lb = LoadBalancer(["a", "b", "c"])
+    assert [lb.pick_least_conn() for _ in range(4)] == ["a", "b", "c", "a"]
+    lb.release("b")
+    assert lb.active("b") == 0 and lb.active("a") == 2
+    assert lb.pick_least_conn() == "b"
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: release lowers the count and cannot go negative
+  code: |
+    lb = LoadBalancer(["a", "b"])
+    lb.pick_least_conn()
+    lb.release("a")
+    assert lb.active("a") == 0
+    try:
+        lb.release("a")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("release without a connection must raise ValueError")
+  hidden: false
+  tags:
+  - invalid
+  - state-reuse
+- name: unhealthy backends are skipped and may return
+  code: |
+    lb = LoadBalancer(["a", "b", "c"])
+    lb.set_healthy("a", False)
+    assert [lb.pick_least_conn() for _ in range(3)] == ["b", "c", "b"]
+    lb.set_healthy("a", True)
+    assert lb.pick_least_conn() == "a"
+    for n in "abc":
+        lb.set_healthy(n, False)
+    try:
+        lb.pick_least_conn()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("no healthy backend must raise RuntimeError")
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: P2C samples two healthy backends and takes the less loaded
+  code: |
+    import random
+    names = ["a", "b", "c", "d"]
+    lb = LoadBalancer(names, random.Random(11))
+    ref = random.Random(11)
+    load = {n: 0 for n in names}
+    for _ in range(40):
+        x, y = ref.sample(names, 2)
+        want = x if load[x] <= load[y] else y
+        load[want] += 1
+        assert lb.pick_p2c() == want
+    assert all(lb.active(n) == load[n] for n in names)
+  hidden: false
+  tags:
+  - ordering
+  - time
+- name: P2C with one backend and with unhealthy ones
+  code: |
+    import random
+    lb = LoadBalancer(["only"], random.Random(0))
+    assert lb.pick_p2c() == "only" and lb.active("only") == 1
+    lb2 = LoadBalancer(["a", "b", "c"], random.Random(0))
+    lb2.set_healthy("a", False); lb2.set_healthy("c", False)
+    assert [lb2.pick_p2c() for _ in range(3)] == ["b", "b", "b"]
+    lb2.set_healthy("b", False)
+    try:
+        lb2.pick_p2c()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError
+  hidden: true
+  tags:
+  - single
+  - invalid
+- name: empty backend list
+  code: |
+    lb = LoadBalancer([])
+    try:
+        lb.pick_least_conn()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError
+  hidden: true
+  tags:
+  - empty
+  - zero-capacity
+- name: P2C keeps the spread tight without ever consulting global state
+  code: |
+    import random
+    names = [f"b{i}" for i in range(10)]
+    lb = LoadBalancer(names, random.Random(4))
+    for _ in range(3000):
+        lb.pick_p2c()
+    loads = [lb.active(n) for n in names]
+    assert sum(loads) == 3000 and max(loads) - min(loads) <= 6, loads
+  hidden: true
+  tags:
+  - duplicate
+  - scale
+- name: 2000 backends, 200k connections open/close
+  code: |
+    lb = LoadBalancer([f"b{i}" for i in range(2000)])
+    held = []
+    for i in range(200000):
+        held.append(lb.pick_least_conn())
+        if len(held) > 3000:
+            lb.release(held.pop(0))
+    loads = [lb.active(f"b{i}") for i in range(2000)]
+    assert sum(loads) == 3000 and max(loads) - min(loads) <= 2, (min(loads), max(loads))
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: pick_least_conn
+  time: O(log N)
+  space: O(N)
+- op: pick_p2c
+  time: O(N)
+  space: O(N)
+- op: release
+  time: O(log N)
+  space: O(1)
+extensions:
+- q: 'Level 2: weight backends by capacity (e.g. GPUs) and pick the lowest active/weight, ties by list
+    order.'
+  kind: code
+  key_points:
+  - Heap key becomes (active / weight, index); use Fraction or cross-multiplication for exact ties
+  - 'Weight 0 means drain: never pick, but keep tracking releases'
+  - Lazy validity check must compare the stored ratio's source count
+- q: Why is power-of-two-choices often preferred to global least-connections for a fleet of routers?
+  kind: design
+  key_points:
+  - Global least-conn needs shared, fresh state; many routers acting on stale counts herd onto the same
+    backend
+  - Two random choices need only two probes yet give an exponentially better max load than one random
+    choice
+  - Combine with health and outlier ejection; sampling only from healthy backends
+- q: Connection count is a poor load signal for LLM requests. What would you use?
+  kind: design
+  key_points:
+  - Outstanding prompt+generation tokens, or queue depth and KV-cache utilisation reported by the replica
+  - Latency EWMA as a tie-breaker, with slow-start for newly added replicas
+  - Prefix-cache affinity can outweigh small load differences (see request-router-consistent-hash)
+- q: Complexity of both policies and the lazy-heap cost.
+  kind: complexity
+  key_points:
+  - 'pick_least_conn O(log N) amortised: each count change pushes one entry and each stale entry is popped
+    once'
+  - pick_p2c O(1) after sampling, but building the healthy list is O(N) unless you keep it incrementally
+  - Heap size grows with stale entries; rebuild when stale entries dominate
+narration: []
+state_aloud:
+- Ties go to list order; define it up front.
+- A pick opens a connection; release closes it and cannot underflow.
+- Unhealthy backends keep their counts.
+- 'P2C: exact rng.sample call so tests are reproducible; single healthy backend short-circuits.'
+- Empty or fully unhealthy pool raises RuntimeError.
+walkthrough: |
+  Counts and health live in arrays. Least-connections keeps a min-heap of (active, index); every change to a count pushes a new entry, so popped entries are validated (healthy and count still equal) and stale ones discarded, giving O(log N) amortised picks instead of an O(N) scan. P2C samples two healthy backends and compares their counts. This is the standard least-connections / power-of-two-choices formulation; no source note applies.
+categories:
+- ai-infra

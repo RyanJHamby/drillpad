@@ -1,0 +1,119 @@
+id: cheapest-flights-within-k-stops
+title: Cheapest Flights Within K Stops
+bar_level: 2
+target_minutes: 22
+patterns:
+- shortest-path
+- dp-1d
+firm_tags:
+- distsys
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Cheapest Flights K Stops (LC 787)"
+statement: |
+  There are `n` cities numbered `0..n-1` and a list of directed `flights`, each `[from, to, price]`. Find the cheapest price to travel from `src` to `dst` using at most `k` stops (cities visited strictly between the source and destination). Return `-1` if there is no such route. Here `src` differs from `dst`.
+
+  Example: with flights `[[0,1,100],[1,2,100],[0,2,500]]`, `src=0`, `dst=2`, `k=1` the cheapest price is `200`; with `k=0` it is `500`.
+starter: |
+  def find_cheapest_price(n, flights, src, dst, k):
+      pass
+hints:
+- 'A plain Dijkstra on price is wrong: the cheapest path may use too many stops while a pricier one uses fewer.'
+- 'Bound the number of edges instead: run Bellman-Ford for exactly k + 1 rounds.'
+- In each round relax from a copy of the previous round's distances so a single round extends paths by one edge only.
+follow_ups:
+- Return the route, not just the price.
+- Solve it with BFS by levels and pruning.
+tests:
+- name: two ways
+  tags:
+  - boundary
+  code: |
+    assert find_cheapest_price(3,[[0,1,100],[1,2,100],[0,2,500]],0,2,1)==200
+    assert find_cheapest_price(3,[[0,1,100],[1,2,100],[0,2,500]],0,2,0)==500
+- name: cycle with bigger graph
+  tags:
+  - ordering
+  code: |
+    f=[[0,1,100],[1,2,100],[2,0,100],[1,3,600],[2,3,200]]
+    assert find_cheapest_price(4,f,0,3,1)==700
+- name: not enough stops for the cheap path
+  tags:
+  - boundary
+  - invalid
+  code: |
+    f=[[0,1,1],[1,2,1],[2,3,1],[0,3,10]]
+    assert find_cheapest_price(4,f,0,3,1)==10
+    assert find_cheapest_price(4,f,0,3,2)==3
+- name: no flights
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert find_cheapest_price(2,[],0,1,5)==-1
+- name: unreachable destination
+  tags:
+  - invalid
+  hidden: true
+  code: |
+    assert find_cheapest_price(3,[[0,1,5]],0,2,2)==-1
+- name: single direct flight
+  tags:
+  - single
+  hidden: true
+  code: |
+    assert find_cheapest_price(2,[[0,1,7]],0,1,0)==7
+- name: parallel flights
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    assert find_cheapest_price(2,[[0,1,9],[0,1,4]],0,1,0)==4
+- name: layered graph with exponentially many paths
+  tags:
+  - scale
+  hidden: true
+  code: |
+    L=28
+    f=[[0,1,1],[0,2,1]]
+    for i in range(1,L):
+        for a in (2*i-1,2*i):
+            for b in (2*i+1,2*i+2):
+                f.append([a,b,1])
+    dst=2*L+1
+    f+= [[2*L-1,dst,1],[2*L,dst,1]]
+    n=dst+1
+    assert find_cheapest_price(n,f,0,dst,L)==L+1
+    assert find_cheapest_price(n,f,0,dst,L-1)==-1
+    assert find_cheapest_price(n,f,0,dst,L-1+10)==L+1
+complexity:
+- op: overall
+  time: O(k * E)
+  space: O(n)
+extensions:
+- q: What is the cost and why not plain DFS?
+  kind: complexity
+  key_points:
+  - k+1 rounds each scanning all E edges, O(kE)
+  - Space O(n) for two distance arrays
+  - DFS without memo explores exponentially many paths
+- q: Why copy the distance array each round?
+  kind: reasoning
+  key_points:
+  - Relaxing in place could chain several edges within one round
+  - That would allow more than k+1 edges
+  - Using the previous round's snapshot caps path length per round
+- q: How would Dijkstra be adapted?
+  kind: design
+  key_points:
+  - State is (node, stops used), not just node
+  - Heap on price; prune if you already reached node with fewer or equal stops and lower price
+  - Worst case O(E k log) states, similar to Bellman-Ford but better when k is large
+narration: []
+state_aloud:
+- k stops means k + 1 edges.
+- Unreachable returns -1.
+- Parallel flights keep the cheaper one.
+walkthrough: |
+  Keep an array of the cheapest known price to each city using at most i flights. Initialise the source to zero. Repeat k + 1 times: copy the array, and for each flight (u, v, p) if u has a finite price in the old array, try improving the copy at v with old[u] + p. After all rounds the destination holds the cheapest price using at most k + 1 flights; return it, or -1 if it is still infinite.

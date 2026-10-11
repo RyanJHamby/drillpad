@@ -1,0 +1,180 @@
+id: luhn-card-validation
+title: Luhn / Card Number Validation
+bar_level: 1
+target_minutes: 12
+patterns:
+- checksum
+- string-parsing
+- validation
+firm_tags: []
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement three helpers for payment-card numbers (PANs).
+
+  1. `luhn_valid(s)` returns `True` iff `s` is a valid card number:
+     * `s` must be a `str`; spaces and hyphens are allowed as separators and are removed first. Any other
+       non-digit character makes it invalid.
+     * After cleaning, the number must have 12 to 19 digits inclusive.
+     * The Luhn checksum must pass: from the rightmost digit moving left, double every second digit (the
+       2nd, 4th, ... from the right); if a doubled digit is greater than 9 subtract 9; the sum of all digits
+       must be divisible by 10.
+  2. `luhn_check_digit(payload)` takes a string of digits WITHOUT its check digit and returns the check digit
+     (an int 0-9) such that `payload + str(check)` passes the checksum. Empty or non-digit payload raises
+     `ValueError`. (No length rule here.)
+  3. `card_brand(s)` returns `"invalid"` if `luhn_valid(s)` is false; otherwise, using the cleaned digits,
+     * `"visa"`: starts with `4`, length 13, 16 or 19
+     * `"mastercard"`: length 16 and prefix 51-55 or 2221-2720
+     * `"amex"`: length 15 and prefix 34 or 37
+     * `"discover"`: length 16 and prefix 6011, 65, or 644-649
+     * otherwise `"unknown"`.
+starter: |
+  def luhn_valid(s):
+      pass
+
+
+  def luhn_check_digit(payload):
+      pass
+
+
+  def card_brand(s):
+      pass
+hints:
+- Walk the digits from the right with enumerate(reversed(digits)); double when the index is odd (the 2nd
+  from the right is index 1).
+- The check digit for a payload is computed with the payload's rightmost digit treated as 'doubled position'
+  because the check digit will occupy position 0 once appended.
+- Clean the input once in a shared helper and use it for all three functions.
+follow_ups:
+- Which errors does Luhn catch and miss (single digit errors yes, some transpositions like 09/90 no)?
+- Why must you never log a full PAN, and what is the PCI-friendly way to display one?
+- How would you validate a stream of millions of numbers efficiently?
+tests:
+- name: known valid and invalid numbers
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    assert luhn_valid("4111111111111111") is True
+    assert luhn_valid("4111111111111112") is False
+    assert luhn_valid("378282246310005") is True
+    assert luhn_valid("5555555555554444") is True
+    assert luhn_valid("1234567890123452") is True
+    assert luhn_valid("1234567890123456") is False
+- name: separators and bad characters
+  tags:
+  - invalid
+  - empty
+  code: |
+    assert luhn_valid("4111 1111 1111 1111") is True
+    assert luhn_valid("4111-1111-1111-1111") is True
+    assert luhn_valid(" 4111111111111111") is True
+    assert luhn_valid("4111.1111.1111.1111") is False
+    assert luhn_valid("4111a11111111111") is False
+    assert luhn_valid("") is False and luhn_valid("   ") is False
+    assert luhn_valid(4111111111111111) is False, "not a string"
+    assert luhn_valid(None) is False
+- name: length limits are 12 to 19
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    assert luhn_valid("79927398713") is False, "valid checksum but only 11 digits"
+    assert luhn_valid("4000000000006") is True, "13 digits"
+    assert luhn_valid("0000000000000000") is True
+    assert luhn_valid("4000000000000000006") is True, "19 digits"
+    assert luhn_valid("40000000000000000006") is False, "20 digits"
+    assert luhn_valid("000000000000") is True, "12 digits"
+- name: check digit generation
+  tags:
+  - invalid
+  - single
+  code: |
+    assert luhn_check_digit("411111111111111") == 1
+    assert luhn_check_digit("37828224631000") == 5
+    assert luhn_check_digit("7992739871") == 3
+    for p in ["0", "123", "99999999", "555555555555444"]:
+        assert luhn_check_digit(p) in range(10)
+    c = luhn_check_digit("400000000000")
+    assert luhn_valid("400000000000" + str(c)) is True
+    for bad in ("", "12a", "1 2"):
+        try:
+            luhn_check_digit(bad)
+            assert False
+        except ValueError:
+            pass
+- name: brands
+  tags:
+  - boundary
+  - invalid
+  hidden: true
+  code: |
+    assert card_brand("4111111111111111") == "visa"
+    assert card_brand("4000000000006") == "visa"
+    assert card_brand("4000000000000000006") == "visa"
+    assert card_brand("5100000000000008") == "mastercard"
+    assert card_brand("5000000000000009") == "unknown", "50 is not a mastercard prefix"
+    assert card_brand("2221000000000009") == "mastercard"
+    assert card_brand("2720999999999996") == "mastercard"
+    assert card_brand("2721000000000004") == "unknown"
+    assert card_brand("2220000000000000") == "unknown"
+    assert card_brand("378282246310005") == "amex"
+    assert card_brand("6011000000000004") == "discover"
+    assert card_brand("6500000000000002") == "discover"
+    assert card_brand("6440000000000005") == "discover"
+    assert card_brand("6430000000000007") == "unknown"
+    assert card_brand("4111111111111112") == "invalid"
+    assert card_brand("4111-1111-1111-1111") == "visa"
+- name: validate a large batch
+  tags:
+  - scale
+  hidden: true
+  code: |
+    ok = 0
+    for i in range(300000):
+        payload = "4%014d" % i
+        c = luhn_check_digit(payload)
+        if luhn_valid(payload + str(c)) and card_brand(payload + str(c)) == "visa":
+            ok += 1
+    assert ok == 300000
+complexity:
+- op: luhn_valid
+  time: O(n)
+  space: O(n)
+extensions:
+- q: 'Level 2: mask a PAN for display and logs (first 6 and last 4, or last 4 only), keeping separators
+    optional.'
+  kind: code
+  key_points:
+  - Never store or log the full PAN; mask after validation
+  - Handle variable length (13-19) and keep BIN digits visible only when policy allows
+  - Return a fixed pattern so output length does not leak the card length
+- q: 'Level 3: add `detect_issuer` using a prefix table with the longest matching prefix and per-issuer
+    length sets.'
+  kind: code
+  key_points:
+  - Prefix table sorted so the longest prefix wins (e.g. 6011 vs 60)
+  - Per-issuer valid length sets rather than a single length
+  - Table-driven so adding an issuer is data, not code
+- q: Where does Luhn fit in a payments flow and what does it not prove?
+  kind: design
+  key_points:
+  - It is a client-side typo filter only; it does not prove the card exists or has funds
+  - Real validation is an authorization (or $0 verification) with the issuer via the processor
+  - 'PCI scope: tokenize the PAN immediately and avoid handling raw numbers on your servers'
+- q: State time and space and when you could do better.
+  kind: complexity
+  key_points:
+  - 'One pass over at most 19 digits: O(n) time with n the digit count (effectively constant)'
+  - Cleaning creates an O(n) string; a pure index loop could be O(1) extra space
+  - For batches the cost is linear in the number of cards
+narration: []
+state_aloud:
+- Doubling starts from the second digit from the RIGHT, not from the left (matters for odd lengths).
+- 'Doubled digit above 9: subtract 9 (equivalent to summing its digits).'
+- Clean separators first, reject anything else, enforce 12-19 digits, then checksum.
+- Non-string input returns False rather than raising.
+- Luhn is a typo detector, not security; never log the full PAN.
+walkthrough: |
+  A shared helper strips spaces and hyphens and returns the digit string or None if any other character remains or the input is not a string. The checksum iterates the digits from the right with enumerate, doubling odd indices and subtracting 9 from results above 9. For the check digit, compute the sum of the payload as if a placeholder digit sat at position 0 (so the payload's last digit lands on an odd, doubled index) and return (10 - sum % 10) % 10. Brand detection reads the cleaned digits' prefix and length. Standard formulation (Luhn algorithm); no source doc.

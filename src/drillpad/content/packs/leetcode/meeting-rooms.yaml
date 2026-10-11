@@ -1,0 +1,119 @@
+id: meeting-rooms
+title: Meeting Rooms
+bar_level: 1
+target_minutes: 12
+patterns:
+- intervals
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Meeting Rooms (LC 252)"
+statement: |
+  Given a list of meeting time ranges `[start, end)` (end exclusive), return `True` if one person could attend all of them, i.e. no two meetings overlap. A meeting that starts exactly when another ends is fine.
+
+  Example: `can_attend_meetings([[0,30],[5,10],[15,20]])` returns `False`; `can_attend_meetings([[7,10],[2,4]])` returns `True`.
+starter: |
+  def can_attend_meetings(intervals):
+      pass
+hints:
+- Two meetings conflict only if one starts before the other ends.
+- If the list is sorted by start, only neighbours can conflict.
+- Sort by start and check each meeting's start >= previous end.
+follow_ups:
+- Return the minimum number of rooms (Meeting Rooms II).
+- Return which pair conflicts.
+tests:
+- name: conflicting
+  tags:
+  - ordering
+  code: |
+    assert can_attend_meetings([[0,30],[5,10],[15,20]]) is False
+- name: non-conflicting unsorted
+  tags:
+  - ordering
+  code: |
+    assert can_attend_meetings([[7,10],[2,4]]) is True
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert can_attend_meetings([]) is True
+- name: single
+  tags:
+  - single
+  code: |
+    assert can_attend_meetings([[1,2]]) is True
+- name: touching meetings are fine
+  tags:
+  - boundary
+  code: |
+    assert can_attend_meetings([[1,5],[5,9]]) is True
+    assert can_attend_meetings([[1,5],[4,9]]) is False
+- name: duplicate meeting conflicts
+  tags:
+  - duplicate
+  code: |
+    assert can_attend_meetings([[3,4],[3,4]]) is False
+  hidden: true
+- name: one meeting contains another
+  tags:
+  - boundary
+  code: |
+    assert can_attend_meetings([[1,10],[2,3]]) is False
+    assert can_attend_meetings([[2,3],[1,10]]) is False
+  hidden: true
+- name: input not mutated
+  tags:
+  - state-reuse
+  code: |
+    a=[[7,10],[2,4]]
+    assert can_attend_meetings(a) is True
+    assert a==[[7,10],[2,4]]
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 400000
+    a = [[i * 2, i * 2 + 2] for i in range(n)][::-1]
+    assert can_attend_meetings(a) is True
+    a.append([n, n + 1])
+    assert can_attend_meetings(a) is False
+  hidden: true
+complexity:
+- op: overall
+  time: O(n log n)
+  space: O(n)
+extensions:
+- q: Why is checking only adjacent meetings after sorting enough?
+  kind: reasoning
+  key_points:
+  - Sorted by start, if any two meetings overlap then some adjacent pair does
+  - Non-adjacent overlap implies the in-between meeting overlaps the earlier one
+  - So one adjacent pass finds any conflict
+- q: Complexity and what dominates.
+  kind: complexity
+  key_points:
+  - Sort O(n log n)
+  - Scan O(n)
+  - Sorted copy costs O(n) space; in-place sort is O(1) extra in other languages
+- q: 'Design: a calendar that must reject conflicting bookings online.'
+  kind: design
+  key_points:
+  - Keep booked intervals in a sorted structure by start
+  - On booking, binary search for neighbours and check the two adjacent intervals
+  - O(log n) per booking with a balanced tree
+- q: How does this extend to Meeting Rooms II?
+  kind: design
+  key_points:
+  - Count the maximum simultaneous overlap instead of any overlap
+  - Min-heap of end times or sweep over sorted starts and ends
+  - O(n log n) time and O(n) space
+narration: []
+state_aloud:
+- Empty input is trivially True.
+- Touching endpoints (end == start) do not conflict.
+- Input arrives unsorted.
+walkthrough: |
+  Sort the meetings by start time. If any meeting starts before the previous one ends, they overlap, so return False. Otherwise every meeting finishes before the next begins and one person can attend all. Touching endpoints are allowed because the end is exclusive.

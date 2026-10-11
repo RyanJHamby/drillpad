@@ -1,0 +1,128 @@
+id: clone-graph
+title: Clone Graph
+bar_level: 2
+target_minutes: 25
+patterns:
+- graph-bfs-dfs
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Clone Graph (LC 133)"
+statement: |
+  Given a reference to one node of a connected undirected graph, return a deep copy of the whole graph (new `Node` objects with the same values and the same neighbor structure). The `Node` class, `build_graph(adj)` and `graph_to_adj(node)` helpers are in the starter.
+
+  Example: the square graph `[[2,4],[1,3],[2,4],[1,3]]` clones to an identical graph that shares no node objects with the original.
+prelude: |
+  class Node:
+      def __init__(self, val=0, neighbors=None):
+          self.val = val
+          self.neighbors = neighbors if neighbors is not None else []
+
+  def build_graph(adj):
+      """adj[i] lists the neighbor values of node i+1. Returns node 1 (or None if adj is empty)."""
+      if not adj:
+          return None
+      nodes = [Node(i + 1) for i in range(len(adj))]
+      for i, nb in enumerate(adj):
+          nodes[i].neighbors = [nodes[j - 1] for j in nb]
+      return nodes[0]
+
+  def graph_to_adj(node):
+      """Inverse of build_graph (nodes must be labelled 1..n)."""
+      if node is None:
+          return []
+      seen, stack = {node.val: node}, [node]
+      while stack:
+          n = stack.pop()
+          for m in n.neighbors:
+              if m.val not in seen:
+                  seen[m.val] = m
+                  stack.append(m)
+      return [[m.val for m in seen[v].neighbors] for v in sorted(seen)]
+starter: |
+  def clone_graph(node):
+      pass
+hints:
+- You need a map from each original node to its copy.
+- Traverse (BFS/DFS); create the copy the first time you see a node.
+- Always look the neighbor up in the map so cycles terminate and every copy is reused.
+follow_ups:
+- What if the graph is disconnected?
+- How would you clone a directed graph with parallel edges?
+tests:
+- name: square graph
+  tags:
+  - ordering
+  code: |
+    o=build_graph([[2,4],[1,3],[2,4],[1,3]])
+    c=clone_graph(o)
+    assert graph_to_adj(c)==[[2,4],[1,3],[2,4],[1,3]]
+- name: no shared nodes
+  tags:
+  - state-reuse
+  code: |
+    o=build_graph([[2],[1]])
+    c=clone_graph(o)
+    assert c is not o and c.neighbors[0] is not o.neighbors[0]
+    assert c.neighbors[0].neighbors[0] is c
+- name: empty graph
+  tags:
+  - empty
+  code: |
+    assert clone_graph(None) is None
+    assert graph_to_adj(clone_graph(build_graph([[2],[1]])))==[[2],[1]]
+- name: single node, no neighbors
+  tags:
+  - single
+  code: |
+    c=clone_graph(build_graph([[]]))
+    assert c.val==1 and c.neighbors==[]
+- name: self loop
+  tags:
+  - boundary
+  code: |
+    o=build_graph([[1]])
+    c=clone_graph(o)
+    assert c is not o and c.neighbors[0] is c
+- name: large ring
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=5000
+    adj=[[(i-2)%n+1,i%n+1] for i in range(1,n+1)]
+    c=clone_graph(build_graph(adj))
+    assert graph_to_adj(c)==adj
+complexity:
+- op: overall
+  time: O(V + E)
+  space: O(V)
+extensions:
+- q: Disconnected graph
+  kind: reasoning
+  key_points:
+  - A single start node only reaches its component
+  - Loop over all nodes if given a node list
+  - Share the same map across starts
+- q: Recursion versus iteration
+  kind: complexity
+  key_points:
+  - Recursive DFS uses O(V) stack worst case
+  - BFS queue also O(V)
+  - Python recursion limit makes iterative preferable for 5000+ nodes
+- q: 'Design: serialize and clone a directed graph'
+  kind: design
+  key_points:
+  - Assign ids, emit node list plus edge list
+  - Rebuild nodes first, then wire edges
+  - Preserves parallel edges and self loops
+narration: []
+state_aloud:
+- None input.
+- Single node with no neighbors.
+- Self loops and cycles.
+- Neighbors must point to copies, never originals.
+walkthrough: |
+  Keep a dictionary from original nodes to their clones. Starting at the given node, run a DFS or BFS: when a node is first seen, create its clone and register it; for each neighbor, ensure it has a clone too, then append that clone to the current clone's neighbor list. The map both prevents infinite loops on cycles and guarantees shared structure is copied exactly once.

@@ -1,0 +1,194 @@
+id: log-aggregator-bucketing
+title: Metrics / Log Aggregator (time-bucketing)
+bar_level: 2
+target_minutes: 25
+patterns:
+- time-bucketing
+- aggregation
+- retention
+- min-heap
+- observability
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Build the storage core of a metrics system: raw points are rolled up into fixed-width time buckets so
+  queries over a range are cheap and memory is bounded.
+
+  `MetricsAggregator(bucket_seconds, retention_buckets)` (`ValueError` if `bucket_seconds <= 0` or
+  `retention_buckets < 1`):
+  - `record(metric, ts, value) -> bool`: the point goes to the bucket starting at
+    `start = (ts // bucket_seconds) * bucket_seconds` (floor division, works for floats and ints).
+    For each metric only the `retention_buckets` newest bucket starts are kept: let `newest` be the largest
+    bucket start ever recorded for this metric. A point whose bucket start is `<= newest - retention_buckets
+    * bucket_seconds` is too old: return `False` and store nothing. Otherwise store it, return `True`, and if
+    this point raised `newest`, evict every bucket now outside the window. Points may arrive out of order.
+  - `series(metric, start, end) -> list[(bucket_start, count, sum)]`: non-empty buckets whose start `b`
+    satisfies `start <= b < end`, ascending. Unknown metrics, or `end <= start`, give `[]`.
+  - `query(metric, start, end) -> dict`: `{"count", "sum", "min", "max"}` over the same buckets
+    (`min` and `max` are `None` and `count`, `sum` are 0 when nothing matches).
+
+  Each bucket stores `count`, `sum`, `min`, `max`; never keep raw points. A query over a short range must
+  not scan all retained buckets, and a record must not scan the retention window.
+starter: |
+  class MetricsAggregator:
+      def __init__(self, bucket_seconds, retention_buckets):
+          pass
+
+      def record(self, metric, ts, value):
+          pass
+
+      def series(self, metric, start, end):
+          pass
+
+      def query(self, metric, start, end):
+          pass
+hints:
+- 'Per metric: dict bucket_start -> [count, sum, min, max] plus a min-heap of bucket starts to evict oldest
+  buckets in order.'
+- 'For series(): if the range spans fewer bucket slots than there are stored buckets, probe each slot;
+  otherwise filter and sort the keys.'
+- 'Round the query start UP to a bucket boundary: -((-start) // b) * b.'
+follow_ups:
+- 'Downsampling: roll old fine buckets into coarser ones (1s -> 1m -> 1h).'
+- Percentiles per bucket with a mergeable sketch (t-digest or fixed histogram).
+- Rate computation from monotonically increasing counters with reset detection.
+tests:
+- name: values are grouped into time buckets
+  code: |
+    m = MetricsAggregator(60, 100)
+    assert m.record("lat", 5, 10) and m.record("lat", 59, 20) and m.record("lat", 60, 30)
+    assert m.series("lat", 0, 120) == [(0, 2, 30), (60, 1, 30)]
+    assert m.query("lat", 0, 60) == {"count": 2, "sum": 30, "min": 10, "max": 20}
+    assert m.query("lat", 0, 120) == {"count": 3, "sum": 60, "min": 10, "max": 30}
+  hidden: false
+  tags:
+  - time
+  - boundary
+- name: range is [start, end) over bucket starts
+  code: |
+    m = MetricsAggregator(10, 100)
+    for ts in (0, 10, 20, 30):
+        m.record("x", ts, 1)
+    assert [b for b, _, _ in m.series("x", 10, 30)] == [10, 20]
+    assert [b for b, _, _ in m.series("x", 5, 30)] == [10, 20], "start rounds up to the next bucket start"
+    assert m.series("x", 30, 30) == [] and m.series("x", 40, 10) == []
+    assert m.query("x", 100, 200) == {"count": 0, "sum": 0, "min": None, "max": None}
+  hidden: false
+  tags:
+  - boundary
+  - time
+- name: metrics are independent; unknown metrics are empty
+  code: |
+    m = MetricsAggregator(60, 10)
+    m.record("a", 1, 5); m.record("b", 1, 7)
+    assert m.query("a", 0, 60)["sum"] == 5 and m.query("b", 0, 60)["sum"] == 7
+    assert m.series("nothing", 0, 600) == []
+  hidden: false
+  tags:
+  - empty
+  - duplicate
+- name: old buckets are evicted when newer data arrives
+  code: |
+    m = MetricsAggregator(10, 3)
+    for ts in (0, 10, 20):
+        m.record("x", ts, 1)
+    assert [b for b, _, _ in m.series("x", 0, 100)] == [0, 10, 20]
+    m.record("x", 30, 1)                         # keeps buckets 10, 20, 30 (3 newest)
+    assert [b for b, _, _ in m.series("x", 0, 100)] == [10, 20, 30]
+    assert m.record("x", 5, 1) is False, "late point older than the retention window is dropped"
+    assert m.record("x", 15, 1) is True, "late but still inside the window"
+    assert m.query("x", 10, 20)["count"] == 2
+  hidden: false
+  tags:
+  - state-reuse
+  - time
+- name: negative values, floats and out-of-order arrival
+  code: |
+    m = MetricsAggregator(1, 50)
+    m.record("t", 3.5, -2.0); m.record("t", 3.1, 4.0); m.record("t", 1.2, 0.5)
+    assert m.series("t", 0, 10) == [(1, 1, 0.5), (3, 2, 2.0)]
+    assert m.query("t", 0, 10) == {"count": 3, "sum": 2.5, "min": -2.0, "max": 4.0}
+  hidden: true
+  tags:
+  - ordering
+  - invalid
+- name: invalid configuration and single point
+  code: |
+    for args in [(0, 5), (-1, 5), (10, 0)]:
+        try:
+            MetricsAggregator(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    m = MetricsAggregator(60, 1)
+    m.record("x", 100, 3)
+    assert m.query("x", 60, 120) == {"count": 1, "sum": 3, "min": 3, "max": 3}
+    assert m.record("x", 59, 1) is False
+  hidden: true
+  tags:
+  - invalid
+  - single
+  - zero-capacity
+- name: 1M points, 100 metrics, 10k-bucket retention, many range queries
+  code: |
+    m = MetricsAggregator(1, 10000)
+    for i in range(1000000):
+        m.record("m%d" % (i % 100), i // 100, i % 7)
+    total = 0
+    for q in range(2000):
+        total += m.query("m%d" % (q % 100), 9990 - 50, 9990)["count"]
+    assert total == 2000 * 50
+    assert len(m.series("m0", 0, 10 ** 9)) <= 10000
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: record
+  time: O(log B) amortized
+  space: O(M * B)
+- op: query
+  time: O(min(R, B))
+  space: O(1)
+extensions:
+- q: 'Level 2: add `percentile(metric, start, end, p)` using a fixed set of histogram bounds stored per
+    bucket. What changes in the per-bucket record and in merging?'
+  kind: code
+  key_points:
+  - Each bucket stores counts per histogram bound; merging buckets adds the count arrays
+  - The percentile is read from the merged histogram with interpolation inside the final bound, giving
+    bounded relative error
+  - Memory per bucket grows by the number of bounds, which is the accuracy/space trade-off
+- q: How would you use this for LLM serving observability, and what cardinality risks exist?
+  kind: design
+  key_points:
+  - Track tokens/s, time to first token, queue depth and error counts per model and per tenant per bucket
+  - 'Labels multiply series: per-user labels explode memory, so cap label cardinality and aggregate'
+  - Alerting reads recent buckets (compare with rolling-canary-deploy rollback signals)
+- q: 'Late and out-of-order data: how do you decide what to accept?'
+  kind: design
+  key_points:
+  - A retention window defines how late a point can be; older points are dropped and counted
+  - 'Event time bucketing (the point''s own ts) versus ingestion time: event time is correct but needs
+    the late-data policy'
+  - Closed buckets can be finalised and downsampled once the watermark passes them
+- q: Cost of record and query, and memory bound.
+  kind: complexity
+  key_points:
+  - record is O(1) for an existing bucket, O(log B) for a new one; eviction is amortised O(log B) per
+    bucket
+  - query is O(min(R, B)) for R bucket slots in the range and B retained buckets
+  - Memory is O(M * B) for M metrics regardless of the number of raw points
+narration: []
+state_aloud:
+- Bucket by floor(ts / width) * width; ranges are [start, end) over bucket starts.
+- Retention counts buckets, not seconds of wall clock, and is relative to the newest data seen.
+- Late points inside the window are accepted; older ones are rejected.
+- Empty queries return count 0 with min/max None.
+- Never store raw points.
+walkthrough: |
+  Each metric holds a dict of bucket start to [count, sum, min, max] and a min-heap of bucket starts. record floors the timestamp, rejects points older than the retention window relative to the newest bucket, updates or creates the bucket, and when the newest bucket advances pops expired starts from the heap. series either probes each slot of the range or filters the keys, whichever is smaller, so short-range queries stay cheap. query folds the buckets. Standard time-series rollup design; no source note applies.
+categories:
+- ai-infra

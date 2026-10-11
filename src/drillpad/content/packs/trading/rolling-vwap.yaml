@@ -1,0 +1,173 @@
+id: rolling-vwap
+title: Rolling VWAP
+bar_level: 2
+target_minutes: 20
+patterns:
+- sliding-window
+- deque
+- running-sums
+- streaming
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `RollingVWAP(window)`: the volume-weighted average price over a trailing time window.
+
+  - `feed(ts, price, qty) -> float`: record a trade and return the VWAP of all trades whose timestamp is in the
+    half-open window `(ts - window, ts]` (a trade exactly `window` old has EXPIRED), including the one just fed.
+    `VWAP = sum(price * qty) / sum(qty)`.
+  - `query(ts) -> float | None`: the VWAP as of time `ts` without adding a trade (None if the window holds no trades).
+  - Timestamps (ints, e.g. milliseconds) never go backwards across `feed` and `query` calls: raise `ValueError`
+    if they do. Equal timestamps are fine and keep arrival order.
+  - `ValueError` for non-positive price or qty, or a non-positive int `window` in the constructor.
+
+  Prices are int ticks. The result is a float; tests compare with a tolerance of 1e-9.
+  Maintain running sums so each call is O(1) amortized; do not rescan the window.
+starter: |
+  class RollingVWAP:
+      def __init__(self, window):
+          pass
+hints:
+- Keep a deque of (ts, price, qty) plus running sums of price*qty and qty; evict from the left as time
+  advances.
+- 'Decide the boundary up front: here a trade exactly `window` old is expired, so evict while ts_oldest
+  <= ts - window.'
+- Use integer sums and divide only at the end to avoid drift; evict before computing so query() and feed()
+  share one path.
+follow_ups:
+- What if timestamps can arrive out of order?
+- How would you do a count-based window (last N trades) instead?
+- How do you avoid float drift over billions of trades?
+tests:
+- name: single trade and simple average
+  code: |
+    v = RollingVWAP(10)
+    assert abs(v.feed(0, 100, 10) - 100.0) < 1e-9
+    assert abs(v.feed(1, 110, 30) - 107.5) < 1e-9
+    assert abs(v.feed(2, 90, 10) - (1000 + 3300 + 900) / 50) < 1e-9
+  hidden: false
+  tags:
+  - single
+  - ordering
+- name: expiry boundary is half-open
+  code: |
+    v = RollingVWAP(10)
+    v.feed(0, 100, 1)
+    assert abs(v.feed(9, 200, 1) - 150.0) < 1e-9, "age 9 < 10 still in window"
+    assert abs(v.feed(10, 300, 1) - 250.0) < 1e-9, "trade at ts=0 is exactly 10 old and expired"
+    assert abs(v.feed(19, 400, 1) - 350.0) < 1e-9, "ts=9 trade is exactly 10 old (expired); ts=10 remains"
+  hidden: false
+  tags:
+  - boundary
+  - time
+- name: query without adding
+  code: |
+    v = RollingVWAP(5)
+    assert v.query(0) is None
+    v.feed(1, 100, 2); v.feed(3, 200, 2)
+    assert abs(v.query(4) - 150.0) < 1e-9
+    assert abs(v.query(6) - 200.0) < 1e-9, "trade at 1 expired by ts 6"
+    assert v.query(8) is None, "window (3, 8] is empty"
+  hidden: false
+  tags:
+  - empty
+  - time
+- name: same timestamp trades and monotonic check
+  code: |
+    v = RollingVWAP(10)
+    v.feed(5, 100, 1)
+    assert abs(v.feed(5, 200, 3) - 175.0) < 1e-9
+    try:
+        v.feed(4, 100, 1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("time went backwards")
+    try:
+        v.query(3)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("query backwards")
+  hidden: false
+  tags:
+  - duplicate
+  - invalid
+- name: rejects bad input
+  code: |
+    for w in (0, -5):
+        try:
+            RollingVWAP(w)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(w)
+    v = RollingVWAP(3)
+    for args in [(1, 0, 5), (1, 5, 0), (1, -1, 5), (1, 5, -2)]:
+        try:
+            v.feed(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: window of 1 holds only the current timestamp
+  code: |
+    v = RollingVWAP(1)
+    assert abs(v.feed(0, 100, 1) - 100) < 1e-9
+    assert abs(v.feed(0, 200, 1) - 150) < 1e-9
+    assert abs(v.feed(1, 300, 1) - 300) < 1e-9
+  hidden: true
+  tags:
+  - boundary
+  - single
+- name: 'scale: 300k trades'
+  code: |
+    v = RollingVWAP(1000)
+    last = 0
+    for i in range(300000):
+        last = v.feed(i, 1000 + i % 50, 1 + i % 5)
+    assert 1000 <= last <= 1050
+    window_trades = [(t, 1000 + t % 50, 1 + t % 5) for t in range(299000, 300000)]
+    exp = sum(p * q for _, p, q in window_trades) / sum(q for _, _, q in window_trades)
+    assert abs(last - exp) < 1e-9
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: feed/query
+  time: O(1) amortized
+  space: O(W)
+extensions:
+- q: 'Level 2: support multiple symbols and a `vwap_all(ts)` across symbols that is also O(1) per update.'
+  key_points:
+  - Per-symbol state in a dict, global running sums updated by the same add/evict deltas
+  - Eviction must look at every symbol deque or use one global time-ordered deque of (symbol, ...) entries
+  - Query for an idle symbol evicts lazily so stale data never leaks
+  kind: code
+- q: Why is this O(1) amortized and what is the memory bound?
+  key_points:
+  - Each trade is appended once and popped once, so total work is O(n) for n calls
+  - Memory is O(W) where W is the number of trades inside the window, bounded by the trade rate times
+    window length
+  - Exact int sums avoid O(window) recomputation and floating-point drift
+  kind: complexity
+- q: 'Design: VWAP benchmarks for execution (e.g. algos that track interval VWAP). What else do you need?'
+  key_points:
+  - Clock injected via event timestamps, not wall time, so replay and tests are deterministic
+  - Handle busts/corrections by emitting negative-qty reversals or recomputing from the log
+  - Late or out-of-order ticks need a reorder buffer or a heap with lazy deletion
+  kind: design
+narration: []
+state_aloud:
+- Window is (ts - window, ts]; a trade exactly window old is expired.
+- Timestamps never decrease; non-positive price or qty rejected.
+- Empty window returns None from query; integer sums, divide at the end.
+walkthrough: |
+  Standard rolling VWAP: deque of trades with running sum(price*qty) and sum(qty), evicting expired trades on every call. Source: standard formulation.
+categories:
+- trading

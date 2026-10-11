@@ -1,0 +1,190 @@
+id: autoscaler-policy
+title: Autoscaler Policy Simulator
+bar_level: 3
+target_minutes: 35
+patterns:
+- autoscaler
+- sliding-window-maximum
+- monotonic-deque
+- stabilization-window
+- simulation
+firm_tags:
+- ai-infra
+- distsys
+anki_queries: []
+statement: |
+  Simulate a replica autoscaler with fast scale-up and slow scale-down (the shape of a horizontal pod
+  autoscaler with a stabilisation window).
+
+  `Autoscaler(min_replicas, max_replicas, target_per_replica, down_window)` starts with `min_replicas`
+  replicas. `ValueError` unless `1 <= min_replicas <= max_replicas`, `target_per_replica > 0`,
+  `down_window >= 0`.
+
+  `observe(now, load) -> int` is called with non-decreasing timestamps (`ValueError` if `now` goes
+  backwards or `load < 0`) and returns the replica count after this observation:
+  1. `desired = clamp(ceil(load / target_per_replica), min_replicas, max_replicas)`.
+  2. If `desired > replicas`: scale up to `desired` immediately.
+  3. Otherwise compute `stable = max(desired values of all observations with now - ts < down_window,
+     including this one)`. If `stable < replicas`, scale down to `stable`. Else keep `replicas`.
+     Observation times are the `now` of earlier calls; an observation older than or exactly
+     `down_window` seconds is expired. With `down_window == 0` only the current observation counts.
+
+  Loads are non-negative numbers; the tests avoid float rounding at exact multiples of the target.
+
+  Example (min 1, max 10, target 10, window 60): `observe(0, 35) -> 4`, `observe(10, 5) -> 4` (the
+  window still holds desired=4), `observe(60, 5) -> 1`.
+
+  Do not rescan the window on every call: there can be hundreds of thousands of observations.
+starter: |
+  class Autoscaler:
+      def __init__(self, min_replicas, max_replicas, target_per_replica, down_window):
+          pass
+
+      def observe(self, now, load):
+          pass
+hints:
+- 'The scale-down decision needs a sliding-window MAXIMUM of desired values: a monotonic deque of (ts,
+  desired) with decreasing desired.'
+- Before appending a new desired, pop back entries that are <= it (they can never be the max again). Pop
+  front entries that expired.
+- Scale up is computed from the current desired only; the window affects scale-down only.
+follow_ups:
+- Rate limit scale-up (at most +50% per minute) and scale-down (at most -1 per minute).
+- Separate up/down cooldowns after an action.
+- Predictive scaling using a forecast of the next window.
+tests:
+- name: scales up immediately
+  code: |
+    a = Autoscaler(1, 10, 10, 60)
+    assert a.observe(0, 35) == 4
+    assert a.observe(1, 100) == 10
+    assert a.observe(2, 1000) == 10, "clamped to max_replicas"
+  hidden: false
+  tags:
+  - time
+  - boundary
+- name: scale down waits for the stabilisation window
+  code: |
+    a = Autoscaler(1, 10, 10, 60)
+    assert a.observe(0, 35) == 4
+    assert a.observe(10, 5) == 4, "window still contains desired=4"
+    assert a.observe(59, 5) == 4, "observation at t=0 is still inside (59 - 0 < 60)"
+    assert a.observe(60, 5) == 1, "t=0 expires when now - ts >= window"
+  hidden: false
+  tags:
+  - time
+  - state-reuse
+- name: scale down goes to the highest desired in the window, not straight to the minimum
+  code: |
+    a = Autoscaler(2, 20, 10, 30)
+    assert a.observe(0, 150) == 15
+    assert a.observe(20, 60) == 15
+    assert a.observe(40, 25) == 6, "t=0 expired; window holds desired 6 (t=20) and 3 (t=40)"
+    assert a.observe(70, 25) == 3
+  hidden: false
+  tags:
+  - time
+  - ordering
+- name: floor, zero load and exact multiples
+  code: |
+    a = Autoscaler(2, 5, 10, 0)
+    assert a.observe(0, 0) == 2
+    assert a.observe(1, 20) == 2 and a.observe(2, 21) == 3
+    assert a.observe(3, 0) == 2, "window 0: nothing remembered, scale down at once"
+  hidden: false
+  tags:
+  - boundary
+  - empty
+  - zero-capacity
+- name: invalid config and time going backwards
+  code: |
+    for cfg in [(0, 5, 10, 1), (3, 2, 10, 1), (1, 5, 0, 1), (1, 5, 10, -1)]:
+        try:
+            Autoscaler(*cfg)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(cfg)
+    a = Autoscaler(1, 5, 10, 10)
+    a.observe(5, 10)
+    for args in [(4, 10), (6, -1)]:
+        try:
+            a.observe(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+  hidden: true
+  tags:
+  - invalid
+- name: flapping load does not flap replicas
+  code: |
+    a = Autoscaler(1, 10, 10, 10)
+    outs = [a.observe(t, 80 if t % 2 == 0 else 10) for t in range(20)]
+    assert outs[0] == 8 and set(outs) == {8}, outs
+    assert a.observe(30, 10) == 1
+  hidden: true
+  tags:
+  - state-reuse
+  - duplicate
+- name: 500k observations with a 600s window
+  code: |
+    import random
+    rng = random.Random(3)
+    a = Autoscaler(1, 100, 10, 600)
+    peak = 1
+    for t in range(500000):
+        load = 500 + 400 * ((t // 5000) % 2) + rng.randrange(100)
+        peak = max(peak, a.observe(t, load))
+    assert a.observe(500000, 0) >= 1 and peak <= 100
+    assert a.observe(501000, 0) == 1
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: observe
+  time: O(1) amortized
+  space: O(W)
+extensions:
+- q: 'Level 2: add a cooldown after any scale event: no scale-down for `cooldown` seconds after the last
+    change, and a max step of `max_step` replicas per observation.'
+  kind: code
+  key_points:
+  - Track last_change_ts; scale-down is allowed only when now - last_change_ts >= cooldown
+  - 'Step limiting: replicas moves by at most max_step toward the target, so the policy may need several
+    observations to converge'
+  - Keep the stabilisation window logic separate so each rule can be tested alone
+- q: What signal would you scale an LLM inference fleet on, and why is CPU a bad choice?
+  kind: design
+  key_points:
+  - Queue depth, in-flight tokens or requests per replica, and KV-cache utilisation track real saturation
+    of GPU serving
+  - GPU model servers batch, so utilisation can stay high while latency is fine, and CPU says nothing
+    about GPU memory
+  - Scale-up has long lead time (model load, GPU provisioning), so keep warm capacity and scale on leading
+    indicators
+- q: Why scale up fast but down slow, and what failure does each choice avoid?
+  kind: reasoning
+  key_points:
+  - Under-provisioning breaks latency SLOs immediately, over-provisioning only costs money
+  - A stabilisation window avoids flapping when load is noisy and avoids paying repeated cold starts
+  - The window length trades cost against responsiveness; it should exceed the cold-start time
+- q: Why is a monotonic deque needed and what is its cost?
+  kind: complexity
+  key_points:
+  - Scanning the window per call is O(W); a monotonic deque gives O(1) amortised because each entry is
+    pushed and popped once
+  - Space is O(W) in the worst case (strictly decreasing desired values)
+  - Heap with lazy deletion would be O(log W)
+narration: []
+state_aloud:
+- Scale-up is immediate, scale-down is delayed by a window of recent desired values.
+- 'Window boundary: an observation at exactly now - down_window is expired.'
+- Clamp desired to [min, max] before it enters the window.
+- Timestamps must be non-decreasing; load non-negative.
+- window 0 means no memory.
+walkthrough: |
+  Each observation turns load into a clamped desired count. Scale-up uses the current desired alone. Scale-down uses the maximum desired seen in the last down_window seconds, maintained as a monotonic deque (entries behind a larger-or-equal new value are dropped, expired fronts are popped), so each observation is O(1) amortised. The behaviour mirrors a stabilisation window in a horizontal autoscaler; this problem's rules are stated explicitly in the statement. No source note applies.
+categories:
+- ai-infra

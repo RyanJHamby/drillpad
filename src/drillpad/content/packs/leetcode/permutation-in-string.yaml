@@ -1,0 +1,98 @@
+id: permutation-in-string
+title: Permutation in String
+bar_level: 2
+target_minutes: 22
+patterns:
+- sliding-window
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Permutation in String (LC 567)"
+statement: |
+  Given strings `s1` and `s2`, return `True` if some contiguous substring of `s2` is a rearrangement of `s1` (same characters, same counts), otherwise `False`.
+
+  Example: `check_inclusion("ab", "eidbaooo")` is `True` because `"ba"` appears; `check_inclusion("ab", "eidboaoo")` is `False`.
+starter: |
+  def check_inclusion(s1, s2):
+      pass
+hints:
+- The substring must have exactly len(s1) characters.
+- Slide a fixed-size window over s2 and keep its character counts.
+- Compare counts with those of s1; updating by one entering and one leaving character avoids recounting.
+follow_ups:
+- Make the comparison O(1) per step using a match counter.
+- Find all start indices (Find All Anagrams).
+tests:
+- name: present
+  tags:
+  - ordering
+  code: |
+    assert check_inclusion('ab','eidbaooo') is True
+- name: absent
+  tags:
+  - invalid
+  code: |
+    assert check_inclusion('ab','eidboaoo') is False
+- name: s1 longer than s2
+  tags:
+  - boundary
+  code: |
+    assert check_inclusion('abc','ab') is False
+- name: empty s1
+  tags:
+  - empty
+  code: |
+    assert check_inclusion('','abc') is True
+- name: single char
+  tags:
+  - single
+  code: |
+    assert check_inclusion('a','a') is True
+    assert check_inclusion('a','b') is False
+- name: repeated letters need matching counts
+  tags:
+  - duplicate
+  code: |
+    assert check_inclusion('aab','abab') is True
+    assert check_inclusion('aab','abbb') is False
+- name: long text
+  tags:
+  - scale
+  hidden: true
+  code: |
+    s1='ab'*2500
+    s2='c'*195000+'ba'*2500+'c'*5
+    assert check_inclusion(s1,s2) is True
+    assert check_inclusion(s1,'c'*200000) is False
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Cost of comparing count arrays each step.
+  kind: complexity
+  key_points:
+  - 'Naively O(26) per step: O(26 n)'
+  - Track a matches counter to get O(1) per step
+  - Space is O(alphabet)
+- q: Return all starting indices.
+  kind: design
+  key_points:
+  - Same window, collect index when counts equal
+  - Handle overlapping matches
+  - O(n) time
+- q: Why not sort each window?
+  kind: reasoning
+  key_points:
+  - Costs O(m log m) per window, O(n m log m) total
+  - Counts are order independent
+  - A fixed window makes incremental updates trivial
+narration: []
+state_aloud:
+- len(s1) > len(s2) is False.
+- Empty s1 is trivially included.
+- Counts, not just membership.
+walkthrough: |
+  A permutation of `s1` is exactly a window of length `len(s1)` with identical letter counts. Count `s1`, then slide a window over `s2`, adding the entering character and removing the leaving one. After each shift compare the two count maps; equality means a permutation exists.

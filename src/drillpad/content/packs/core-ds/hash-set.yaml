@@ -1,0 +1,121 @@
+id: hash-set
+title: Hash set on chaining buckets
+bar_level: 1
+target_minutes: 15
+patterns: [hash-table, chaining, set]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:10 - *"'
+statement: |
+  Implement `HashSet(capacity=8, load_factor=0.75)` from scratch (no set/dict) with chaining
+  buckets that store bare keys. API: `add(k)` (idempotent), `contains(k)`, `remove(k)`
+  (KeyError if absent), `len()`, and `k in s`. Double and rehash past the load factor.
+starter: |
+  class HashSet:
+      def __init__(self, capacity=8, load_factor=0.75):
+          pass
+hints:
+  - add must check for a duplicate before appending, and only then bump the size.
+  - Rehash through add so duplicates cannot appear during a resize.
+follow_ups:
+  - Why build on chaining rather than open addressing?
+  - Implement union, intersection and difference (iterate the smaller set for intersection).
+  - Can it be generic over any hashable type?
+  - What is the memory saving over a map with dummy values?
+tests:
+  - name: add contains remove
+    tags: [invalid]
+    code: |
+      s = HashSet()
+      s.add("a"); s.add("b")
+      assert s.contains("a") and "b" in s and not s.contains("c")
+      s.remove("a")
+      assert not s.contains("a") and len(s) == 1
+  - name: duplicate add is idempotent
+    tags: [duplicate, single, empty]
+    code: |
+      s = HashSet()
+      for _ in range(5): s.add(7)
+      assert len(s) == 1
+      s.remove(7)
+      assert len(s) == 0 and not s.contains(7)
+  - name: remove missing raises
+    tags: [empty, invalid]
+    code: |
+      s = HashSet()
+      try: s.remove(1)
+      except KeyError: pass
+      else: raise AssertionError("expected KeyError")
+  - name: many elements across resizes
+    tags: [scale, boundary, duplicate]
+    hidden: true
+    code: |
+      s = HashSet(capacity=2)
+      for i in range(1000): s.add(i)
+      for i in range(0, 1000, 3): s.add(i)
+      assert len(s) == 1000
+      assert all(i in s for i in range(1000)) and 1000 not in s
+      for i in range(500): s.remove(i)
+      assert len(s) == 500 and 499 not in s and 500 in s
+  - name: reinsert after remove
+    tags: [state-reuse, single]
+    hidden: true
+    code: |
+      s = HashSet()
+      for _ in range(3):
+          s.add("x")
+          assert s.contains("x") and len(s) == 1
+          s.remove("x")
+          assert not s.contains("x") and len(s) == 0
+complexity:
+- op: add/contains/remove
+  time: O(1) expected
+  space: O(n)
+- op: add/contains/remove (worst case)
+  time: O(n) worst case
+  space: O(n)
+- op: resize
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why build on chaining rather than open addressing?
+  kind: reasoning
+  key_points:
+  - Delete is simpler (no tombstones)
+  - Either works; open addressing is an equally valid backing
+  - Chaining tolerates load factor above 1 gracefully
+- q: Implement union, intersection and difference.
+  kind: code
+  key_points:
+  - 'Union: add all of both'
+  - 'Intersection: iterate the smaller set and probe the larger, O(min(n, m))'
+  - 'Difference is asymmetric: iterate a, keep elements not in b'
+- q: What is the memory saving over a map with dummy values, and the cost profile?
+  kind: complexity
+  key_points:
+  - No value slot per entry (about one pointer less per entry)
+  - Time O(1) expected, O(n) worst case on heavy collisions
+  - Resize O(n), amortized O(1) per add
+  - Space O(n)
+- q: Can it be generic over any hashable type? What about mutable keys?
+  kind: design
+  key_points:
+  - Only relies on hash() and ==
+  - Keys must be immutable or at least not mutated after insertion
+  - Mutating a key breaks its bucket placement invariant
+narration:
+- I'll build this directly on the chaining bucket structure from the hash map, just dropping the value half of each pair.
+- '[silent] silently write add/contains'
+- Add needs an explicit duplicate check so it's idempotent, unlike appending blindly.
+- '[silent] silently write remove and resize'
+- Resize reuses add rather than raw appends, so it can't accidentally reintroduce duplicates during rehash.
+- Let me trace adding the same key twice and confirm size only increments once.
+state_aloud:
+- Duplicate `add` calls — must be idempotent (no size increment, no duplicate bucket entry), unlike a list-based multiset.
+- '`remove` on a missing key — raise `KeyError` to match set semantics rather than silently ignoring.'
+- Set operations (union/intersection) if asked — note they'd iterate the smaller set's buckets and probe the larger, for O(min(n, m)) rather than O(n + m) naively.
+- 'Resize correctness — same as the backing map: rehash must happen after capacity changes, using `add` (not a raw append) so duplicates during rehash can''t occur.'
+- 'Storing mutable objects as keys — same caveat as any hash-based structure: mutating a key after insertion breaks its bucket placement invariant.'
+walkthrough: |
+  The set reuses the chaining bucket and resize machinery but stores bare keys with no value half. `add`, `contains` and `remove` are O(1) expected and O(n) worst case, and resize is amortized O(1) per operation. `add` needs an explicit duplicate check so it is idempotent, and `remove` on a missing key raises `KeyError`. Resize re-inserts through `add` so duplicates cannot reappear during rehash. Keys must be hashable and effectively immutable, since mutating a key after insertion breaks its bucket placement.
+categories: [leetcode, trading, ai-infra, systems-impl]

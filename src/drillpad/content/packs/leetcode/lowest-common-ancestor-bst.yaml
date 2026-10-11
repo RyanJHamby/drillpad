@@ -1,0 +1,136 @@
+id: lowest-common-ancestor-bst
+title: Lowest Common Ancestor of a BST
+bar_level: 2
+target_minutes: 20
+patterns:
+- tree-dfs
+- binary-search
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Lowest Common Ancestor BST (LC 235)"
+statement: |
+  In a binary search tree (unique values), the lowest common ancestor of two values `p` and `q` is the deepest node that has both as descendants, where a node counts as a descendant of itself. Given the root and the two values (both exist in the tree), return the LCA **node**. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: in `[6,2,8,0,4,7,9,None,None,3,5]`, the LCA of `2` and `8` is the node `6`; the LCA of `2` and `4` is the node `2`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def lowest_common_ancestor(root, p, q):
+      pass
+hints:
+- Use the BST ordering instead of searching both subtrees.
+- If both values are smaller than the current node, the answer is in the left subtree; if both are larger,
+  in the right.
+- Otherwise the values split here (or one equals the node), so this node is the answer.
+follow_ups:
+- What if it is a general binary tree, not a BST?
+- Do it iteratively with O(1) extra space.
+tests:
+- name: values split at the root
+  tags:
+  - ordering
+  code: |
+    r = build_tree([6,2,8,0,4,7,9,None,None,3,5])
+    assert lowest_common_ancestor(r, 2, 8).val == 6
+- name: one value is the ancestor
+  tags:
+  - boundary
+  code: |
+    r = build_tree([6,2,8,0,4,7,9,None,None,3,5])
+    assert lowest_common_ancestor(r, 2, 4).val == 2
+    assert lowest_common_ancestor(r, 6, 9).val == 6
+- name: deep pair
+  tags:
+  - ordering
+  code: |
+    r = build_tree([6,2,8,0,4,7,9,None,None,3,5])
+    assert lowest_common_ancestor(r, 3, 5).val == 4
+    assert lowest_common_ancestor(r, 0, 5).val == 2
+- name: same value twice
+  tags:
+  - duplicate
+  code: |
+    r = build_tree([6,2,8,0,4,7,9,None,None,3,5])
+    assert lowest_common_ancestor(r, 7, 7).val == 7
+- name: two-node tree
+  tags:
+  - single
+  code: |
+    r = build_tree([2,1])
+    assert lowest_common_ancestor(r, 2, 1).val == 2
+    assert lowest_common_ancestor(r, 1, 1).val == 1
+- name: negative values
+  tags:
+  - invalid
+  code: |
+    r = build_tree([0,-5,5,-8,-2,2,8])
+    assert lowest_common_ancestor(r, -8, -2).val == -5
+    assert lowest_common_ancestor(r, -2, 8).val == 0
+- name: deep skewed BST
+  hidden: true
+  tags:
+  - scale
+  code: |
+    root = cur = TreeNode(0)
+    for i in range(1, 50000):
+        cur.right = TreeNode(i)
+        cur = cur.right
+    assert lowest_common_ancestor(root, 49998, 49999).val == 49998
+    assert lowest_common_ancestor(root, 10, 49999).val == 10
+complexity:
+- op: overall
+  time: O(h)
+  space: O(1)
+extensions:
+- q: Iterative vs recursive?
+  kind: complexity
+  key_points:
+  - Both walk one root-to-node path so O(h) time
+  - Iterative uses O(1) space
+  - Recursive uses O(h) stack and can overflow on skewed trees
+- q: General binary tree LCA?
+  kind: design
+  key_points:
+  - No ordering so search both subtrees
+  - Return a node if it matches, combine child results
+  - The node where both sides return non-null is the LCA, O(n)
+- q: Why can the node itself be the LCA?
+  kind: reasoning
+  key_points:
+  - A node is a descendant of itself by definition
+  - When p equals the current value the loop stops there
+  - Handles p == q and ancestor cases uniformly
+narration: []
+state_aloud:
+- p or q equals an ancestor node.
+- p equals q.
+- Use BST ordering; do not search the whole tree.
+- Skewed BST makes recursion deep; prefer a loop.
+walkthrough: |
+  Start at the root and walk down. If both values are less than the current node's value, move left; if both are greater, move right. The first node where they are not both on the same side (they split, or one equals the node) is the lowest common ancestor. This follows a single path, so it takes O(h) time and O(1) space.

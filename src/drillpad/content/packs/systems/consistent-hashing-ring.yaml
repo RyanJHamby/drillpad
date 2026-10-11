@@ -1,0 +1,202 @@
+id: consistent-hashing-ring
+title: Consistent Hashing Ring
+bar_level: 3
+target_minutes: 35
+patterns:
+- consistent-hashing
+- bisect
+- virtual-nodes
+- sharding
+firm_tags:
+- distsys
+- ai-infra
+statement: |
+  Implement `HashRing(vnodes=100, hash_fn=None)`, a consistent hashing ring with virtual nodes.
+
+  - Each node is placed on the ring at `vnodes` points. The `i`-th point of `node` (i from 0) is
+    `hash_fn(f"{node}#{i}")`. `hash_fn(str) -> int`; the default is the first 8 bytes of the md5
+    digest as a big-endian integer (deterministic across runs; do NOT use built-in `hash`).
+  - `add_node(node)` / `remove_node(node)`: adding an existing node or removing a missing one is a
+    no-op.
+  - `get_node(key)` -> owner of `key` (a string): hash it with `hash_fn(key)` and take the first
+    ring point with value `>= hash`, wrapping around to the smallest point. Returns `None` when
+    the ring is empty.
+  - `get_nodes(key, n)` -> list of up to `n` *distinct* nodes found walking clockwise from the
+    key's position (the replica set); the first equals `get_node(key)`.
+
+  Example (vnodes=1 and `hash_fn=lambda s: int(s.split("#")[0])`)
+  ```python
+  r = HashRing(vnodes=1, hash_fn=...); [r.add_node(x) for x in ("10", "20", "30")]
+  r.get_node("15") -> "20";  r.get_node("20") -> "20";  r.get_node("35") -> "10"
+  r.get_nodes("15", 2) -> ["20", "30"]
+  ```
+starter: |
+  class HashRing:
+      def __init__(self, vnodes=100, hash_fn=None):
+          pass
+
+      def add_node(self, node):
+          pass
+
+      def remove_node(self, node):
+          pass
+
+      def get_node(self, key):
+          pass
+
+      def get_nodes(self, key, n):
+          pass
+hints:
+- Keep a sorted list of ring positions plus a dict position -> node.
+- bisect_left on the key hash gives the first point >= hash; use modulo for wraparound.
+- For replicas, keep walking clockwise and skip nodes already collected.
+follow_ups:
+- What happens on a hash collision between two vnodes?
+- How do you avoid pausing lookups during a rebalance?
+tests:
+- name: clockwise lookup and wraparound
+  tags:
+  - boundary
+  - ordering
+  code: |
+    h = lambda s: int(s.split("#")[0])
+    r = HashRing(vnodes=1, hash_fn=h)
+    for x in ("10", "20", "30"):
+        r.add_node(x)
+    assert r.get_node("15") == "20"
+    assert r.get_node("20") == "20"
+    assert r.get_node("21") == "30"
+    assert r.get_node("35") == "10"
+    assert r.get_node("5") == "10"
+- name: empty ring
+  tags:
+  - empty
+  - invalid
+  code: |
+    r = HashRing(vnodes=3)
+    assert r.get_node("x") is None
+    assert r.get_nodes("x", 2) == []
+    r.add_node("a")
+    assert r.get_node("x") == "a"
+    r.remove_node("a"); r.remove_node("a")
+    assert r.get_node("x") is None
+- name: replica set is distinct and clockwise
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    r = HashRing(vnodes=3, hash_fn=lambda s: int(s.split("#")[0]) + (int(s.split("#")[1]) if "#" in s else 0))
+    for x in ("10", "20", "30"):
+        r.add_node(x)
+    assert r.get_nodes("15", 2) == ["20", "30"]
+    assert r.get_nodes("15", 5) == ["20", "30", "10"]
+    assert r.get_nodes("15", 1) == [r.get_node("15")]
+    r.add_node("20")   # duplicate add is a no-op
+    assert r.get_nodes("15", 3) == ["20", "30", "10"]
+- name: removal only moves the removed nodes keys
+  tags:
+  - state-reuse
+  - scale
+  code: |
+    r = HashRing(vnodes=50)
+    for n in ("a", "b", "c", "d"):
+        r.add_node(n)
+    keys = ["key%d" % i for i in range(3000)]
+    before = {k: r.get_node(k) for k in keys}
+    r.remove_node("c")
+    after = {k: r.get_node(k) for k in keys}
+    for k in keys:
+        if before[k] != "c":
+            assert after[k] == before[k], "a key not owned by the removed node moved"
+        else:
+            assert after[k] != "c"
+    assert any(v == "c" for v in before.values())
+- name: balance across nodes
+  hidden: true
+  tags:
+  - scale
+  - single
+  code: |
+    r = HashRing(vnodes=100)
+    nodes = ["n%d" % i for i in range(4)]
+    for n in nodes: r.add_node(n)
+    counts = {n: 0 for n in nodes}
+    for i in range(10000):
+        counts[r.get_node("user:%d" % i)] += 1
+    assert all(1500 <= c <= 3500 for c in counts.values()), counts
+- name: adding a node moves about 1/N of keys
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    r = HashRing(vnodes=100)
+    for n in ("a", "b", "c", "d"): r.add_node(n)
+    keys = ["k%d" % i for i in range(5000)]
+    before = {k: r.get_node(k) for k in keys}
+    r.add_node("e")
+    moved = [k for k in keys if r.get_node(k) != before[k]]
+    assert all(r.get_node(k) == "e" for k in moved)
+    assert 0.08 * len(keys) < len(moved) < 0.35 * len(keys), len(moved)
+- name: deterministic across instances
+  hidden: true
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    a = HashRing(vnodes=20); b = HashRing(vnodes=20)
+    for n in ("x", "y", "z"):
+        a.add_node(n)
+    for n in ("z", "y", "x"):
+        b.add_node(n)
+    assert all(a.get_node(str(i)) in ("x", "y", "z") and a.get_node(str(i)) == b.get_node(str(i)) for i in range(500))
+complexity:
+- op: get_node
+  time: O(log n)
+  space: O(n)
+- op: add_node
+  time: O(n) worst case
+  space: O(n)
+- op: remove_node
+  time: O(n) worst case
+  space: O(n)
+extensions:
+- q: State the costs with N nodes and V virtual nodes each.
+  kind: complexity
+  key_points:
+  - 'get_node is a binary search over N*V points: O(log(N*V))'
+  - add_node does V sorted insertions (O(V*N*V) with a list) or one O(N*V log) rebuild; remove is a linear
+    filter
+  - Space is O(N*V) ring points
+- q: How many virtual nodes, and how do you handle heterogeneous node capacity?
+  kind: design
+  key_points:
+  - More vnodes smooth load variance (stddev ~ 1/sqrt(V)) at the cost of memory and slower membership
+    changes
+  - Give bigger nodes proportionally more vnodes (weights)
+  - Compare with rendezvous (HRW) hashing and jump hash as alternatives
+- q: How do replication and node failure work on top of the ring?
+  kind: design
+  key_points:
+  - Store each key on the next N distinct nodes clockwise (preference list)
+  - Skip virtual nodes of the same physical node or rack when picking replicas
+  - On failure, only the successor ranges are re-replicated, bounded data movement
+- q: Why consistent hashing over hash(key) % N?
+  kind: reasoning
+  key_points:
+  - Modulo remaps almost every key when N changes
+  - Ring moves only about 1/N of keys when a node joins or leaves
+  - Hash must be stable across processes, so avoid language built-in hash
+narration: []
+state_aloud:
+- Wraparound past the largest point to the smallest.
+- Exact hit on a point belongs to that point (>=).
+- Empty ring returns None.
+- Stable hash, not Python's randomised built-in hash.
+walkthrough: Each node adds `vnodes` points at hash(node#i) into a sorted list with a position-to-node
+  map. A lookup hashes the key, bisects for the first point at or after it (wrapping with modulo) and
+  returns its owner. Replica sets keep walking clockwise collecting distinct nodes. Lookup is O(log(N*V));
+  membership changes are linear in ring size with a list.
+anki_queries: []
+categories:
+- systems-impl

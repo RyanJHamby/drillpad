@@ -1,0 +1,363 @@
+id: cpp-arena-allocator
+title: Arena (Bump) Allocator and Object Pool
+language: cpp
+bar_level: 3
+target_minutes: 40
+patterns:
+- arena
+- bump-allocator
+- alignment
+- object-pool
+- free-list
+- placement-new
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Implement two allocation-free-after-startup building blocks (C++20). Neither may call `malloc`/`new` after construction
+  (the pool may use one `std::vector` or buffer allocated in its constructor).
+
+  `class Arena(size_t capacity_bytes)`: a bump allocator over one owned buffer.
+  - `void* allocate(size_t size, size_t align = alignof(std::max_align_t))`: the returned ADDRESS is a multiple of `align`
+    (the buffer's own base address is only guaranteed `max_align_t`-aligned, so align the absolute address, not the offset).
+    Returns `nullptr` if it does not fit or if `align` is not a power of two. A failed request must not consume any space,
+    and huge sizes must not overflow the arithmetic.
+  - `template <class T, class... Args> T* create(Args&&...)`: allocate with `sizeof(T)`/`alignof(T)` and placement-new;
+    `nullptr` when full. The arena never runs destructors.
+  - `reset()` rewinds to the start; `used()` is bytes consumed including padding; `capacity()`.
+
+  `template <class T> class ObjectPool(size_t capacity)`: fixed slots with an intrusive free list.
+  - `T* acquire(Args&&...)`: construct a `T` in a free slot, `nullptr` when exhausted
+  - `void release(T*)`: destroy the object and push its slot on the free list (the slot just released is the next one reused)
+  - `available()`, `capacity()`. Slots must be suitably aligned for over-aligned `T` (e.g. `alignas(32)`).
+  - Hint: a free slot can store the "next free" pointer in its own bytes (a `union`).
+
+  Example:
+  ```cpp
+  Arena a(1024);
+  void* p = a.allocate(16, 64);   // 64-byte aligned address
+  ObjectPool<Order> pool(1000);
+  Order* o = pool.acquire(id, px, qty);
+  pool.release(o);
+  ```
+starter: |
+  // Fixed-capacity bump allocator. Owns one buffer; never calls malloc after construction.
+  class Arena {
+  public:
+      explicit Arena(std::size_t capacity_bytes) { (void)capacity_bytes; }
+      Arena(const Arena&) = delete;
+      Arena& operator=(const Arena&) = delete;
+
+      // Returns nullptr if there is not enough room or `align` is not a power of two.
+      // The returned ADDRESS (not just the offset) is a multiple of `align`.
+      void* allocate(std::size_t size, std::size_t align = alignof(std::max_align_t)) {
+          (void)size; (void)align; return nullptr;
+      }
+      // Allocate and construct a T (destructors are never run by the arena). nullptr when full.
+      template <class T, class... Args>
+      T* create(Args&&... args) { return nullptr; }
+      void reset() {}
+      std::size_t used() const { return 0; }       // bytes consumed so far, including alignment padding
+      std::size_t capacity() const { return 0; }
+  };
+
+  // Fixed-size pool of T slots with an intrusive free list. No allocation after construction.
+  template <class T>
+  class ObjectPool {
+  public:
+      explicit ObjectPool(std::size_t capacity) { (void)capacity; }
+      ObjectPool(const ObjectPool&) = delete;
+      ObjectPool& operator=(const ObjectPool&) = delete;
+
+      // Construct a T in a free slot; nullptr if the pool is exhausted.
+      template <class... Args>
+      T* acquire(Args&&... args) { return nullptr; }
+      // Destroy *p and return its slot. p must come from this pool's acquire().
+      void release(T* p) { (void)p; }
+      std::size_t available() const { return 0; }
+      std::size_t capacity() const { return 0; }
+  };
+prelude: |
+  struct Counted {
+      static inline int live = 0;
+      int id;
+      explicit Counted(int i) : id(i) { ++live; }
+      Counted(const Counted&) = delete;
+      ~Counted() { --live; }
+  };
+  struct alignas(32) Wide { double v[4]; explicit Wide(double x) { for (double& d : v) d = x; } };
+hints:
+- 'Bump pointer: offset into the buffer. To align, compute on the real address: aligned = (base + offset
+  + align - 1) & ~(align - 1), then pad = aligned - (base + offset).'
+- Check fit as `size > remaining - pad` (not `offset + pad + size > cap`) so a huge size cannot wrap around,
+  and only commit the new offset after the check passes.
+- 'Pool: `union Slot { Slot* next; alignas(T) unsigned char storage[sizeof(T)]; }` in a vector sized in
+  the constructor; thread the free list through the slots, acquire pops and placement-news, release calls
+  ~T and pushes.'
+follow_ups:
+- Why is arena allocation so much faster than malloc, and what do you give up (individual free, destructors)?
+- How would you make the arena thread-safe without a mutex (per-thread arenas, atomic fetch_add on the
+  offset)?
+- What is the ABA problem for a lock-free free list and how do tagged pointers or hazard pointers address
+  it?
+- How do you integrate an arena with std::pmr (std::pmr::monotonic_buffer_resource) so standard containers
+  allocate from it?
+tests:
+- name: allocations are distinct and writable
+  tags:
+  - single
+  - ordering
+  code: |
+    Arena a(256);
+    CHECK_EQ(a.capacity(), 256u);
+    char* p = static_cast<char*>(a.allocate(10, 1));
+    char* q = static_cast<char*>(a.allocate(10, 1));
+    CHECK(p != nullptr && q != nullptr);
+    CHECK(q >= p + 10);
+    std::memset(p, 'a', 10);
+    std::memset(q, 'b', 10);
+    for (int i = 0; i < 10; i++) { CHECK_EQ(p[i], 'a'); CHECK_EQ(q[i], 'b'); }
+    CHECK_EQ(a.used(), 20u);
+- name: returned addresses honour alignment
+  tags:
+  - boundary
+  - ordering
+  code: |
+    Arena a(1024);
+    void* p1 = a.allocate(1, 1);
+    void* p2 = a.allocate(8, 8);
+    void* p3 = a.allocate(3, 1);
+    void* p4 = a.allocate(16, 64);
+    void* p5 = a.allocate(1, 2);
+    void* p6 = a.allocate(8, 128);
+    CHECK(p1 && p2 && p3 && p4 && p5 && p6);
+    CHECK_EQ(reinterpret_cast<std::uintptr_t>(p2) % 8, std::uintptr_t{0});
+    CHECK_EQ(reinterpret_cast<std::uintptr_t>(p4) % 64, std::uintptr_t{0});
+    CHECK_EQ(reinterpret_cast<std::uintptr_t>(p5) % 2, std::uintptr_t{0});
+    CHECK_EQ(reinterpret_cast<std::uintptr_t>(p6) % 128, std::uintptr_t{0});
+    CHECK(static_cast<char*>(p2) >= static_cast<char*>(p1) + 1);
+    CHECK(static_cast<char*>(p4) >= static_cast<char*>(p3) + 3);
+- name: default alignment is max_align_t
+  tags:
+  - boundary
+  - single
+  code: |
+    Arena a(512);
+    a.allocate(1, 1);
+    void* p = a.allocate(24);
+    CHECK(p != nullptr);
+    CHECK_EQ(reinterpret_cast<std::uintptr_t>(p) % alignof(std::max_align_t), std::uintptr_t{0});
+    void* q = a.allocate(1);
+    CHECK_EQ(reinterpret_cast<std::uintptr_t>(q) % alignof(std::max_align_t), std::uintptr_t{0});
+- name: exhaustion returns nullptr and consumes nothing
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    Arena a(64);
+    CHECK(a.allocate(40, 1) != nullptr);
+    CHECK(a.allocate(40, 1) == nullptr);       // does not fit
+    std::size_t u = a.used();
+    CHECK_EQ(u, 40u);
+    CHECK(a.allocate(24, 1) != nullptr);       // the failed request must not have eaten space
+    CHECK_EQ(a.used(), 64u);
+    CHECK(a.allocate(1, 1) == nullptr);
+    Arena z(0);
+    CHECK(z.allocate(1, 1) == nullptr);
+    CHECK_EQ(z.capacity(), 0u);
+    CHECK_EQ(a.capacity(), 64u);
+- name: invalid alignment and overflow are rejected
+  tags:
+  - invalid
+  - boundary
+  code: |
+    Arena a(128);
+    CHECK(a.allocate(8, 3) == nullptr);
+    CHECK(a.allocate(8, 0) == nullptr);
+    CHECK(a.allocate(8, 24) == nullptr);
+    CHECK(a.allocate(static_cast<std::size_t>(-1), 8) == nullptr);
+    CHECK(a.allocate(static_cast<std::size_t>(-8), 16) == nullptr);
+    CHECK_EQ(a.used(), 0u);
+    CHECK(a.allocate(8, 8) != nullptr);
+- name: reset reuses the buffer
+  tags:
+  - state-reuse
+  - duplicate
+  code: |
+    Arena a(100);
+    void* first = a.allocate(50, 1);
+    a.allocate(40, 1);
+    CHECK(a.allocate(50, 1) == nullptr);
+    a.reset();
+    CHECK_EQ(a.used(), 0u);
+    void* again = a.allocate(50, 1);
+    CHECK(again == first);
+    CHECK(a.allocate(50, 1) != nullptr);
+- name: create constructs objects in the arena
+  tags:
+  - single
+  - invalid
+  code: |
+    Arena a(256);
+    Counted::live = 0;
+    Counted* c = a.create<Counted>(42);
+    CHECK(c != nullptr);
+    CHECK_EQ(c->id, 42);
+    CHECK_EQ(Counted::live, 1);
+    Wide* w = a.create<Wide>(1.5);
+    CHECK(w != nullptr);
+    CHECK_EQ(reinterpret_cast<std::uintptr_t>(w) % 32, std::uintptr_t{0});
+    CHECK_EQ(w->v[3], 1.5);
+    Arena tiny(4);
+    CHECK(tiny.create<Wide>(1.0) == nullptr);
+    c->~Counted();
+- name: pool hands out every slot then nullptr
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    ObjectPool<Counted> pool(3);
+    Counted::live = 0;
+    CHECK_EQ(pool.capacity(), 3u);
+    CHECK_EQ(pool.available(), 3u);
+    Counted* a = pool.acquire(1);
+    Counted* b = pool.acquire(2);
+    Counted* c = pool.acquire(3);
+    CHECK(a && b && c);
+    CHECK(a != b && b != c && a != c);
+    CHECK_EQ(pool.available(), 0u);
+    CHECK(pool.acquire(4) == nullptr);
+    CHECK_EQ(Counted::live, 3);
+    CHECK_EQ(a->id + b->id + c->id, 6);
+    pool.release(a); pool.release(b); pool.release(c);
+    CHECK_EQ(Counted::live, 0);
+    ObjectPool<int> none(0);
+    CHECK(none.acquire(1) == nullptr);
+- name: pool reuses released slots
+  tags:
+  - state-reuse
+  - ordering
+  code: |
+    ObjectPool<Counted> pool(2);
+    Counted::live = 0;
+    Counted* a = pool.acquire(1);
+    Counted* b = pool.acquire(2);
+    pool.release(a);
+    CHECK_EQ(pool.available(), 1u);
+    CHECK_EQ(Counted::live, 1);
+    Counted* c = pool.acquire(3);
+    CHECK(c == a);                          // LIFO free list: the slot just released comes back
+    CHECK_EQ(c->id, 3);
+    CHECK_EQ(b->id, 2);
+    CHECK(pool.acquire(4) == nullptr);
+    pool.release(b); pool.release(c);
+    CHECK_EQ(pool.available(), 2u);
+- name: pool slots are suitably aligned
+  hidden: true
+  tags:
+  - boundary
+  - single
+  code: |
+    ObjectPool<Wide> pool(5);
+    std::vector<Wide*> ws;
+    for (int i = 0; i < 5; i++) {
+        Wide* w = pool.acquire(static_cast<double>(i));
+        CHECK(w != nullptr);
+        CHECK_EQ(reinterpret_cast<std::uintptr_t>(w) % 32, std::uintptr_t{0});
+        ws.push_back(w);
+    }
+    for (int i = 0; i < 5; i++) CHECK_EQ(ws[i]->v[0], static_cast<double>(i));
+    CHECK_EQ(sizeof(Wide), 32u);
+- name: pool churn and pool destruction
+  hidden: true
+  tags:
+  - scale
+  - state-reuse
+  code: |
+    Counted::live = 0;
+    {
+        ObjectPool<Counted> pool(64);
+        std::vector<Counted*> held;
+        for (int round = 0; round < 2000; round++) {
+            while (held.size() < 64) { Counted* p = pool.acquire(round); CHECK(p != nullptr); held.push_back(p); }
+            CHECK(pool.acquire(0) == nullptr);
+            for (std::size_t i = 0; i < 40; i++) { pool.release(held.back()); held.pop_back(); }
+        }
+        CHECK_EQ(pool.available() + held.size(), 64u);
+        CHECK_EQ(static_cast<std::size_t>(Counted::live), held.size());
+        for (Counted* p : held) pool.release(p);
+        CHECK_EQ(Counted::live, 0);
+    }
+    CHECK_EQ(Counted::live, 0);
+- name: arena as a long-running bump pointer
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    Arena a(1 << 20);
+    std::size_t count = 0;
+    std::uintptr_t last_end = 0;
+    for (;;) {
+        void* p = a.allocate(24, 8);
+        if (!p) break;
+        auto addr = reinterpret_cast<std::uintptr_t>(p);
+        CHECK(addr >= last_end);
+        last_end = addr + 24;
+        ++count;
+    }
+    CHECK_EQ(count, (1u << 20) / 24u);
+    CHECK(a.used() <= a.capacity());
+complexity:
+- op: allocate / create
+  time: O(1)
+  space: O(1)
+- op: reset
+  time: O(1)
+  space: O(1)
+- op: acquire / release
+  time: O(1)
+  space: O(capacity)
+extensions:
+- q: Why O(1) with tiny constants, and what are the memory costs?
+  kind: complexity
+  key_points:
+  - Allocation is an add and a compare; no free list search, locking or per-block header, unlike malloc
+  - Padding for alignment wastes up to align-1 bytes per allocation; sort allocations by alignment to
+    cut it
+  - reset() frees everything in O(1), ideal for per-request or per-tick scratch memory
+- q: How does this change the thread-safety and ABI picture?
+  kind: design
+  key_points:
+  - A single arena is not thread-safe; the lock-free variant does fetch_add on the offset and checks bounds
+    afterwards, wasting space on failure
+  - 'Better: one arena per thread (thread_local) so there is no sharing at all'
+  - Align per-thread arenas to cache lines to avoid false sharing, and keep the alignment rule part of
+    the contract
+- q: What goes wrong with destructors and lifetimes?
+  kind: reasoning
+  key_points:
+  - 'Arena never runs destructors: only use it for trivially destructible types, or call ~T yourself before
+    reset()'
+  - 'reset() invalidates every pointer handed out: use-after-reset is a silent bug'
+  - 'The pool runs ~T in release but not for objects still acquired when the pool dies: say so, or track
+    and destroy them'
+- q: Make the pool lock-free for multiple threads.
+  kind: design
+  key_points:
+  - 'A Treiber stack of free slots with CAS on the head is lock-free but suffers ABA: pair the pointer
+    with a version counter (double-width CAS) or use hazard pointers'
+  - 'Alternative: per-thread pools with a global overflow list to keep the hot path uncontended'
+  - 'Progress guarantee: lock-free (some thread always makes progress), not wait-free'
+narration: []
+state_aloud:
+- Alignment must be computed on the absolute address, not the offset into the buffer.
+- A failed allocation must leave the arena unchanged; check with subtraction to avoid size overflow.
+- Arena never runs destructors; pool release does. Pointers die on reset().
+- Zero capacity and non-power-of-two alignment are the edge inputs.
+walkthrough: |
+  The arena is a buffer plus an offset: each request rounds the absolute address up to the alignment, checks fit with subtraction (no overflow) and only then advances the offset, so failure is free and `reset()` is a single store. The pool threads a free list through unused slots (a `union` of `next` pointer and aligned storage) so acquire and release are O(1) pointer swaps with placement-new and an explicit destructor call. Python hides allocation entirely; in C++ you can replace malloc with these when latency and determinism matter.
+anki_queries: []
+categories:
+- trading
+- systems-impl

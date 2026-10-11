@@ -1,0 +1,351 @@
+id: cpp-shared-ptr-refcount
+title: shared_ptr (Reference Counting) from Scratch
+language: cpp
+bar_level: 3
+target_minutes: 40
+patterns:
+- raii
+- reference-counting
+- control-block
+- type-erasure
+- atomics
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Implement `template <class T> class SharedPtr` (C++20): a thread-safe, intrusive-free reference-counted
+  owning pointer, without `std::shared_ptr` / `std::weak_ptr`. Weak references and `make_shared`'s single
+  allocation are out of scope (see the extensions).
+
+  API:
+  - Default and `nullptr` construction (empty, `use_count() == 0`), `template <class U> explicit SharedPtr(U*)`
+    (takes ownership; `U*` must convert to `T*`)
+  - Copy and move construction/assignment, plus converting copy/move from `SharedPtr<U>` when `U*` converts to `T*`
+  - Destructor: when the last owner goes away the object is deleted exactly once
+  - `get`, `operator*`, `operator->`, `explicit operator bool`, `use_count()` (strong count, `long`), `reset()`,
+    `reset(U*)`, `swap`
+  - The pointee is deleted through its ORIGINAL type: `SharedPtr<Base>(new Derived)` must destroy a `Derived` even if
+    `Base` has no virtual destructor, so the deleter is captured (type-erased) in a heap-allocated control block that
+    all copies share.
+  - The count is `std::atomic`; copying from several threads at once must keep it exact. Choose memory orders
+    deliberately (increment can be relaxed; the decrement that may delete needs release/acquire).
+  - Self-assignment is safe; move leaves the source empty. A reference cycle leaks by design (as in the standard).
+
+  Example:
+  ```cpp
+  SharedPtr<Base> p(new Derived);   // Base has a non-virtual destructor
+  auto q = p;                       // use_count() == 2
+  ```
+starter: |
+  // Reference-counted owning pointer (no std::shared_ptr / std::weak_ptr). Counts must be thread-safe.
+  template <class T>
+  class SharedPtr {
+      T* ptr_ = nullptr;   // TODO: control block with the strong count and a type-erased deleter
+  public:
+      SharedPtr() noexcept = default;
+      SharedPtr(std::nullptr_t) noexcept {}
+      template <class U>
+      explicit SharedPtr(U* p) { (void)p; }
+      SharedPtr(const SharedPtr& other) noexcept { (void)other; }
+      SharedPtr(SharedPtr&& other) noexcept { (void)other; }
+      template <class U>
+      SharedPtr(const SharedPtr<U>& other) noexcept { (void)other; }
+      template <class U>
+      SharedPtr(SharedPtr<U>&& other) noexcept { (void)other; }
+      SharedPtr& operator=(const SharedPtr& other) noexcept { (void)other; return *this; }
+      SharedPtr& operator=(SharedPtr&& other) noexcept { (void)other; return *this; }
+      ~SharedPtr() = default;
+
+      T* get() const noexcept { return nullptr; }
+      T& operator*() const { throw std::logic_error("TODO"); }
+      T* operator->() const noexcept { return nullptr; }
+      explicit operator bool() const noexcept { return false; }
+      long use_count() const noexcept { return 0; }
+      void reset() noexcept {}
+      template <class U>
+      void reset(U* p) { (void)p; }
+      void swap(SharedPtr& other) noexcept { (void)other; }
+  };
+prelude: |
+  struct Probe {
+      static inline int live = 0, dtors = 0;
+      int id;
+      explicit Probe(int i = 0) : id(i) { ++live; }
+      Probe(const Probe&) = delete;
+      ~Probe() { --live; ++dtors; }
+  };
+  struct NBase { int tag = 1; };                       // NON-virtual destructor on purpose
+  struct NDerived : NBase { Probe p{99}; };            // its destructor must still run
+  template <template <class> class SP>
+  struct BasicNode {
+      Probe probe;
+      SP<BasicNode> next;
+      explicit BasicNode(int i) : probe(i) {}
+  };
+hints:
+- 'Two members: T* ptr_ (what you dereference) and a pointer to a control block (what you count and delete
+  through). The control block has an atomic strong count and a virtual dispose().'
+- Make a templated control-block subclass SpControlImpl<U> that remembers the U* passed to the constructor;
+  its dispose() does `delete obj`. That is the type erasure that fixes the non-virtual-destructor case.
+- Decrement with fetch_sub(1, acq_rel) and delete when the old value was 1; increments can be relaxed.
+  Implement assignment as copy-and-swap, which makes self-assignment trivially safe.
+follow_ups:
+- Why can the increment use memory_order_relaxed but the decrement needs acq_rel?
+- What does make_shared do differently with the control block, and why is it faster?
+- How does weak_ptr work (weak count in the control block, expired control block lifetime)?
+- Is shared_ptr itself thread-safe? What exactly is and is not safe (the count vs the pointee vs concurrent
+  reassignment of one shared_ptr object)?
+tests:
+- name: ownership and use_count
+  tags:
+  - single
+  - empty
+  code: |
+    SharedPtr<int> e;
+    CHECK_EQ(e.use_count(), 0);
+    CHECK(!e);
+    SharedPtr<int> a(new int(7));
+    CHECK(a);
+    CHECK_EQ(*a, 7);
+    CHECK_EQ(a.use_count(), 1);
+    SharedPtr<int> b = a;
+    CHECK_EQ(a.use_count(), 2);
+    CHECK_EQ(b.use_count(), 2);
+    CHECK(a.get() == b.get());
+- name: object dies with the last owner
+  tags:
+  - single
+  - state-reuse
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        SharedPtr<Probe> a(new Probe(1));
+        {
+            SharedPtr<Probe> b = a;
+            SharedPtr<Probe> c(b);
+            CHECK_EQ(a.use_count(), 3);
+            CHECK_EQ(Probe::live, 1);
+        }
+        CHECK_EQ(a.use_count(), 1);
+        CHECK_EQ(Probe::dtors, 0);
+    }
+    CHECK_EQ(Probe::live, 0);
+    CHECK_EQ(Probe::dtors, 1);
+- name: move steals without touching the count
+  tags:
+  - single
+  - state-reuse
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    SharedPtr<Probe> a(new Probe(2));
+    SharedPtr<Probe> b = a;
+    SharedPtr<Probe> c(std::move(a));
+    CHECK(!a);
+    CHECK_EQ(a.use_count(), 0);
+    CHECK_EQ(c.use_count(), 2);
+    CHECK_EQ(b.use_count(), 2);
+    SharedPtr<Probe> d;
+    d = std::move(c);
+    CHECK_EQ(d.use_count(), 2);
+    CHECK(!c);
+    CHECK_EQ(Probe::dtors, 0);
+- name: copy assignment releases the old target
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    SharedPtr<Probe> a(new Probe(1));
+    SharedPtr<Probe> b(new Probe(2));
+    b = a;
+    CHECK_EQ(Probe::dtors, 1);              // Probe(2) lost its only owner
+    CHECK_EQ(a.use_count(), 2);
+    CHECK_EQ(b->id, 1);
+    SharedPtr<Probe>& alias = a;
+    a = alias;                              // self assignment must not destroy anything
+    CHECK_EQ(Probe::dtors, 1);
+    CHECK_EQ(a.use_count(), 2);
+- name: reset and swap
+  tags:
+  - empty
+  - ordering
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    SharedPtr<Probe> a(new Probe(1)), b(new Probe(2));
+    a.swap(b);
+    CHECK_EQ(a->id, 2);
+    CHECK_EQ(b->id, 1);
+    SharedPtr<Probe> keep = a;
+    a.reset();
+    CHECK(!a);
+    CHECK_EQ(Probe::dtors, 0);              // keep still owns it
+    keep.reset(new Probe(3));
+    CHECK_EQ(Probe::dtors, 1);
+    CHECK_EQ(keep->id, 3);
+    CHECK_EQ(keep.use_count(), 1);
+    a.reset();                              // resetting an empty pointer is fine
+- name: deleter is captured from the constructing type
+  tags:
+  - invalid
+  - single
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        SharedPtr<NBase> b(new NDerived);   // NBase has no virtual destructor
+        CHECK_EQ(b->tag, 1);
+        CHECK_EQ(Probe::live, 1);
+    }
+    CHECK_EQ(Probe::live, 0);               // ~NDerived must have run
+    CHECK_EQ(Probe::dtors, 1);
+- name: converting copy and move share the count
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        SharedPtr<NDerived> d(new NDerived);
+        SharedPtr<NBase> b1 = d;
+        SharedPtr<NBase> b2 = std::move(d);
+        CHECK(!d);
+        CHECK_EQ(b1.use_count(), 2);
+        CHECK(b1.get() == b2.get());
+        CHECK_EQ(Probe::live, 1);
+    }
+    CHECK_EQ(Probe::live, 0);
+- name: cycles leak by design
+  hidden: true
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    using N = BasicNode<SharedPtr>;
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        SharedPtr<N> a(new N(1));
+        SharedPtr<N> b(new N(2));
+        a->next = b;                        // chain, no cycle
+    }
+    CHECK_EQ(Probe::live, 0);               // acyclic graph is fully freed
+    {
+        SharedPtr<N> a(new N(1));
+        SharedPtr<N> b(new N(2));
+        a->next = b;
+        b->next = a;                        // cycle: each keeps the other alive
+        CHECK_EQ(a.use_count(), 2);
+    }
+    CHECK_EQ(Probe::live, 2);               // leaked, exactly like std::shared_ptr
+- name: counts are thread safe
+  hidden: true
+  tags:
+  - concurrency
+  - scale
+  code: |
+    Probe::live = 0; Probe::dtors = 0;
+    {
+        SharedPtr<Probe> root(new Probe(5));
+        std::vector<std::thread> ts;
+        for (int t = 0; t < 4; t++) {
+            ts.emplace_back([root] {                       // each thread owns a copy
+                for (int i = 0; i < 20000; i++) {
+                    SharedPtr<Probe> a = root;
+                    SharedPtr<Probe> b = a;
+                    a = std::move(b);
+                }
+            });
+        }
+        root.reset();                                       // main drops its handle while threads run
+        for (auto& t : ts) t.join();
+    }
+    CHECK_EQ(Probe::live, 0);
+    CHECK_EQ(Probe::dtors, 1);
+- name: use_count is exact after concurrent copies
+  hidden: true
+  tags:
+  - concurrency
+  - boundary
+  code: |
+    SharedPtr<int> root(new int(1));
+    std::atomic<int> go{0};
+    std::vector<SharedPtr<int>> held(4000);
+    std::vector<std::thread> ts;
+    for (int t = 0; t < 4; t++) {
+        ts.emplace_back([&, t] {
+            for (int i = 0; i < 1000; i++) held[t * 1000 + i] = root;
+        });
+    }
+    for (auto& t : ts) t.join();
+    CHECK_EQ(root.use_count(), 4001);
+    held.clear();
+    CHECK_EQ(root.use_count(), 1);
+    (void)go;
+- name: null pointer construction
+  hidden: true
+  tags:
+  - empty
+  - boundary
+  code: |
+    SharedPtr<int> n(static_cast<int*>(nullptr));
+    CHECK(!n);
+    CHECK_EQ(n.use_count(), 0);
+    SharedPtr<int> m = n;
+    CHECK(!m);
+    SharedPtr<int> z(nullptr);
+    CHECK(!z);
+    SharedPtr<int> v(new int(3));
+    CHECK_EQ(v.use_count(), 1);
+complexity:
+- op: copy / destroy
+  time: O(1)
+  space: O(1)
+- op: use_count / get
+  time: O(1)
+  space: O(1)
+- op: object overhead
+  time: O(1)
+  space: O(1)
+extensions:
+- q: What does each copy cost, and what are the concurrency guarantees?
+  kind: complexity
+  key_points:
+  - 'Copy is one atomic RMW (lock xadd): O(1), but under contention the count''s cache line ping-pongs
+    between cores'
+  - Only the control block count is thread safe; concurrent reads/writes of the same SharedPtr object,
+    or the pointee, still need synchronization
+  - Pass by const& or raw pointer in hot paths and copy only when you need to extend lifetime
+- q: Why acq_rel on the final decrement?
+  kind: reasoning
+  key_points:
+  - 'Release: every owner''s earlier writes to the object must be visible before another thread may delete
+    it'
+  - 'Acquire: the thread that sees the count hit zero must see all those writes before running the destructor'
+  - Increments carry no information about the pointee so relaxed is enough (you already hold a reference)
+- q: How would you add weak_ptr and make_shared-style single allocation?
+  kind: design
+  key_points:
+  - Add a weak count; strong>0 holds one weak reference; dispose() destroys the object, the block is freed
+    when the weak count reaches 0
+  - lock() must do a CAS loop incrementing strong only if it is non-zero
+  - make_shared allocates object and control block together (one malloc, better locality) at the cost
+    of memory being freed only when the last weak ref dies
+- q: What are the ABI/layout considerations of this design?
+  kind: design
+  key_points:
+  - 'Two pointers per SharedPtr (16 bytes): pointer to object and pointer to control block; aliasing constructors
+    need the separate pointers'
+  - The control block's vtable makes the deleter type invisible to the handle's type, which keeps SharedPtr<T>
+    ABI stable across deleters
+  - 'intrusive_ptr stores the count in the object: 8 bytes, one allocation, no vtable, but needs cooperation
+    from T'
+narration: []
+state_aloud:
+- 'Control block + type-erased deleter: SharedPtr<Base>(new Derived) must delete a Derived.'
+- 'Thread safety: atomic count only; the pointee and one shared_ptr object being reassigned concurrently
+  are not protected.'
+- 'Memory orders: relaxed increment, acq_rel decrement that frees.'
+- 'Cycles leak (no cycle collector): break them with weak references.'
+walkthrough: |
+  Each `SharedPtr` holds the raw pointer plus a pointer to a shared control block containing an atomic strong count and a virtual `dispose()` instantiated for the type used at construction, so deleting through a base view still destroys the derived object. Copies bump the count (relaxed), the decrement that reaches zero (acq_rel) disposes the object and frees the block; assignment is copy-and-swap. Python's refcounts are guarded by the GIL and cycles are handled by the GC; here the count is explicit, atomic, and cycles leak unless you add weak pointers.
+anki_queries: []
+categories:
+- systems-impl

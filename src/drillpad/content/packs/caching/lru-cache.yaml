@@ -1,0 +1,228 @@
+id: lru-cache
+title: LRU cache with O(1) get and put
+bar_level: 3
+target_minutes: 25
+patterns: [hash-map, doubly-linked-list, eviction]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:16 - *"'
+statement: |
+  Implement `LRUCache(capacity)` with `get(key)` (returns the value, or -1 if absent) and
+  `put(key, value)`. Both must be O(1): build it from a hash map plus a doubly linked list
+  (do not use OrderedDict). Both `get` hits and `put` mark the key most recently used. When
+  size exceeds capacity, evict the least recently used key. Capacity 0 stores nothing.
+starter: |
+  class LRUCache:
+      def __init__(self, capacity: int):
+          pass
+hints:
+  - Map key to a list node; the list order is the recency order.
+  - Sentinel head and tail nodes remove the boundary special cases.
+  - put on an existing key must update the value and move it to the front.
+follow_ups:
+  - How would you make this thread-safe (single lock versus striped locking)?
+  - How would you extend it to LFU?
+  - How would you add TTL?
+  - How do you scale it beyond one machine (consistent hashing)?
+stages:
+  - level: 0
+    kind: part
+    prompt: ""
+    minutes: 25
+    tests:
+      - name: classic sequence
+        tags: [ordering]
+        code: |
+          c = LRUCache(2)
+          c.put(1, 1); c.put(2, 2)
+          assert c.get(1) == 1
+          c.put(3, 3)
+          assert c.get(2) == -1
+          c.put(4, 4)
+          assert c.get(1) == -1 and c.get(3) == 3 and c.get(4) == 4
+      - name: put existing key refreshes recency and value
+        tags: [duplicate, ordering]
+        code: |
+          c = LRUCache(2)
+          c.put(1, 1); c.put(2, 2); c.put(1, 10)
+          c.put(3, 3)
+          assert c.get(2) == -1 and c.get(1) == 10 and c.get(3) == 3
+      - name: capacity one
+        tags: [zero-capacity, single, boundary]
+        code: |
+          c = LRUCache(1)
+          c.put(1, 1); c.put(2, 2)
+          assert c.get(1) == -1 and c.get(2) == 2
+      - name: capacity zero stores nothing
+        tags: [zero-capacity, empty]
+        hidden: true
+        code: |
+          c = LRUCache(0)
+          c.put(1, 1)
+          assert c.get(1) == -1
+      - name: randomized against OrderedDict model
+        tags: [scale, ordering, state-reuse]
+        hidden: true
+        code: |
+          import random
+          from collections import OrderedDict
+          rng = random.Random(11)
+          cap = 5
+          c, m = LRUCache(cap), OrderedDict()
+          for _ in range(3000):
+              k = rng.randrange(12)
+              if rng.random() < 0.5:
+                  v = rng.randrange(1000)
+                  c.put(k, v)
+                  m[k] = v; m.move_to_end(k)
+                  if len(m) > cap: m.popitem(last=False)
+              else:
+                  exp = -1
+                  if k in m: m.move_to_end(k); exp = m[k]
+                  assert c.get(k) == exp
+  - level: 1
+    kind: followup
+    prompt: |
+      Add thread-safety: wrap the cache with a lock so concurrent get/put calls do not race.
+      Note: get also mutates state (recency order), so it must hold the lock too.
+    minutes: 8
+    tests:
+      - name: concurrent get and put do not corrupt state
+        tags: [concurrency]
+        code: |
+          import threading
+          c = LRUCache(3)
+          errors = []
+          def worker():
+              try:
+                  for i in range(100):
+                      c.put(i % 3, i)
+                      c.get(i % 3)
+              except Exception as e:
+                  errors.append(e)
+          threads = [threading.Thread(target=worker) for _ in range(4)]
+          for t in threads: t.start()
+          for t in threads: t.join()
+          assert not errors, f"concurrent access failed: {errors}"
+          assert c.get(0) != -1 or c.get(1) != -1 or c.get(2) != -1
+      - name: single lock preserves semantics
+        tags: [ordering, concurrency]
+        code: |
+          import threading
+          c = LRUCache(2)
+          c.put(1, 'a'); c.put(2, 'b')
+          def access():
+              for _ in range(50):
+                  c.get(1)
+                  c.put(3, 'c')
+          t = threading.Thread(target=access)
+          t.start()
+          t.join()
+          assert c.get(1) in ['a', -1], "concurrent put should not break existing get"
+  - level: 2
+    kind: followup
+    prompt: |
+      Extend to LFU (Least Frequently Used): evict based on access count, not recency.
+      Break ties by evicting the least recently used among items with the same frequency.
+    minutes: 10
+    tests:
+      - name: evict least frequent item
+        tags: [ordering]
+        code: |
+          c = LRUCache(2)
+          c.put(1, 'a')
+          c.put(2, 'b')
+          c.get(1)  # freq[1] = 2, freq[2] = 1
+          c.put(3, 'c')  # should evict 2 (freq 1 < freq 1, but 2 is older)
+          assert c.get(2) == -1, "should evict least frequent"
+          assert c.get(1) != -1
+      - name: tie-breaking by recency in LFU
+        tags: [ordering]
+        code: |
+          c = LRUCache(2)
+          c.put(1, 'a')
+          c.put(2, 'b')
+          c.get(1)
+          c.get(2)  # both now freq=2
+          c.put(3, 'c')  # evict 1 (less recently used)
+          assert c.get(1) == -1
+          assert c.get(2) != -1
+  - level: 3
+    kind: followup
+    prompt: |
+      Add per-key TTL (time-to-live): each entry expires after a specified duration.
+      Implement expiry check on access and return the value if not expired, or -1 if expired.
+    minutes: 10
+    tests:
+      - name: basic ttl expiry
+        tags: [time]
+        code: |
+          import time
+          c = LRUCache(5)
+          c.put(1, 'a')
+          c.set_with_ttl(2, 'b', ttl_ms=100)
+          assert c.get(2) == 'b'
+          time.sleep(0.15)
+          assert c.get(2) == -1, "expired entry should return -1"
+          assert c.get(1) == 'a', "non-expired entry survives"
+      - name: overwrite clears ttl
+        tags: [time]
+        code: |
+          import time
+          c = LRUCache(2)
+          c.set_with_ttl(1, 'a', ttl_ms=100)
+          time.sleep(0.05)
+          c.put(1, 'new')  # overwrite should reset TTL
+          time.sleep(0.1)
+          assert c.get(1) == 'new', "overwrite should clear TTL"
+complexity:
+- op: get/put
+  time: O(1)
+  space: O(capacity)
+extensions:
+- q: How would you make this thread-safe?
+  kind: design
+  key_points:
+  - A single lock around get/put is simplest (get mutates recency, so it needs the lock too)
+  - 'Striped locking: shard into N locked segments for throughput'
+  - 'Tradeoff: loses exact global LRU order'
+- q: How would you extend it to LFU?
+  kind: code
+  key_points:
+  - Replace the single list with per-frequency doubly linked lists
+  - Track min_freq and a frequency-to-list map
+  - Evict from the tail of the min_freq list
+- q: How would you add TTL?
+  kind: design
+  key_points:
+  - Store an expiry timestamp per node and check it in get (lazy expiry)
+  - Optionally a background sweeper, or a min-heap on expiry
+  - Use a monotonic clock
+- q: How do you scale it beyond one machine?
+  kind: design
+  key_points:
+  - Consistent hashing to shard across nodes
+  - Each shard runs its own local LRU independently
+  - Virtual nodes smooth load; adding a node remaps about 1/n of keys
+- q: What is the space cost and why a map plus DLL?
+  kind: complexity
+  key_points:
+  - Space O(capacity)
+  - Map gives O(1) key to node lookup
+  - DLL gives O(1) reorder and eviction without shifting
+  - Sentinels remove boundary cases; capacity 0 and 1 must be handled
+narration:
+- I'll use a hashmap for O(1) key lookup and a doubly linked list to track recency, so both get and put stay O(1).
+- I'll use sentinel head and tail nodes to avoid null-checking at the boundaries.
+- Front of the list is most-recently-used, back is least — so eviction just pops the tail.
+- On a hit I unlink the node and reinsert it at the front.
+- Let me trace capacity=1 with two puts to confirm eviction works before moving on.
+state_aloud:
+- 'Capacity 0: every put should evict immediately (or be a no-op); decide and state which.'
+- 'Capacity 1: put must correctly evict the sole entry on a new key.'
+- '`put` on an existing key must update value AND move to front — don''t just overwrite in place.'
+- Duplicate `get`/`put` bursts on the same key shouldn't corrupt the list (removing then reinserting the same node is safe here).
+- Concurrent access is unsafe as written — no locking; call this out before they ask.
+walkthrough: |
+  A hash map from key to node gives O(1) lookup, and a doubly linked list orders entries by recency so reordering and eviction need no element shifting. Front is most recently used and back is least recently used, with sentinel head and tail nodes avoiding boundary null-checks. A hit unlinks the node and reinserts it at the front, and eviction pops the tail. A `put` on an existing key must update the value and also move the node to the front. Both operations are O(1) and space is O(capacity); the structure as written is not thread-safe.
+categories: [leetcode, systems-impl, ai-infra]

@@ -1,0 +1,102 @@
+id: n-queens
+title: N-Queens
+bar_level: 3
+target_minutes: 38
+patterns:
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:N-Queens (LC 51)"
+statement: |
+  Place `n` queens on an `n x n` chessboard so that no two attack each other (no shared row, column, or diagonal). Return every distinct arrangement. Each arrangement is a list of `n` strings of length `n`, where `"Q"` marks a queen and `"."` an empty square. Any order of arrangements is fine.
+
+  Example: `solve_n_queens(4)` returns `[[".Q..","...Q","Q...","..Q."],["..Q.","Q...","...Q",".Q.."]]`.
+starter: |
+  def solve_n_queens(n):
+      pass
+hints:
+- Place exactly one queen per row; the decision at each row is which column.
+- A square conflicts if its column, its r - c diagonal, or its r + c anti-diagonal is already taken.
+- Keep three sets (cols, diag, anti) so the conflict check is O(1); remove from them when backtracking.
+follow_ups:
+- Count solutions only, using bitmasks.
+- Return just one solution fast for large n.
+tests:
+- name: four queens
+  tags:
+  - ordering
+  code: |
+    r=solve_n_queens(4)
+    assert sorted(r)==[["..Q.","Q...","...Q",".Q.."],[".Q..","...Q","Q...","..Q."]]
+- name: one queen
+  tags:
+  - single
+  code: |
+    assert solve_n_queens(1)==[["Q"]]
+- name: no solutions for 2 and 3
+  tags:
+  - invalid
+  - boundary
+  code: |
+    assert solve_n_queens(2)==[]
+    assert solve_n_queens(3)==[]
+- name: six queens
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    r=solve_n_queens(6)
+    assert len(r)==4
+- name: eight queens validated
+  tags:
+  - ordering
+  - duplicate
+  hidden: true
+  code: |
+    r=solve_n_queens(8)
+    assert len(r)==92 and len({tuple(b) for b in r})==92
+    for b in r:
+        assert len(b)==8 and all(len(row)==8 and row.count("Q")==1 for row in b)
+        cols=[row.index("Q") for row in b]
+        assert len(set(cols))==8
+        assert len({i-c for i,c in enumerate(cols)})==8
+        assert len({i+c for i,c in enumerate(cols)})==8
+- name: nine queens
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=solve_n_queens(9)
+    assert len(r)==352
+complexity:
+- op: overall
+  time: O(n!)
+  space: O(n)
+extensions:
+- q: What does the constant-time conflict check buy and what is the bound?
+  kind: complexity
+  key_points:
+  - Sets or bitmasks make each placement check O(1) instead of O(n)
+  - Search space is bounded by n! with heavy pruning in practice
+  - Recursion depth and the sets are O(n)
+- q: Count solutions with bitmasks.
+  kind: code
+  key_points:
+  - Three integers for columns and both diagonals
+  - Free squares = ~(cols|d1|d2) & mask, pick lowest bit with x & -x
+  - Shift d1 left and d2 right when going a row down
+- q: How would you exploit symmetry?
+  kind: design
+  key_points:
+  - Mirror the solution horizontally so only half the first-row columns are searched
+  - Double the count (handle the middle column for odd n)
+  - Reflections and rotations can cut further but complicate bookkeeping
+narration: []
+state_aloud:
+- n = 2 and n = 3 have no solutions.
+- n = 1 returns a single 'Q' board.
+- Backtrack all three conflict sets.
+walkthrough: |
+  Process the board one row at a time, trying each column. A column is legal if neither its column index, its `row - col` diagonal, nor its `row + col` anti-diagonal is already occupied, which three sets answer in constant time. Place the queen, recurse to the next row, then undo the marks. When all n rows are filled, render the stored column per row into strings and append the board.

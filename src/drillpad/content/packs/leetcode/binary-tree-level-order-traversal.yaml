@@ -1,0 +1,115 @@
+id: binary-tree-level-order-traversal
+title: Binary Tree Level Order Traversal
+bar_level: 2
+target_minutes: 15
+patterns:
+- tree-bfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Binary Tree Level Order (LC 102)"
+statement: |
+  Return the values of a binary tree grouped by depth, top to bottom and left to right within a level. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `level_order(build_tree([3,9,20,None,None,15,7]))` returns `[[3],[9,20],[15,7]]`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def level_order(root):
+      pass
+hints:
+- Use a queue and process the tree breadth first.
+- Snapshot the queue length at the start of each level to know how many nodes belong to it.
+- Append children for the next level while consuming the current one.
+follow_ups:
+- Return the zigzag order.
+- What would the DFS version look like?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert level_order(build_tree([3,9,20,None,None,15,7]))==[[3],[9,20],[15,7]]
+- name: empty tree
+  tags:
+  - empty
+  code: |
+    assert level_order(None)==[]
+- name: single node
+  tags:
+  - single
+  code: |
+    assert level_order(build_tree([1]))==[[1]]
+- name: skewed
+  tags:
+  - boundary
+  code: |
+    assert level_order(build_tree([1,None,2,None,3]))==[[1],[2],[3]]
+- name: duplicate values
+  tags:
+  - duplicate
+  code: |
+    assert level_order(build_tree([1,1,1,1,1,1,1]))==[[1],[1,1],[1,1,1,1]]
+- name: wide tree
+  tags:
+  - scale
+  hidden: true
+  code: |
+    t=build_tree(list(range(1,100001)))
+    r=level_order(t)
+    assert sum(len(x) for x in r)==100000 and r[3]==list(range(8,16))
+complexity:
+- op: overall
+  time: O(n)
+  space: O(w)
+extensions:
+- q: Space cost
+  kind: complexity
+  key_points:
+  - Queue holds at most one level, width w
+  - O(n) worst case for a complete tree
+  - Output itself is O(n)
+- q: DFS alternative
+  kind: code
+  key_points:
+  - Pass the depth down and append to res[depth]
+  - Create a new list when depth equals len(res)
+  - Same O(n) time, O(h) stack
+- q: Zigzag or right-side variants
+  kind: design
+  key_points:
+  - Reverse alternate levels or take the last element per level
+  - BFS structure is unchanged
+  - 'Right view with DFS: visit right child first'
+narration: []
+state_aloud:
+- Empty tree returns [].
+- Missing children skipped.
+- Need level boundaries, not a flat BFS list.
+walkthrough: |
+  Run a breadth-first search with a deque. At each iteration record the current queue length, pop exactly that many nodes into a level list, and enqueue their children. The recorded length separates levels, so the output is a list of per-depth value lists. Each node is enqueued and dequeued once.

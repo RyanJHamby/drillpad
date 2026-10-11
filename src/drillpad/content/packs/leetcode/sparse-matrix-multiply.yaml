@@ -1,0 +1,142 @@
+id: sparse-matrix-multiply
+title: Sparse Matrix Multiplication
+bar_level: 2
+target_minutes: 22
+patterns:
+- sparse
+- hash-map
+- matrix
+firm_tags:
+- ai-infra
+categories:
+- leetcode
+- ai-infra
+statement: |
+  Implement `multiply(a, b)` which multiplies an `m x k` matrix `a` by a `k x n` matrix `b` and returns the `m x n` product. Both inputs and the output are **dense** lists of lists of integers (row-major). Most entries of the inputs are zero, so your solution must exploit that: a plain triple loop does `m*k*n` work and will not finish on the large tests (2000 x 2000 inputs with about 0.1% non-zeros).
+
+  If the inner dimensions disagree (`len(b) != len(row)` for some row of `a`), raise `ValueError`. If `a` is empty, return `[]`.
+
+  Example:
+  ```python
+  multiply([[1, 0, 0], [-1, 0, 3]],
+           [[7, 0, 0], [0, 0, 0], [0, 0, 1]])
+  # [[7, 0, 0], [-7, 0, 3]]
+  ```
+starter: |
+  def multiply(a, b):
+      pass
+hints:
+- C[i][j] = sum over t of A[i][t] * B[t][j]. If A[i][t] is zero the whole inner loop for (i, t) is wasted.
+- Pre-index each row of B as a list of (column, value) pairs holding only the non-zeros.
+- For each non-zero A[i][t], add A[i][t] * v into C[i][j] for every (j, v) in B's row t.
+follow_ups:
+- Store the matrices in CSR format instead of dense lists. How do you multiply two CSR matrices?
+- Multiply a sparse matrix by a dense matrix, as in an embedding lookup in an ML model.
+tests:
+- name: example
+  tags:
+  - boundary
+  code: |
+    assert multiply([[1, 0, 0], [-1, 0, 3]], [[7, 0, 0], [0, 0, 0], [0, 0, 1]]) == [[7, 0, 0], [-7, 0, 3]]
+- name: rectangular shapes
+  tags:
+  - ordering
+  code: |
+    a = [[1, 2, 3], [4, 5, 6]]
+    b = [[1, 0], [0, 1], [1, 1]]
+    assert multiply(a, b) == [[4, 5], [10, 11]]
+    assert multiply(b, a) == [[1, 2, 3], [4, 5, 6], [5, 7, 9]]
+- name: one by one
+  tags:
+  - single
+  code: |
+    assert multiply([[3]], [[4]]) == [[12]]
+    assert multiply([[0]], [[4]]) == [[0]]
+- name: all zeros
+  tags:
+  - empty
+  code: |
+    assert multiply([[0, 0], [0, 0]], [[1, 2], [3, 4]]) == [[0, 0], [0, 0]]
+    assert multiply([], [[1]]) == []
+- name: dimension mismatch
+  tags:
+  - invalid
+  code: |
+    try:
+        multiply([[1, 2]], [[1, 2]])
+    except ValueError:
+        pass
+    else:
+        assert False, "expected ValueError"
+- name: cancellation to zero and accumulation
+  tags:
+  - duplicate
+  hidden: true
+  code: |
+    assert multiply([[1, 1]], [[2], [-2]]) == [[0]]
+    assert multiply([[1, 2, 3]], [[1], [1], [1]]) == [[6]]
+    assert multiply([[2, 0], [0, 2]], [[1, 1], [1, 1]]) == [[2, 2], [2, 2]]
+- name: large sparse
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 2000
+    a = [[0] * n for _ in range(n)]
+    b = [[0] * n for _ in range(n)]
+    for t in range(4000):
+        a[(t * 37) % n][(t * 91 + t // n) % n] = t % 9 + 1
+        b[(t * 53 + 1) % n][(t * 29 + t // n) % n] = t % 7 + 1
+    brows = {}
+    for r in range(n):
+        nz = [(j, v) for j, v in enumerate(b[r]) if v]
+        if nz:
+            brows[r] = nz
+    want = {}
+    for i in range(n):
+        for t, av in enumerate(a[i]):
+            if av and t in brows:
+                for j, bv in brows[t]:
+                    want[(i, j)] = want.get((i, j), 0) + av * bv
+    c = multiply(a, b)
+    assert len(c) == n and all(len(row) == n for row in c)
+    assert sum(1 for row in c for v in row if v) == len(want)
+    for (i, j), v in want.items():
+        assert c[i][j] == v
+complexity:
+- op: overall
+  time: O(m*k + nnz_a*d_b + m*n)
+  space: O(m*n + nnz_b)
+extensions:
+- q: What is the running time, and what dominates on the 2000 x 2000 test?
+  kind: complexity
+  key_points:
+  - Indexing B scans k*n entries once, scanning A is m*k, both cheap compared with m*k*n
+  - Real multiply work is nnz(A) times the average non-zeros per row of B
+  - Dense output allocation costs m*n; a sparse output (dict or CSR) removes it
+- q: Design a CSR representation and the multiply over it.
+  kind: design
+  key_points:
+  - Three arrays - values, column indices, row pointers (m+1 entries)
+  - Row i of A is values[ptr[i]:ptr[i+1]]; for each entry look up row t of B the same way
+  - Memory is O(nnz + m) instead of O(m*n); accumulate each output row in a dict or dense scratch row
+- q: Now B is a dense embedding table and A is a sparse batch of token weights. What changes?
+  kind: reasoning
+  key_points:
+  - Output rows are dense and each non-zero in A adds a scaled embedding row (axpy)
+  - Cost is nnz(A) * embedding_dim and access is row-contiguous, cache friendly
+  - With one-hot rows this is a pure embedding lookup, no multiplication needed
+- q: When is the sparse approach slower than dense multiplication?
+  kind: reasoning
+  key_points:
+  - High density, where pointer chasing and index overhead outweigh skipped zeros
+  - Dense kernels use contiguous memory, SIMD and blocking
+  - Choose by measured density threshold, often a few percent for naive code
+narration: []
+state_aloud:
+- Dimension mismatch handling.
+- All-zero or empty inputs and 1x1 matrices.
+- Non-square shapes, and that A*B differs from B*A.
+- Products can cancel to zero; output stays a dense matrix with explicit zeros.
+walkthrough: |
+  Convert each row of B into a list of `(column, value)` pairs for its non-zero entries. Then for every row `i` of A and every non-zero `A[i][t]`, add `A[i][t] * v` into `C[i][j]` for each `(j, v)` in B's row `t`. Zero entries of A are skipped immediately and zero rows of B contribute nothing, so work is proportional to the number of actual non-zero products plus a single scan of the inputs.

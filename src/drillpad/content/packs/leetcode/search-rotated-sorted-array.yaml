@@ -1,0 +1,97 @@
+id: search-rotated-sorted-array
+title: Search in Rotated Sorted Array
+bar_level: 2
+target_minutes: 25
+patterns:
+- binary-search
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Search Rotated Sorted (LC 33)"
+statement: |
+  A sorted list of distinct integers was rotated at an unknown pivot (for example `[0,1,2,4,5,6,7]` became `[4,5,6,7,0,1,2]`). Given the rotated list and a `target`, return the index of `target`, or `-1` if absent, in O(log n).
+
+  Example: `search_rotated([4,5,6,7,0,1,2], 0)` returns `4`.
+starter: |
+  def search_rotated(nums, target):
+      pass
+hints:
+- At every midpoint, at least one half of the range is sorted.
+- Compare nums[lo] with nums[mid] to learn which half is sorted.
+- Check whether the target lies inside the sorted half's bounds; keep that half or discard it.
+follow_ups:
+- What changes if duplicates are allowed?
+- How would you find the pivot itself?
+tests:
+- name: target in the rotated tail
+  tags:
+  - ordering
+  code: |
+    assert search_rotated([4,5,6,7,0,1,2],0)==4
+- name: target absent
+  tags:
+  - invalid
+  code: |
+    assert search_rotated([4,5,6,7,0,1,2],3)==-1
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert search_rotated([],5)==-1
+- name: single element
+  tags:
+  - single
+  code: |
+    assert search_rotated([1],1)==0
+    assert search_rotated([1],0)==-1
+- name: first and last positions, no rotation
+  tags:
+  - boundary
+  code: |
+    a=[1,2,3,4,5]
+    assert search_rotated(a,1)==0 and search_rotated(a,5)==4
+- name: two elements rotated
+  tags:
+  - boundary
+  code: |
+    assert search_rotated([3,1],1)==1
+    assert search_rotated([3,1],3)==0
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    a=list(range(50000,100000))+list(range(0,50000))
+    assert all(search_rotated(a,v)==a.index(v) for v in (0,49999,50000,99999,70000))
+complexity:
+- op: overall
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: With duplicates?
+  kind: reasoning
+  key_points:
+  - When nums[lo]==nums[mid]==nums[hi] you cannot tell which half is sorted
+  - Shrink both ends by one
+  - Worst case degrades to O(n)
+- q: Why is it still O(log n)?
+  kind: complexity
+  key_points:
+  - Each step discards half of the range
+  - Only O(1) comparisons per step
+  - No extra storage, iterative loop
+- q: Find the pivot (minimum) instead
+  kind: design
+  key_points:
+  - Binary search comparing mid with the right end
+  - If nums[mid] > nums[hi] the min is to the right
+  - Then search each sorted side or just return the min
+narration: []
+state_aloud:
+- Empty list.
+- Single element.
+- Array that is not actually rotated.
+- Target missing returns -1.
+walkthrough: |
+  Run a standard binary search, but at each midpoint determine which half is properly sorted by comparing `nums[lo]` to `nums[mid]`. If the target falls within the sorted half's value range, search that half; otherwise search the other. Every iteration halves the range, so the search is logarithmic even though the array as a whole is not sorted.

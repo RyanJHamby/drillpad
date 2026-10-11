@@ -1,0 +1,96 @@
+id: edit-distance
+title: Edit Distance
+bar_level: 3
+target_minutes: 38
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Edit Distance (LC 72)"
+statement: |
+  Return the minimum number of single-character operations (insert, delete, replace) needed to transform string `word1` into `word2`. Either string may be empty.
+
+  Example: `min_distance("horse", "ros")` returns `3` (horse -> rorse -> rose -> ros).
+starter: |
+  def min_distance(word1, word2):
+      pass
+hints:
+- 'Look at the last characters: if equal, no cost; otherwise choose the cheapest of insert, delete, replace.'
+- 'State: d[i][j] = edit distance between word1[:i] and word2[:j].'
+- d[i][0] = i, d[0][j] = j. d[i][j] = d[i-1][j-1] if equal else 1 + min(d[i-1][j], d[i][j-1], d[i-1][j-1]).
+follow_ups:
+- Reconstruct the edit script.
+- What if replace costs 2 (Levenshtein vs LCS-based)?
+tests:
+- name: example
+  tags:
+  - ordering
+  code: |
+    assert min_distance("horse","ros")==3
+- name: example 2
+  tags:
+  - ordering
+  code: |
+    assert min_distance("intention","execution")==5
+    assert min_distance("kitten","sitting")==3
+- name: both empty
+  tags:
+  - empty
+  code: |
+    assert min_distance("","")==0
+- name: one empty
+  tags:
+  - empty
+  code: |
+    assert min_distance("","abc")==3
+    assert min_distance("abc","")==3
+- name: identical
+  tags:
+  - duplicate
+  code: |
+    assert min_distance("same","same")==0
+- name: single replace
+  tags:
+  - single
+  code: |
+    assert min_distance("a","b")==1
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    assert min_distance("a"*800,"b"*800)==800
+    assert min_distance("ab"*400,"ba"*400)==2
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(n)
+  accepted_space:
+  - O(m * n)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - m*n cells with constant work
+  - Two rows give O(n) space
+  - Recursion without memo is exponential (3^max(m,n))
+- q: Reconstruct operations
+  kind: design
+  key_points:
+  - Keep the full table, or Hirschberg's divide and conquer for linear space
+  - Backtrack choosing the predecessor that explains each value
+  - Emit insert/delete/replace
+- q: Rolling rows
+  kind: code
+  key_points:
+  - Keep prev diagonal in a temp variable
+  - cur[j] = prev[j-1] if equal else 1 + min of three
+  - Swap rows each iteration
+narration: []
+state_aloud:
+- Distance to an empty string is its length.
+- Equal characters cost nothing.
+- 'Three operations: insert, delete, replace.'
+walkthrough: Let `d[i][j]` be the edit distance between `word1[:i]` and `word2[:j]`. With `d[i][0] = i` and `d[0][j] = j`, when the last characters match `d[i][j] = d[i-1][j-1]`; otherwise it is `1 + min(d[i-1][j], d[i][j-1], d[i-1][j-1])` for delete, insert, replace. Two rolling rows give O(m*n) time and O(n) space.

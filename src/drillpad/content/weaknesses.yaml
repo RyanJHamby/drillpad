@@ -1,0 +1,145 @@
+# Seed weaknesses for drillpad. EVERY entry is "user to confirm": mined from Ryan's notes, not self-declared
+# inside drillpad. Unconfirmed seeds do not affect scoring until `status: confirmed` (see coach/weakness.py).
+#
+# evidence:
+#   recorded         - the notes explicitly record this as a past failure/gap
+#   drill-prescribed - the notes prescribe a drill/fix for it, but do not record Ryan failing at it
+#                      (weaker evidence; confirm or delete)
+# severity: 1 (minor) .. 3 (major) is a first guess.
+# Sources are the author's private drill notes.
+seeds:
+  # ---- problem: whole-problem execution ----
+  - category: problem
+    tag: slow-time-to-working
+    severity: 3
+    status: user-to-confirm
+    evidence: recorded
+    description: Not fast enough to a working solution in timed rounds (prior fintech loop failure attributed to this).
+    source: author's drill notes
+  - category: problem
+    tag: timed-execution
+    severity: 3
+    status: user-to-confirm
+    evidence: recorded
+    description: Trading-firm cycle failure attributed to timed execution; strong design/systems knowledge did not survive slow coding rounds.
+    source: author's drill notes
+  - category: problem
+    tag: practical-part1-over-20min
+    severity: 2
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Practical multi-part (in-memory system) rounds; target is part 1 green in 20 min.
+    source: author's drill notes
+
+  # ---- algorithm: process/approach habits ----
+  - category: algorithm
+    tag: edge-cases
+    severity: 2
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Edge-case misses (listed as a miss category to classify after each session; negative amounts, duplicates, ordering, idempotency for practical rounds).
+    source: author's drill notes
+  - category: algorithm
+    tag: optimizing-before-correct
+    severity: 2
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Polishing/optimizing before a working version exists; no typing before a plan.
+    source: author's drill notes
+  - category: algorithm
+    tag: untested-before-done
+    severity: 2
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Declaring done without hand-testing a small example; tests that cannot fail; ignoring failing tests.
+    source: author's drill notes
+
+  # ---- pattern: recognition under 60 seconds (templates from memory) ----
+  - category: pattern
+    tag: pattern-recognition
+    severity: 2
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Recognition misses (did not see the pattern) is the first miss class in the review protocol; goal is recognition in under 60 seconds.
+    source: author's drill notes
+  - category: pattern
+    tag: sliding-window
+    severity: 1
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Template not yet confirmed as writable from memory.
+    source: author's drill notes
+  - category: pattern
+    tag: bfs
+    severity: 1
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Template not yet confirmed as writable from memory.
+    source: author's drill notes
+  - category: pattern
+    tag: heap-top-k
+    severity: 1
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Template not yet confirmed as writable from memory.
+    source: author's drill notes
+  - category: pattern
+    tag: union-find
+    severity: 1
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Template not yet confirmed as writable from memory.
+    source: author's drill notes
+  - category: pattern
+    tag: binary-search-on-answer
+    severity: 1
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Template not yet confirmed as writable from memory.
+    source: author's drill notes
+
+  # ---- language ----
+  - category: language
+    tag: cpp-fluency
+    severity: 3
+    status: user-to-confirm
+    evidence: recorded
+    description: C++ is L0 overall; do not choose it for speed-sensitive general rounds.
+    source: author's drill notes
+  - category: language
+    tag: python-idioms
+    severity: 2
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Fluency in collections/heapq/bisect/slicing/lru_cache/dataclass and pitfalls (recursion limit, mutable default args, iterator invalidation).
+    source: author's drill notes
+
+  # ---- communication ----
+  - category: communication
+    tag: silence-while-thinking
+    severity: 3
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Going silent; interviewer cannot credit reasoning they cannot hear. Narrate decisions; recovery script when stuck over 3 minutes.
+    source: author's drill notes
+  - category: communication
+    tag: nerves-live
+    severity: 2
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Nerves as a classified miss category; mitigated by monthly camera-on, talk-aloud mock with another person.
+    source: author's drill notes
+  - category: communication
+    tag: thrashing-when-stuck
+    severity: 2
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Silent thrashing instead of stating what is known, brute-forcing, then improving.
+    source: author's drill notes
+  - category: communication
+    tag: unexplained-code
+    severity: 1
+    status: user-to-confirm
+    evidence: drill-prescribed
+    description: Unable to explain/justify code and its complexity aloud (over-reliance in AI-assisted rounds; state complexity in wrap-up).
+    source: author's drill notes

@@ -1,0 +1,146 @@
+id: admission-control
+title: Priority-based admission control and load shedding
+bar_level: 3
+target_minutes: 25
+patterns: [admission-control, load-shedding, priority-thresholds, saturation-signal]
+firm_tags: [ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:115 - *"'
+  - 'deck:"Interview Prep*" "Item:116 - *"'
+statement: |
+  The starter defines `Priority` (LOW < NORMAL < HIGH). Implement
+  `AdmissionController(max_in_flight, latency_window=50)`:
+
+  - `admit(priority) -> bool`: saturation is `in_flight / max_in_flight`. Reject if saturation
+    is `>=` the tier's shed threshold (LOW 0.6, NORMAL 0.85, HIGH 1.0); otherwise increment
+    `in_flight` and return True.
+  - `release(latency_sec)`: decrement in-flight (never below 0) and record the latency in a
+    rolling window of the last `latency_window` samples.
+  - `is_latency_saturated(slo_sec) -> bool`: true if the p99 of recorded latencies
+    (sorted, index `min(int(n * 0.99), n - 1)`) exceeds `slo_sec`; False if no samples.
+  Lock around state.
+prelude: |
+  from enum import IntEnum
+
+  class Priority(IntEnum):
+      LOW = 0
+      NORMAL = 1
+      HIGH = 2
+starter: |
+  class AdmissionController:
+      def __init__(self, max_in_flight: int, latency_window: int = 50):
+          pass
+hints:
+  - Lower priority tiers get lower thresholds, so they shed first and HIGH keeps headroom.
+  - Use a deque(maxlen=latency_window) for the rolling window.
+follow_ups:
+  - Queue depth or latency as the saturation signal?
+  - How do you avoid a thundering herd when shedding lifts (jittered client backoff, gradual ramp)?
+  - How is this different from rate limiting?
+  - How would you shed by request cost rather than count?
+tests:
+  - name: tiers shed in order
+    tags: [ordering, boundary]
+    code: |
+      c = AdmissionController(max_in_flight=10)
+      assert [c.admit(Priority.LOW) for _ in range(7)] == [True] * 6 + [False]
+      assert [c.admit(Priority.NORMAL) for _ in range(4)] == [True, True, True, False]
+      assert [c.admit(Priority.HIGH) for _ in range(2)] == [True, False]
+  - name: release frees capacity
+    tags: [state-reuse, boundary]
+    code: |
+      c = AdmissionController(max_in_flight=10)
+      for _ in range(6): c.admit(Priority.LOW)
+      assert c.admit(Priority.LOW) is False
+      c.release(0.01)
+      assert c.admit(Priority.LOW) is True
+  - name: latency saturation signal
+    tags: [empty, boundary]
+    code: |
+      c = AdmissionController(max_in_flight=4)
+      assert c.is_latency_saturated(0.1) is False
+      for lat in (0.1, 0.1, 0.9):
+          c.admit(Priority.HIGH); c.release(lat)
+      assert c.is_latency_saturated(0.5) is True
+      assert c.is_latency_saturated(1.0) is False
+  - name: release never goes below zero and window rolls
+    tags: [invalid, boundary, state-reuse]
+    hidden: true
+    code: |
+      c = AdmissionController(max_in_flight=2, latency_window=3)
+      for _ in range(5): c.release(5.0)
+      assert c.admit(Priority.HIGH) is True and c.admit(Priority.HIGH) is True
+      assert c.admit(Priority.HIGH) is False, "over-releasing must not create extra capacity"
+      for _ in range(3): c.release(0.01)
+      assert c.is_latency_saturated(1.0) is False, "old samples must roll out of the window"
+  - name: concurrent admits never exceed the limit
+    tags: [concurrency, scale]
+    hidden: true
+    code: |
+      import threading
+      c = AdmissionController(max_in_flight=100)
+      ok = []
+      def worker():
+          ok.append(sum(c.admit(Priority.HIGH) for _ in range(50)))
+      ts = [threading.Thread(target=worker, daemon=True) for _ in range(8)]
+      for t in ts: t.start()
+      for t in ts: t.join(10)
+      assert not any(t.is_alive() for t in ts)
+      assert sum(ok) == 100, f"expected exactly 100 admissions, got {sum(ok)}"
+complexity:
+- op: admit
+  time: O(1)
+  space: O(1)
+- op: release
+  time: O(1)
+  space: O(window)
+- op: is_latency_saturated (p99)
+  time: O(w log w)
+  space: O(w)
+extensions:
+- q: Queue depth or latency as the saturation signal?
+  kind: design
+  key_points:
+  - Queue depth/in-flight is cheap and immediate but instantaneous and can flap
+  - Latency percentile reflects user pain and catches slow-but-not-backed-up downstreams, but lags by the window
+  - Best to combine both
+- q: How do you avoid a thundering herd when shedding lifts?
+  kind: design
+  key_points:
+  - Shed clients retrying together re-saturate the system
+  - Client-side exponential backoff with jitter
+  - Ramp the shed threshold back gradually instead of flipping it
+- q: How is this different from rate limiting?
+  kind: reasoning
+  key_points:
+  - Rate limiting enforces per-client fairness against a quota
+  - Admission control protects overall system health against real-time saturation regardless of per-client quota
+  - Priority tiers shed LOW first so HIGH keeps headroom
+- q: How would you shed by request cost rather than count?
+  kind: code
+  key_points:
+  - Weight in_flight by an estimated cost per request type
+  - Saturation then reflects resource pressure, not request count
+  - release must subtract the same cost
+- q: What does admit cost, and what are the risks of the gatekeeper itself?
+  kind: complexity
+  key_points:
+  - admit is O(1) with a small fixed priority enum (O(log P) if a heap drives shedding)
+  - p99 over a window is O(w log w) when sorted on demand; mention maintaining it incrementally
+  - Gatekeeper must be cheaper than what it protects; a contended lock can cascade failure
+  - Starvation of LOW under sustained near-saturation is by design but should be stated
+narration:
+- This is admission control, not rate limiting — the goal is protecting the whole system's health under saturation, shedding the least important work first.
+- I'll track a saturation signal — I'll use in-flight request count here, and mention latency-percentile as a complementary signal.
+- Each priority tier gets its own shed threshold — low priority sheds early, high priority only sheds at full saturation, so critical traffic gets protected headroom.
+- 'Let me trace it: as in_flight climbs past 60%, LOW gets rejected first; NORMAL and HIGH keep flowing until later thresholds.'
+- I'd flag the thundering-herd risk on recovery as a natural follow-up — once shedding stops, retries can hit all at once without client-side jitter.
+state_aloud:
+- 'Priority inversion: a low-priority request already admitted and holding a downstream resource can still block a high-priority one queued behind it at the *downstream* layer — admission control alone doesn''t fix resource contention inside the dependency, only entry to it.'
+- 'Thundering herd on recovery: once saturation drops below a threshold, all shed clients retrying simultaneously can immediately re-saturate the system — pair with jittered client-side backoff.'
+- 'Signal staleness: queue depth is instantaneous and can flap; latency percentile is smoother but lags reality by the window size — often best to combine both signals (AND/OR) rather than pick one.'
+- 'Starvation of low priority under sustained near-saturation: LOW traffic may never get admitted for extended periods — decide if that''s acceptable (usually yes, by design) or if it needs a minimum guaranteed share.'
+- Cascading failure risk if admission control itself becomes slow (e.g., a lock-contended shared counter) — the gatekeeper must be cheaper than the thing it's protecting.
+walkthrough: |
+  This protects whole-system health under saturation, unlike per-client rate limiting, by shedding the least important work first. A saturation signal such as in-flight count (or a latency percentile) is compared against a per-tier shed threshold, so LOW sheds early and HIGH only near full saturation, leaving headroom for critical traffic. With a small fixed set of tiers, `admit()` is O(1); signal updates are O(1) amortized. Admission alone does not fix priority inversion inside the dependency, and low priority can starve under sustained near-saturation. Shed clients retrying together on recovery can re-saturate the system, so pair this with jittered backoff.
+categories: [systems-impl]

@@ -1,0 +1,97 @@
+id: longest-consecutive-sequence
+title: Longest Consecutive Sequence
+bar_level: 2
+target_minutes: 20
+patterns:
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Longest Consecutive Sequence (LC 128)"
+statement: |
+  Given an unsorted list of integers `nums`, return the length of the longest run of consecutive integer values (like 4, 5, 6, 7) that can be formed from its elements. The elements need not be adjacent in the list. The algorithm must run in O(n) time.
+
+  Example: `longest_consecutive([100, 4, 200, 1, 3, 2])` returns `4` for the run `1, 2, 3, 4`.
+starter: |
+  def longest_consecutive(nums):
+      pass
+hints:
+- Sorting gives O(n log n); the target is O(n).
+- Put all values in a set so membership is O(1).
+- Only start counting from values `x` where `x - 1` is not in the set, then walk upward; each element
+  is then visited once overall.
+follow_ups:
+- Can you do it with union-find instead?
+- How do you return the actual sequence, not just its length?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert longest_consecutive([100,4,200,1,3,2])==4
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert longest_consecutive([])==0
+- name: single element
+  tags:
+  - single
+  code: |
+    assert longest_consecutive([42])==1
+- name: duplicates do not extend a run
+  tags:
+  - duplicate
+  code: |
+    assert longest_consecutive([1,2,0,1])==3
+    assert longest_consecutive([7,7,7])==1
+- name: negatives crossing zero
+  tags:
+  - boundary
+  code: |
+    assert longest_consecutive([-2,-1,0,1,5])==4
+- name: no two values consecutive
+  tags:
+  - invalid
+  code: |
+    assert longest_consecutive([10,20,30])==1
+- name: large input needing O(n)
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=200000
+    xs=list(range(n,0,-1))
+    assert longest_consecutive(xs)==n
+    assert longest_consecutive(list(range(0,2*n,2)))==1
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why is the set walk O(n) despite the inner while loop?
+  kind: complexity
+  key_points:
+  - The inner loop only runs from sequence starts
+  - Each element is stepped over at most once across all starts
+  - Total work is at most 2n set operations
+- q: Union-find or hash-map-of-boundaries alternatives.
+  kind: design
+  key_points:
+  - Map each endpoint to its run length and merge neighbours on insert
+  - Union-find unions x with x+1 and tracks component size
+  - Both are single pass; choose by whether you need dynamic inserts
+- q: How would you return the sequence itself?
+  kind: reasoning
+  key_points:
+  - Record the start value of the best run
+  - Reconstruct range(start, start+best)
+  - Handle ties deterministically
+narration: []
+state_aloud:
+- Empty input returns 0.
+- Duplicates must not inflate the run.
+- Negative values and zero.
+walkthrough: |
+  Load every value into a set. For each value `x` whose predecessor `x - 1` is absent, `x` begins a run: count upward while `x + 1`, `x + 2`, ... are in the set and track the maximum length. Skipping non-starts guarantees each element is walked at most once, giving O(n).

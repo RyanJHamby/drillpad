@@ -1,0 +1,111 @@
+id: maximum-subarray
+title: Maximum Subarray
+bar_level: 2
+target_minutes: 20
+patterns:
+- dp-1d
+- greedy
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Maximum Subarray (LC 53)"
+statement: |
+  Given a non-empty list of integers `nums` (positive, negative, or zero), return the largest sum over all non-empty contiguous subarrays.
+
+  Example: `max_subarray([-2,1,-3,4,-1,2,1,-5,4])` returns `6` (the subarray `[4,-1,2,1]`).
+starter: |
+  def max_subarray(nums):
+      pass
+hints:
+- Brute force tries every (i, j) pair; ask what you actually need to remember about the best subarray ending at index i.
+- The best sum ending at i is either nums[i] alone or nums[i] plus the best sum ending at i-1.
+- If the running sum goes negative it can only hurt the next element, so restart there. Track the best seen overall, and start it from nums[0], not 0.
+follow_ups:
+- Also return the start and end indices of one optimal subarray.
+- Solve it with divide and conquer; what four values does each segment need to expose?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert max_subarray([-2,1,-3,4,-1,2,1,-5,4]) == 6
+- name: single element
+  tags:
+  - single
+  code: |
+    assert max_subarray([5]) == 5
+    assert max_subarray([-7]) == -7
+- name: all negative must pick the largest element
+  tags:
+  - boundary
+  - invalid
+  code: |
+    assert max_subarray([-3,-1,-2]) == -1
+    assert max_subarray([-8,-3,-6,-2,-5,-4]) == -2
+- name: all zeros
+  tags:
+  - duplicate
+  code: |
+    assert max_subarray([0,0,0]) == 0
+- name: whole array is best
+  tags:
+  - boundary
+  code: |
+    assert max_subarray([5,4,-1,7,8]) == 23
+- name: negative prefix then recovery
+  tags:
+  - ordering
+  code: |
+    assert max_subarray([-1,-1,10,-20,3,3]) == 10
+    assert max_subarray([2,-5,3,-1,2]) == 4
+  hidden: true
+- name: large input
+  tags:
+  - scale
+  code: |
+    n = 400000
+    a = [(-1) ** i * (i % 7 + 1) for i in range(n)]
+    best = cur = a[0]
+    for x in a[1:]:
+        cur = max(x, cur + x)
+        best = max(best, cur)
+    assert max_subarray(a) == best
+    assert max_subarray([1] * n) == n
+  hidden: true
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why is it safe to discard a negative running sum?
+  kind: reasoning
+  key_points:
+  - A negative prefix reduces any sum that extends it
+  - So the best subarray starting at the next index is at least as good without that prefix
+  - Equivalent to the DP best_ending[i] = max(nums[i], best_ending[i-1] + nums[i])
+- q: 'Divide and conquer version: complexity and what each half returns?'
+  kind: complexity
+  key_points:
+  - Each segment returns total, best prefix, best suffix, best inside
+  - 'Merge in O(1): best crossing = left.suffix + right.prefix'
+  - T(n) = 2T(n/2) + O(1) = O(n); recursion adds O(log n) space
+- q: The data arrives as a stream or you need range queries on arbitrary [l, r]; what changes?
+  kind: design
+  key_points:
+  - 'Stream: Kadane''s state (current, best) is O(1) and updates per element'
+  - 'Range queries: segment tree storing (total, prefix, suffix, best) per node'
+  - Query merges O(log n) nodes; point updates are O(log n)
+- q: Give an exchange-argument or proof sketch that restarting at a negative running sum never loses the optimum.
+  kind: reasoning
+  key_points:
+  - Suppose an optimal subarray starts inside a prefix whose sum is negative
+  - Dropping that negative prefix strictly increases the sum, contradicting optimality
+  - So an optimal subarray never begins right after a negative-sum prefix, and the restart is safe
+narration: []
+state_aloud:
+- 'Non-empty input: all-negative arrays must return the largest element, not 0.'
+- Single element.
+- Best value initialised from nums[0], not 0.
+walkthrough: |
+  Keep the best sum of a subarray ending at the current element. Either extend the previous run or start fresh at this element, whichever is larger. A global maximum tracks the best of those over all positions. Initialising from the first element handles all-negative input correctly. One pass, constant extra state.

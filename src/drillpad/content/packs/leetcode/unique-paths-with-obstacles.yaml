@@ -1,0 +1,97 @@
+id: unique-paths-with-obstacles
+title: Unique Paths II
+bar_level: 2
+target_minutes: 20
+patterns:
+- dp-2d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Unique Paths II (LC 63)"
+statement: |
+  A robot starts at the top-left of an `m x n` grid and wants to reach the bottom-right, moving only right or down. Cells containing `1` are obstacles and cannot be entered; `0` cells are free. Return the number of distinct paths.
+
+  Example: `unique_paths([[0,0,0],[0,1,0],[0,0,0]])` returns `2`.
+starter: |
+  def unique_paths(grid):
+      pass
+hints:
+- Paths into a cell = paths into the cell above + paths into the cell to the left.
+- An obstacle cell has 0 paths.
+- Seed the start with 1 (unless it's an obstacle) and fill row by row; one row of memory suffices.
+follow_ups:
+- What if you could also move diagonally?
+- Return the answer modulo 10^9+7 for huge grids.
+tests:
+- name: obstacle in the middle
+  tags:
+  - ordering
+  code: |
+    assert unique_paths([[0,0,0],[0,1,0],[0,0,0]])==2
+- name: start blocked
+  tags:
+  - boundary
+  code: |
+    assert unique_paths([[1,0],[0,0]])==0
+- name: goal blocked
+  tags:
+  - invalid
+  code: |
+    assert unique_paths([[0,0],[0,1]])==0
+- name: single cell
+  tags:
+  - single
+  code: |
+    assert unique_paths([[0]])==1
+    assert unique_paths([[1]])==0
+- name: empty grid
+  tags:
+  - empty
+  code: |
+    assert unique_paths([])==0
+- name: single row with obstacle blocks completely
+  tags:
+  - boundary
+  code: |
+    assert unique_paths([[0,0,1,0]])==0
+    assert unique_paths([[0,0,0,0]])==1
+- name: large open grid
+  tags:
+  - scale
+  hidden: true
+  code: |
+    g=[[0]*18 for _ in range(18)]
+    assert unique_paths(g)==2333606220
+    assert unique_paths([[0]*300 for _ in range(300)])>0
+complexity:
+- op: overall
+  time: O(m * n)
+  space: O(n)
+extensions:
+- q: Space optimization
+  kind: complexity
+  key_points:
+  - Each cell needs only the cell above and left
+  - Keep a single row updated in place
+  - O(n) space, time still O(m*n)
+- q: Huge answers
+  kind: design
+  key_points:
+  - Counts grow combinatorially
+  - Use modulo arithmetic or big integers
+  - Closed form C(m+n-2, m-1) works only without obstacles
+- q: Diagonal moves
+  kind: reasoning
+  key_points:
+  - Add the up-left neighbor to the recurrence
+  - Delannoy numbers appear on an open grid
+  - Complexity unchanged
+narration: []
+state_aloud:
+- Blocked start or goal.
+- 1x1 grid.
+- Empty grid.
+- First row/column propagate zeros after an obstacle.
+walkthrough: |
+  Let `dp[j]` hold the number of ways to reach column `j` in the current row. For each cell, an obstacle sets it to 0; otherwise add the value from the left to the value already stored (from above). Starting with 1 at the origin, the final entry is the answer. Obstacles in the first row or column naturally zero out everything past them.

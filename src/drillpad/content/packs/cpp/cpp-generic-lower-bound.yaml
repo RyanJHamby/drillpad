@@ -1,0 +1,276 @@
+id: cpp-generic-lower-bound
+title: Generic lower_bound with Iterators and Templates
+language: cpp
+bar_level: 2
+target_minutes: 25
+patterns:
+- templates
+- iterators
+- binary-search
+- lower-bound
+- iterator-categories
+firm_tags:
+- quant-hft
+statement: |
+  Write `my_lower_bound`, `my_upper_bound` and `my_equal_range` as templates over iterators and comparators
+  (C++20), with the same contracts as the standard library. Do not call `std::lower_bound`, `std::upper_bound` or
+  `std::equal_range`.
+
+  ```cpp
+  template <class It, class T, class Comp = std::less<>>
+  It my_lower_bound(It first, It last, const T& value, Comp comp = Comp{});
+  ```
+  - `my_lower_bound` returns the first position `it` in `[first, last)` where `!comp(*it, value)`; it calls `comp(element, value)`.
+  - `my_upper_bound` returns the first position where `comp(value, *it)`; it calls `comp(value, element)`.
+  - `my_equal_range` returns `{lower, upper}`.
+  - The range must already be partitioned/sorted by `comp`. `T` may differ from the element type (heterogeneous
+    comparators); a comparator that only accepts one argument order must work with the right algorithm.
+  - It must work for forward, bidirectional and random-access iterators (pointers, `std::vector`, `std::deque`,
+    `std::list`) and perform O(log n) comparisons for all of them. Use `std::distance` and `std::advance`, not `it + k`.
+
+  Example:
+  ```cpp
+  std::vector<int> v = {1, 2, 2, 5};
+  auto it = my_lower_bound(v.begin(), v.end(), 2);   // points at v[1]
+  auto up = my_upper_bound(v.begin(), v.end(), 2);   // points at v[3]
+  ```
+starter: |
+  // Same contracts as std::lower_bound / std::upper_bound / std::equal_range, written by hand.
+  // Must work for forward, bidirectional and random-access iterators; use std::distance/std::advance
+  // so that the comparison count is O(log n) for ALL of them.
+
+  // First position where !comp(element, value): comp is called as comp(*it, value).
+  template <class It, class T, class Comp = std::less<>>
+  It my_lower_bound(It first, It last, const T& value, Comp comp = Comp{}) {
+      return last;
+  }
+
+  // First position where comp(value, element): comp is called as comp(value, *it).
+  template <class It, class T, class Comp = std::less<>>
+  It my_upper_bound(It first, It last, const T& value, Comp comp = Comp{}) {
+      return last;
+  }
+
+  template <class It, class T, class Comp = std::less<>>
+  std::pair<It, It> my_equal_range(It first, It last, const T& value, Comp comp = Comp{}) {
+      return {last, last};
+  }
+prelude: |
+  struct Rec { int key; std::string name; };
+  // Heterogeneous comparators: ONLY the argument order the algorithm must use is provided.
+  struct RecLess { bool operator()(const Rec& r, int k) const { return r.key < k; } };      // (element, value)
+  struct ValueLess { bool operator()(int k, const Rec& r) const { return k < r.key; } };    // (value, element)
+  struct RecBoth : RecLess, ValueLess { using RecLess::operator(); using ValueLess::operator(); };
+  struct CountingLess {
+      std::size_t* calls;
+      bool operator()(int a, int b) const { ++*calls; return a < b; }
+  };
+hints:
+- 'Keep (first, count) instead of (low, high): step = count / 2, mid = first advanced by step. This avoids
+  `it + k` and `(lo + hi) / 2` overflow issues.'
+- 'If the predicate says mid is too small: first = ++mid; count -= step + 1. Otherwise count = step.'
+- 'lower_bound asks comp(*mid, value); upper_bound asks the mirrored !comp(value, *mid). Mixing the argument
+  order up is the classic bug: only one of the two overloads exists on the test''s comparators.'
+follow_ups:
+- Why is std::advance O(1) for random access and O(n) for list iterators, and what does that make the
+  total cost on a list?
+- Why does std::lower_bound take a `const T&` that need not be the element type?
+- What requirements does the comparator have (strict weak ordering) and what happens if it is not?
+- When is a sorted vector + binary search faster than std::map or unordered_map (cache locality)?
+tests:
+- name: lower_bound on a sorted vector
+  tags:
+  - single
+  - boundary
+  code: |
+    std::vector<int> v = {1, 3, 5, 7, 9};
+    auto idx = [&](int x) { return std::distance(v.begin(), my_lower_bound(v.begin(), v.end(), x)); };
+    CHECK_EQ(idx(5), 2);
+    CHECK_EQ(idx(4), 2);
+    CHECK_EQ(idx(0), 0);
+    CHECK_EQ(idx(1), 0);
+    CHECK_EQ(idx(9), 4);
+    CHECK_EQ(idx(10), 5);
+    CHECK(my_lower_bound(v.begin(), v.end(), 100) == v.end());
+- name: empty and single element ranges
+  tags:
+  - empty
+  - single
+  code: |
+    std::vector<int> e;
+    CHECK(my_lower_bound(e.begin(), e.end(), 3) == e.end());
+    CHECK(my_upper_bound(e.begin(), e.end(), 3) == e.end());
+    std::vector<int> one = {5};
+    CHECK(my_lower_bound(one.begin(), one.end(), 1) == one.begin());
+    CHECK(my_lower_bound(one.begin(), one.end(), 5) == one.begin());
+    CHECK(my_lower_bound(one.begin(), one.end(), 6) == one.end());
+    CHECK(my_upper_bound(one.begin(), one.end(), 5) == one.end());
+    CHECK(my_upper_bound(one.begin(), one.end(), 4) == one.begin());
+- name: 'duplicates: first of the run and one past the last'
+  tags:
+  - duplicate
+  - ordering
+  code: |
+    std::vector<int> v = {1, 2, 2, 2, 2, 3, 3, 9};
+    auto lo = my_lower_bound(v.begin(), v.end(), 2);
+    auto hi = my_upper_bound(v.begin(), v.end(), 2);
+    CHECK_EQ(std::distance(v.begin(), lo), 1);
+    CHECK_EQ(std::distance(v.begin(), hi), 5);
+    auto er = my_equal_range(v.begin(), v.end(), 3);
+    CHECK_EQ(std::distance(er.first, er.second), 2);
+    auto none = my_equal_range(v.begin(), v.end(), 4);
+    CHECK(none.first == none.second);
+    CHECK_EQ(std::distance(v.begin(), none.first), 7);
+    std::vector<int> same(10, 7);
+    CHECK(my_lower_bound(same.begin(), same.end(), 7) == same.begin());
+    CHECK(my_upper_bound(same.begin(), same.end(), 7) == same.end());
+- name: works on std::list
+  tags:
+  - ordering
+  - single
+  code: |
+    std::list<int> l = {2, 4, 4, 6, 8, 10};
+    auto it = my_lower_bound(l.begin(), l.end(), 4);
+    CHECK_EQ(std::distance(l.begin(), it), 1);
+    CHECK_EQ(*it, 4);
+    auto up = my_upper_bound(l.begin(), l.end(), 4);
+    CHECK_EQ(*up, 6);
+    CHECK(my_lower_bound(l.begin(), l.end(), 11) == l.end());
+    CHECK(my_lower_bound(l.begin(), l.end(), 1) == l.begin());
+    const std::list<int>& cl = l;
+    CHECK_EQ(*my_lower_bound(cl.begin(), cl.end(), 7), 8);
+- name: custom comparator for a descending range
+  tags:
+  - ordering
+  - boundary
+  code: |
+    std::vector<int> v = {9, 7, 7, 5, 3, 1};
+    auto it = my_lower_bound(v.begin(), v.end(), 7, std::greater<int>());
+    CHECK_EQ(std::distance(v.begin(), it), 1);
+    auto up = my_upper_bound(v.begin(), v.end(), 7, std::greater<int>());
+    CHECK_EQ(std::distance(v.begin(), up), 3);
+    CHECK(my_lower_bound(v.begin(), v.end(), 0, std::greater<int>()) == v.end());
+    auto lam = my_lower_bound(v.begin(), v.end(), 4, [](int a, int b) { return a > b; });
+    CHECK_EQ(*lam, 3);
+- name: heterogeneous comparator uses (element, value) order
+  tags:
+  - invalid
+  - ordering
+  code: |
+    std::vector<Rec> recs = {{1, "a"}, {3, "b"}, {3, "c"}, {8, "d"}};
+    auto lo = my_lower_bound(recs.begin(), recs.end(), 3, RecLess{});
+    CHECK_EQ(lo->name, "b");
+    auto hi = my_upper_bound(recs.begin(), recs.end(), 3, ValueLess{});
+    CHECK_EQ(hi->name, "d");
+    auto er = my_equal_range(recs.begin(), recs.end(), 3, RecBoth{});   // equal_range needs both orders
+    CHECK_EQ(std::distance(er.first, er.second), 2);
+    CHECK(my_lower_bound(recs.begin(), recs.end(), 9, RecLess{}) == recs.end());
+- name: arrays, deque and iterator type preserved
+  tags:
+  - boundary
+  - single
+  code: |
+    int a[] = {10, 20, 30, 40};
+    int* p = my_lower_bound(a, a + 4, 25);
+    CHECK_EQ(*p, 30);
+    CHECK_EQ(p - a, 2);
+    std::deque<int> d = {1, 2, 3, 4, 5, 6};
+    auto it = my_upper_bound(d.begin(), d.end(), 4);
+    CHECK_EQ(*it, 5);
+    std::vector<std::string> s = {"apple", "banana", "cherry"};
+    auto sit = my_lower_bound(s.begin(), s.end(), std::string("blueberry"));
+    CHECK_EQ(*sit, "cherry");
+    auto sub = my_lower_bound(s.begin() + 1, s.end(), std::string("a"));   // sub-range
+    CHECK(sub == s.begin() + 1);
+- name: equal_range matches the standard library
+  hidden: true
+  tags:
+  - scale
+  - duplicate
+  code: |
+    std::vector<int> v;
+    for (int i = 0; i < 300; i++) v.push_back(i / 7);
+    for (int x = -2; x < 50; x++) {
+        auto mine = my_equal_range(v.begin(), v.end(), x);
+        auto ref = std::equal_range(v.begin(), v.end(), x);
+        CHECK(mine.first == ref.first);
+        CHECK(mine.second == ref.second);
+    }
+- name: logarithmic comparisons on a million elements
+  hidden: true
+  tags:
+  - scale
+  code: |
+    std::vector<int> v(1000000);
+    std::iota(v.begin(), v.end(), 0);
+    std::size_t calls = 0;
+    auto it = my_lower_bound(v.begin(), v.end(), 777777, CountingLess{&calls});
+    CHECK_EQ(*it, 777777);
+    CHECK(calls <= 21);
+    calls = 0;
+    auto up = my_upper_bound(v.begin(), v.end(), 5, [&](int a, int b) { ++calls; return a < b; });
+    CHECK_EQ(*up, 6);
+    CHECK(calls <= 21);
+- name: logarithmic comparisons on a std::list
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    std::list<int> l;
+    for (int i = 0; i < 1000; i++) l.push_back(i * 2);
+    std::size_t calls = 0;
+    auto it = my_lower_bound(l.begin(), l.end(), 1001, CountingLess{&calls});
+    CHECK_EQ(*it, 1002);
+    CHECK(calls <= 11);                    // O(log n) comparisons even though advancing is O(n)
+complexity:
+- op: lower_bound / upper_bound (random access)
+  time: O(log n)
+  space: O(1)
+- op: lower_bound (forward/bidirectional)
+  time: O(n)
+  space: O(1)
+- op: comparisons (any iterator)
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: What are the comparison and iterator-step counts for each iterator category?
+  kind: complexity
+  key_points:
+  - Comparisons are O(log n) for every category
+  - Iterator movements are O(log n) for random access but O(n) in total for forward/bidirectional iterators
+    (std::advance walks)
+  - So for std::list a linear scan is no worse asymptotically, but binary search still saves comparisons
+    when they are expensive
+- q: How do concepts (C++20) change the declaration?
+  kind: design
+  key_points:
+  - Constrain with std::forward_iterator It and std::indirect_strict_weak_order<const T*, It> (or std::sorted_range
+    semantics via ranges::lower_bound)
+  - The ranges version takes a projection, so you can search records by key without a heterogeneous comparator
+  - Constraints turn a wall of template errors into a clear message at the call site
+- q: Why is the (first, count) formulation preferable to (lo, hi)?
+  kind: reasoning
+  key_points:
+  - It never computes lo + hi, which overflows for large index types, and never needs it + k arithmetic
+  - It works uniformly with std::advance for non-random-access iterators
+  - It is the form used by libstdc++/libc++ and has no off-by-one at the end of the range
+- q: What are the performance considerations for large sorted arrays?
+  kind: design
+  key_points:
+  - 'Binary search has poor cache behaviour: each step is a likely cache miss for big arrays; Eytzinger
+    layout or B-tree-like blocking helps'
+  - 'Branchless variants avoid mispredictions: replace the if with a conditional move'
+  - Prefetching both candidate midpoints hides latency in the final levels
+narration: []
+state_aloud:
+- 'Comparator argument order: lower_bound calls comp(element, value), upper_bound calls comp(value, element).'
+- 'Edge cases: empty range, single element, all equal, value below/above the whole range.'
+- Work with (first, count) and std::advance so every iterator category compiles and stays O(log n) in
+  comparisons.
+- 'Precondition: the range is sorted by the same comparator; say so.'
+walkthrough: |
+  Binary search over `(first, count)`: advance a copy of `first` by `count / 2`, then either skip past it (`count -= step + 1`) or shrink to the left half. Using `std::distance`/`std::advance` makes the same template work for pointers, vectors and lists, and the comparator argument order (element, value) vs (value, element) is what separates lower from upper bound. Python's `bisect` is fixed to indexable sequences with `<`; the C++ version is generic over iterator category, comparator and element/value types.
+anki_queries: []
+categories:
+- leetcode

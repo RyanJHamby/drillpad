@@ -1,0 +1,203 @@
+id: lru-with-ttl
+title: LRU Cache with Per-key TTL
+bar_level: 3
+target_minutes: 35
+patterns:
+- lru
+- ttl
+- ordered-dict
+- lazy-expiry
+- min-heap
+firm_tags:
+- ai-infra
+- distsys
+statement: |
+  Implement `LRUTTLCache(capacity, clock=time.monotonic)`, a bounded cache that combines
+  least-recently-used eviction with a per-key time-to-live.
+
+  API
+  - `put(key, value, ttl=None)`: store `value`. `ttl` is seconds from `clock()` now; `None` means
+    the entry never expires. Overwriting a key replaces value *and* ttl and makes it most recent.
+  - `get(key)`: return the value or `None` when absent or expired. An entry is expired when
+    `clock() >= expiry` (the boundary instant is already expired). A hit makes the key most
+    recent but does NOT extend its ttl.
+  - `len(cache)`: number of live (unexpired) entries.
+  - Capacity: when a `put` would exceed `capacity`, first drop entries that are already expired;
+    only if the cache is still over capacity evict the least-recently-used live entry. Expired
+    entries must never cause a live entry to be evicted. `capacity <= 0` stores nothing.
+  - Always read time through the injected `self.clock()` (tests pass a fake clock).
+
+  Example
+  ```python
+  t = [0.0]
+  c = LRUTTLCache(2, clock=lambda: t[0])
+  c.put("a", 1, ttl=5); c.put("b", 2)
+  t[0] = 6.0
+  c.put("c", 3)          # "a" is expired, so "b" is NOT evicted
+  c.get("a") -> None;  c.get("b") -> 2;  len(c) -> 2
+  ```
+starter: |
+  import time
+
+  class LRUTTLCache:
+      def __init__(self, capacity, clock=time.monotonic):
+          pass
+
+      def put(self, key, value, ttl=None):
+          pass
+
+      def get(self, key):
+          pass
+
+      def __len__(self):
+          pass
+hints:
+- Keep recency in an OrderedDict; store the absolute expiry per entry.
+- 'Expired entries must not occupy capacity: before evicting an LRU victim, drop whatever is already expired.'
+- A min-heap of (expiry, seq, key) finds expired entries without scanning; ignore heap entries whose seq
+  no longer matches the map.
+follow_ups:
+- How does this differ from a per-key TTL cache with a background sweeper?
+- What happens to heap size if the same key is overwritten millions of times?
+- Would you refresh ttl on read (sliding expiration)? Trade-offs?
+tests:
+- name: lru eviction order
+  tags:
+  - ordering
+  - boundary
+  code: |
+    t = [0.0]
+    c = LRUTTLCache(2, clock=lambda: t[0])
+    c.put("a", 1); c.put("b", 2)
+    assert c.get("a") == 1
+    c.put("c", 3)
+    assert c.get("b") is None and c.get("a") == 1 and c.get("c") == 3
+    assert len(c) == 2
+- name: ttl boundary
+  tags:
+  - time
+  - boundary
+  code: |
+    t = [100.0]
+    c = LRUTTLCache(4, clock=lambda: t[0])
+    c.put("k", "v", ttl=10)
+    t[0] = 109.9
+    assert c.get("k") == "v"
+    t[0] = 110.0
+    assert c.get("k") is None
+    assert len(c) == 0
+- name: expired entries do not force live eviction
+  tags:
+  - time
+  - ordering
+  code: |
+    t = [0.0]
+    c = LRUTTLCache(2, clock=lambda: t[0])
+    c.put("a", 1, ttl=5); c.put("b", 2)
+    t[0] = 6.0
+    c.put("c", 3)
+    assert c.get("b") == 2, "live entry evicted while an expired one was still occupying space"
+    assert c.get("c") == 3 and c.get("a") is None
+    assert len(c) == 2
+- name: overwrite replaces ttl and recency
+  tags:
+  - duplicate
+  - time
+  - ordering
+  code: |
+    t = [0.0]
+    c = LRUTTLCache(2, clock=lambda: t[0])
+    c.put("a", 1, ttl=5); c.put("b", 2)
+    t[0] = 4.0
+    c.put("a", 10, ttl=5)          # new ttl: expires at 9, and "a" is now most recent
+    c.put("c", 3)                  # evicts LRU = "b"
+    assert c.get("b") is None
+    t[0] = 8.0
+    assert c.get("a") == 10
+    t[0] = 9.0
+    assert c.get("a") is None
+- name: get does not extend ttl
+  hidden: true
+  tags:
+  - time
+  - state-reuse
+  code: |
+    t = [0.0]
+    c = LRUTTLCache(3, clock=lambda: t[0])
+    c.put("a", 1, ttl=10)
+    t[0] = 9.0
+    assert c.get("a") == 1
+    t[0] = 10.0
+    assert c.get("a") is None
+- name: zero capacity
+  hidden: true
+  tags:
+  - zero-capacity
+  - empty
+  code: |
+    c = LRUTTLCache(0, clock=lambda: 0.0)
+    c.put("a", 1)
+    assert c.get("a") is None
+    assert len(c) == 0
+    d = LRUTTLCache(1, clock=lambda: 0.0)
+    d.put("a", 1); d.put("b", 2)
+    assert d.get("a") is None and d.get("b") == 2 and len(d) == 1
+- name: many keys stay bounded
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    t = [0.0]
+    c = LRUTTLCache(1000, clock=lambda: t[0])
+    for i in range(30000):
+        t[0] += 0.001
+        c.put(i, i, ttl=(None if i % 7 == 0 else 1000))
+    assert len(c) == 1000
+    assert c.get(29999) == 29999 and c.get(0) is None
+complexity:
+- op: get
+  time: O(1)
+  space: O(n)
+- op: put
+  time: O(log n) amortized
+  space: O(n)
+extensions:
+- q: What are the time costs of get and put, and where does the TTL bookkeeping show up?
+  kind: complexity
+  key_points:
+  - 'get is a dict lookup plus move_to_end: O(1)'
+  - put pushes one heap entry, so O(log n); purging k expired entries is O(k log n) amortized across puts
+  - Space is O(capacity) for the map plus stale heap entries that are lazily discarded
+- q: How do you make this thread-safe without serialising all reads?
+  kind: design
+  key_points:
+  - A single lock around the OrderedDict is correct because get mutates recency order
+  - Shard keys over N independent caches each with its own lock to cut contention
+  - Alternatively record accesses in a buffer and apply recency updates in batches (Caffeine-style)
+- q: How would the design change if the cache has to survive restarts (persistence)?
+  kind: design
+  key_points:
+  - Persist absolute wall-clock expiry, not monotonic time, since monotonic resets on reboot
+  - Snapshot plus append-only log of puts; on load, drop already-expired entries
+  - Recency order can be approximated or rebuilt from last-access timestamps
+- q: Why not just scan the whole map for expired entries when full?
+  kind: reasoning
+  key_points:
+  - O(n) per put on the hot path makes worst-case latency unbounded
+  - A min-heap keyed by expiry yields exactly the entries that are due
+  - Overwritten keys leave stale heap entries, so validate against the map on pop
+narration: []
+state_aloud:
+- 'Expiry boundary: expired when clock() >= expiry, applied identically in get and purge.'
+- Expired entries must not push out live ones.
+- ttl=None never expires; capacity 0 stores nothing; overwrite replaces ttl.
+- Time must come from the injected clock, never time.time().
+walkthrough: An OrderedDict holds entries in recency order, each with its absolute expiry and a sequence
+  number. get checks expiry lazily and moves hits to the end without touching the ttl. A min-heap of (expiry,
+  seq, key) lets put drop already-expired entries when over capacity, skipping stale heap rows whose seq
+  no longer matches, and only then evicts the LRU entry. get is O(1); put is O(log n) amortized because
+  of the heap push and purge.
+anki_queries: []
+categories:
+- systems-impl

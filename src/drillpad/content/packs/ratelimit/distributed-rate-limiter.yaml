@@ -1,0 +1,127 @@
+id: distributed-rate-limiter
+title: Fixed-window limiter on shared atomic state (Redis-style)
+bar_level: 3
+target_minutes: 20
+patterns: [distributed-rate-limiting, atomic-incr, fixed-window, check-then-act-race]
+firm_tags: [ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:30 - *"'
+statement: |
+  Model a Redis-backed fixed-window limiter. Implement `FakeRedis` with one atomic operation
+  `eval_incr_with_expire(key, window_sec, now)`: if the key is absent or its expiry
+  `expire_at <= now`, start a new window (count 1, `expire_at = now + window_sec`) and return 1;
+  otherwise increment and return the new count. Then implement
+  `is_allowed(fake_redis, key, limit, window_sec, now) -> bool`, true iff the post-increment
+  count is `<= limit`. Increment-first is the point: GET-then-check-then-INCR is a race.
+  (Atomicity itself is not tested here; this models the protocol, which in real Redis is one
+  INCR/Lua script.)
+starter: |
+  class FakeRedis:
+      def __init__(self):
+          pass
+
+  def is_allowed(fake_redis, key, limit, window_sec, now):
+      pass
+hints:
+  - One call both counts and tells you the count; never read then write separately.
+  - A new window resets the count to 1, not 0, because this request is the first of it.
+follow_ups:
+  - Why a Lua script (or atomic INCR) rather than a distributed lock?
+  - What if Redis is down: fail open or fail closed?
+  - How do you cut load on Redis at very high QPS (local token bucket at limit/N)?
+  - How does this change for a sliding window (sorted set, ZADD/ZREMRANGEBYSCORE/ZCARD)?
+tests:
+  - name: counts up and denies past limit
+    tags: [boundary, ordering]
+    code: |
+      r = FakeRedis()
+      assert [r.eval_incr_with_expire("k", 60, 0) for _ in range(3)] == [1, 2, 3]
+      r = FakeRedis()
+      res = [is_allowed(r, "u", 3, 60, 1.0) for _ in range(5)]
+      assert res == [True, True, True, False, False]
+  - name: window resets after expiry
+    tags: [time, boundary, state-reuse]
+    code: |
+      r = FakeRedis()
+      for _ in range(3): is_allowed(r, "u", 3, 10, now=0)
+      assert is_allowed(r, "u", 3, 10, now=9.9) is False
+      assert is_allowed(r, "u", 3, 10, now=10) is True, "expiry boundary: expire_at <= now starts a new window"
+      assert r.eval_incr_with_expire("u", 10, 11) == 2
+  - name: keys are independent
+    tags: [zero-capacity, duplicate]
+    code: |
+      r = FakeRedis()
+      assert is_allowed(r, "a", 1, 60, 0) is True
+      assert is_allowed(r, "a", 1, 60, 0) is False
+      assert is_allowed(r, "b", 1, 60, 0) is True
+  - name: denied requests still count within the window
+    tags: [duplicate, boundary]
+    hidden: true
+    code: |
+      r = FakeRedis()
+      for _ in range(5): is_allowed(r, "k", 2, 60, 0)
+      assert r.eval_incr_with_expire("k", 60, 1) == 6
+  - name: limit zero denies everything
+    tags: [zero-capacity, boundary, empty]
+    hidden: true
+    code: |
+      r = FakeRedis()
+      assert [is_allowed(r, "k", 0, 60, 0) for _ in range(3)] == [False, False, False]
+      assert is_allowed(r, "k", 0, 60, 100) is False
+complexity:
+- op: is_allowed (one atomic incr)
+  time: O(1)
+  space: O(k)
+- op: per key state
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Why a Lua script (or atomic INCR) rather than a distributed lock or GET-then-INCR?
+  kind: reasoning
+  key_points:
+  - 'GET then check then INCR is a check-then-act race: two servers both read 9 of 10 and both proceed'
+  - A lock needs acquire/release round trips and contention handling
+  - Redis runs one command or script at a time, so atomicity is free
+  - Setting EXPIRE atomically with the first INCR avoids keys with no TTL leaking
+- q: 'What if Redis is down: fail open or fail closed?'
+  kind: design
+  key_points:
+  - Product decision
+  - Fail open protects availability (usual default)
+  - Fail closed protects a fragile downstream
+  - Treat Redis errors/timeouts explicitly; consider a local fallback limiter
+- q: How do you cut load on Redis at very high QPS?
+  kind: design
+  key_points:
+  - 'Local approximate limiting: each of N servers keeps a local token bucket at limit/N'
+  - Sync periodically or batch counter updates asynchronously
+  - Trades exactness for far fewer round trips
+  - Hot-key sharding into sub-counters, summed on read
+- q: How does this change for a sliding window?
+  kind: design
+  key_points:
+  - Same atomicity requirement
+  - 'Script manages a sorted set: ZADD, ZREMRANGEBYSCORE, ZCARD'
+  - More expensive per call and O(N) memory per key for N requests in window
+  - Or use the weighted two-counter hybrid
+- q: What is the cost per check and the storage?
+  kind: complexity
+  key_points:
+  - O(1) per check, one network hop
+  - Storage O(K) keys for K active identities, each a counter plus TTL
+  - Fixed window allows up to 2x limit burst across a window boundary
+narration:
+- Single-instance in-memory state doesn't work here since we're behind a load balancer with multiple app servers — I need shared external state, and Redis is the standard choice.
+- The trap is doing GET, check, then INCR as three separate calls — that's a check-then-act race between concurrent app servers.
+- I'll use Redis's atomic INCR plus a Lua script to set the TTL only on the first increment, so the whole check-and-increment happens as one atomic unit.
+- I'm mocking the Redis client here since a live connection is out of scope, but the protocol — the Lua script logic — is exactly what I'd ship.
+- 'Follow-up I''d expect: what happens if Redis goes down — that''s a fail-open vs. fail-closed tradeoff I''d want to discuss.'
+state_aloud:
+- 'Race condition on GET-then-SET: the entire reason for the Lua script / atomic `INCR`+`EXPIRE` — must state this unprompted, it''s the crux of the question.'
+- Clock skew across app servers doesn't matter here since the counter and TTL live centrally in Redis — but clock skew between the app server setting `now` for a sliding-window variant and Redis's own clock can matter; prefer Redis-side `TIME` or logic that avoids relying on client clocks.
+- Redis becomes a single point of failure / added latency on every request — mitigate with a local token-bucket "fast reject" cache that only asks Redis when close to the limit, or accept eventual/approximate limiting via async counter batching.
+- 'Hot key contention: one very active client hammering one Redis key can become a throughput bottleneck; sharding the key (e.g., hash into N sub-counters, sum on read) spreads load at the cost of exactness.'
+- '`EXPIRE` race if not set atomically with the first `INCR` (the `count == 1` check in the Lua script above) — a crash between INCR and EXPIRE would leave a key with no TTL, leaking memory forever; the Lua script''s atomicity is what prevents this.'
+walkthrough: |
+  With multiple app servers behind a load balancer, per-instance in-memory counters do not enforce a global limit, so the state lives in shared external storage such as Redis. The crux is that GET, check, then INCR as separate round trips is a check-then-act race between servers. The fix is a single atomic operation: `INCR` plus a Lua script that sets `EXPIRE` only when the count is 1, which also prevents a crash between the two from leaving a key with no TTL. Each check is one O(1) round trip and space is O(K) keys. Redis failure is a fail-open versus fail-closed decision.
+categories: [systems-impl]

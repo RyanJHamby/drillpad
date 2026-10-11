@@ -1,0 +1,249 @@
+id: order-book-modify-cancel-ids
+title: Order Book with Modify / Cancel by ID
+bar_level: 3
+target_minutes: 35
+patterns:
+- order-book
+- hash-map-index
+- ordered-dict-fifo
+- lazy-heap
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `OrderBook`, a single-symbol book that stores resting orders keyed by a
+  client-supplied id. This book does NOT match: a crossed book (bid >= ask) is allowed and nothing
+  trades. Sides are `"buy"` / `"sell"`; prices and quantities are positive ints (ticks / shares).
+
+  - `add(order_id, side, price, qty) -> bool`: rest the order at the back of its price level.
+    Returns False (and changes nothing) if `order_id` is already live; True otherwise.
+  - `cancel(order_id) -> bool`: remove a live order. False for unknown or already-cancelled ids.
+  - `modify(order_id, new_price, new_qty) -> bool`: amend a live order, False if the id is unknown.
+    Queue priority rules (this is the point of the exercise): the order **keeps its place** only if the
+    price is unchanged and the quantity does not increase (`new_qty <= old_qty`). A price change or
+    a quantity increase sends it to the **back** of the queue at its (new) price level. The order id is unchanged.
+  - `best(side) -> (price, total_qty) | None`: best level (highest bid / lowest ask) and the total
+    quantity resting there; None if the side is empty.
+  - `queue(side, price) -> list[order_id]`: ids at that level in time-priority order (`[]` if no level).
+  - `depth(side, n) -> [(price, total_qty), ...]`: up to `n` best non-empty levels, best first.
+  - `ValueError` for a bad side or a non-positive/non-int price or qty (on `add` and `modify`).
+
+  Empty levels must vanish from `best`, `queue` and `depth`. `cancel`, `modify`, `add` and `best` should
+  be O(1) or O(log P) amortized, where P is the number of distinct price levels.
+starter: |
+  class OrderBook:
+      def __init__(self):
+          pass
+hints:
+- Per side keep price -> OrderedDict(id -> qty) so removing an id from the middle of a level is O(1) and
+  FIFO order is preserved, plus a global id -> (side, price) map.
+- Keep a running total per level so best() and depth() never scan a queue. Modify is "decrease at same
+  price in place, otherwise cancel and re-add at the back".
+- 'Find the best price with a lazy heap: when the top price has no level any more, pop it. Re-adding a
+  price later just pushes it again.'
+follow_ups:
+- How would you make best() O(1) without a heap if the tick range is bounded?
+- What changes if a modify may also change the side?
+- How do real exchanges treat amend-down versus amend-up for priority, and why?
+- How do you keep this correct under a replayed event log?
+tests:
+- name: add and best per side
+  code: |
+    ob = OrderBook()
+    assert ob.add(1, "buy", 100, 5) is True
+    assert ob.add(2, "buy", 101, 3) is True
+    assert ob.add(3, "sell", 105, 2) is True
+    assert ob.best("buy") == (101, 3)
+    assert ob.best("sell") == (105, 2)
+    assert ob.add(4, "buy", 101, 4) is True
+    assert ob.best("buy") == (101, 7)
+    assert ob.depth("buy", 5) == [(101, 7), (100, 5)]
+    assert ob.queue("buy", 101) == [2, 4]
+  hidden: false
+  tags:
+  - single
+  - ordering
+- name: empty book
+  code: |
+    ob = OrderBook()
+    assert ob.best("buy") is None and ob.best("sell") is None
+    assert ob.depth("buy", 3) == [] and ob.queue("sell", 100) == []
+    assert ob.cancel(1) is False
+    assert ob.modify(1, 100, 1) is False
+    assert ob.depth("sell", 0) == []
+    assert ob.add(1, "sell", 100, 1) is True
+  hidden: false
+  tags:
+  - empty
+- name: duplicate id is rejected
+  code: |
+    ob = OrderBook()
+    assert ob.add(7, "buy", 100, 5)
+    assert ob.add(7, "buy", 101, 9) is False, "live id must not be re-added"
+    assert ob.add(7, "sell", 102, 9) is False
+    assert ob.best("buy") == (100, 5) and ob.best("sell") is None
+    assert ob.cancel(7) is True
+    assert ob.add(7, "sell", 102, 9) is True, "id is reusable once the order is gone"
+    assert ob.best("sell") == (102, 9)
+  hidden: false
+  tags:
+  - duplicate
+  - state-reuse
+- name: cancel removes and cleans level
+  code: |
+    ob = OrderBook()
+    ob.add(1, "sell", 100, 2); ob.add(2, "sell", 100, 3); ob.add(3, "sell", 101, 1)
+    assert ob.cancel(1) is True
+    assert ob.cancel(1) is False
+    assert ob.best("sell") == (100, 3) and ob.queue("sell", 100) == [2]
+    assert ob.cancel(2) is True
+    assert ob.best("sell") == (101, 1), "emptied level must disappear"
+    assert ob.queue("sell", 100) == [] and ob.depth("sell", 5) == [(101, 1)]
+    ob.add(4, "sell", 100, 8)
+    assert ob.best("sell") == (100, 8)
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: modify keeps priority on same-price qty decrease
+  code: |
+    ob = OrderBook()
+    for i in (1, 2, 3):
+        ob.add(i, "buy", 100, 10)
+    assert ob.modify(1, 100, 4) is True
+    assert ob.queue("buy", 100) == [1, 2, 3], "reducing qty keeps the front spot"
+    assert ob.best("buy") == (100, 24)
+    assert ob.modify(2, 100, 10) is True
+    assert ob.queue("buy", 100) == [1, 2, 3], "same price and same qty is a no-op"
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: modify loses priority on qty increase or price change
+  code: |
+    ob = OrderBook()
+    for i in (1, 2, 3):
+        ob.add(i, "buy", 100, 10)
+    assert ob.modify(1, 100, 11) is True
+    assert ob.queue("buy", 100) == [2, 3, 1], "qty increase goes to the back"
+    assert ob.best("buy") == (100, 31)
+    assert ob.modify(2, 101, 10) is True
+    assert ob.best("buy") == (101, 10) and ob.queue("buy", 100) == [3, 1]
+    assert ob.modify(3, 101, 5) is True
+    assert ob.queue("buy", 101) == [2, 3], "moved order joins the back of the new level"
+    assert ob.depth("buy", 5) == [(101, 15), (100, 11)]
+    assert ob.modify(99, 100, 1) is False
+  hidden: false
+  tags:
+  - ordering
+  - duplicate
+- name: best price recovers after levels empty
+  code: |
+    ob = OrderBook()
+    ob.add(1, "buy", 100, 1); ob.add(2, "buy", 105, 1); ob.add(3, "buy", 103, 1)
+    assert ob.best("buy") == (105, 1)
+    ob.cancel(2)
+    assert ob.best("buy") == (103, 1)
+    ob.modify(3, 99, 1)
+    assert ob.best("buy") == (100, 1)
+    ob.add(4, "buy", 105, 2)
+    assert ob.best("buy") == (105, 2)
+    ob.cancel(4); ob.cancel(1); ob.cancel(3)
+    assert ob.best("buy") is None and ob.depth("buy", 3) == []
+    ob.add(5, "buy", 105, 1)
+    assert ob.depth("buy", 3) == [(105, 1)]
+  hidden: true
+  tags:
+  - state-reuse
+  - ordering
+- name: rejects bad input
+  code: |
+    ob = OrderBook()
+    for args in [(1, "hold", 100, 1), (1, "buy", 0, 1), (1, "buy", 100, 0), (1, "buy", -1, 5), (1, "sell", 100, -3)]:
+        try:
+            ob.add(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected ValueError for add{args}")
+    ob.add(1, "buy", 100, 5)
+    for args in [(1, 0, 5), (1, 100, 0), (1, 100, -2)]:
+        try:
+            ob.modify(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"expected ValueError for modify{args}")
+    assert ob.best("buy") == (100, 5) and ob.queue("buy", 100) == [1]
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: crossed book is allowed
+  code: |
+    ob = OrderBook()
+    ob.add(1, "buy", 105, 1)
+    ob.add(2, "sell", 100, 1)
+    assert ob.best("buy") == (105, 1) and ob.best("sell") == (100, 1)
+  hidden: true
+  tags:
+  - boundary
+  - single
+- name: 'scale: 200k adds then cancels and modifies'
+  code: |
+    ob = OrderBook()
+    n = 200000
+    for i in range(n):
+        ob.add(i, "buy" if i % 2 else "sell", 1000 + (i * 7919) % 5000, 1 + i % 7)
+    for i in range(0, n, 2):
+        ob.modify(i, 1000 + (i * 31) % 5000, 3)
+    for i in range(0, n, 3):
+        ob.cancel(i)
+        ob.best("buy"); ob.best("sell")
+    assert ob.best("buy") is not None and ob.best("sell") is not None
+    assert len(ob.depth("buy", 10)) == 10
+    assert ob.add(0, "buy", 1, 1) is True
+  hidden: true
+  tags:
+  - scale
+  - duplicate
+complexity:
+- op: add/cancel/modify/best
+  time: O(log P) amortized
+  space: O(N)
+- op: depth(n)
+  time: O(P log n)
+  space: O(n)
+extensions:
+- q: 'Level 2: add `fill(order_id, qty)` that reduces a resting order (removing it when it hits zero)
+    and returns remaining qty.'
+  key_points:
+  - Partial fill keeps queue position; full fill removes the order from both the level and the id map
+  - Level total and the empty-level cleanup stay consistent so best() moves on
+  - Unknown id or qty greater than remaining is rejected without mutating state
+  kind: code
+- q: What is the cost profile of each operation and what dominates at scale?
+  key_points:
+  - Id map and OrderedDict give O(1) cancel and in-place amend
+  - A new price level costs O(log P) heap push; best() is O(1) amortized because each stale heap entry
+    is popped once
+  - depth(n) is O(P log n) with nlargest; a sorted container or tick-indexed array makes it O(n)
+  kind: complexity
+- q: 'Design: how would this book sit in a production feed handler and survive a restart?'
+  key_points:
+  - Single-threaded per symbol, apply events in sequence order so replay is deterministic
+  - Persist an append-only journal of add/modify/cancel and rebuild the book on restart (or snapshot plus
+    tail)
+  - Reject or detect duplicate ids and out-of-order sequence numbers at the boundary
+  kind: design
+narration: []
+state_aloud:
+- Decreasing quantity at the same price keeps priority; increasing quantity or changing price goes to
+  the back.
+- Duplicate live ids are rejected; ids become reusable after cancel.
+- Empty levels disappear; crossed books are allowed because nothing matches here.
+- Integer ticks, positive qty only.
+walkthrough: |
+  Each side maps price to an OrderedDict of id -> qty (FIFO with O(1) removal), keeps a running total per level, and a lazy heap of prices for the best level. A global id -> (side, price) map makes cancel and modify O(1) lookups. Modify is in place only for same-price quantity decreases (which preserves time priority, matching exchange amend rules); everything else is a cancel plus re-add at the back. Source: standard formulation.
+categories:
+- trading

@@ -1,0 +1,221 @@
+id: gpu-job-bin-packing
+title: GPU Job Scheduler (bin packing)
+bar_level: 3
+target_minutes: 35
+patterns:
+- bin-packing
+- best-fit
+- first-fit
+- gpu-scheduling
+- bucketed-heaps
+- lazy-deletion
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  A cluster has nodes with a number of free GPUs. A job needs `gpus` GPUs and must run entirely on ONE
+  node (a gang: no splitting across nodes). Implement placement with two strategies.
+
+  `GPUScheduler(capacities)`: node `i` has `capacities[i]` GPUs (integers `0..64`, `ValueError`
+  otherwise). Nodes are identified by index.
+  - `place(job_id, gpus, strategy="best_fit") -> node | None`: `ValueError` for a duplicate job id,
+    `gpus < 1` or an unknown strategy. Among nodes with `free >= gpus`:
+    * `"best_fit"`: the node with the smallest free count; ties go to the lowest index.
+    * `"first_fit"`: the lowest-index node that fits.
+    Reserve the GPUs and return the node, or return `None` (changing nothing) when no node fits.
+  - `release(job_id)`: give the GPUs back; `KeyError` for an unknown job.
+  - `free(node) -> int`; `utilization() -> float` = used / total GPUs (`0.0` when the total is 0).
+  - Module function `pack_decreasing(capacities, jobs, strategy="best_fit") -> (placed, unplaced)`:
+    `jobs` is a list of `(job_id, gpus)`. Sort jobs by `gpus` descending (stable, so equal sizes keep
+    their given order), place them one by one, return `placed` as `{job_id: node}` and `unplaced` as the
+    list of job ids that did not fit (in processing order).
+
+  With 20,000 nodes and 100,000 operations a scan over all nodes for every placement is too slow.
+  Capacities are at most 64, so group nodes by their current free count.
+starter: |
+  class GPUScheduler:
+      def __init__(self, capacities):
+          pass
+
+      def place(self, job_id, gpus, strategy="best_fit"):
+          pass
+
+      def release(self, job_id):
+          pass
+
+      def free(self, node):
+          pass
+
+      def utilization(self):
+          pass
+
+
+  def pack_decreasing(capacities, jobs, strategy="best_fit"):
+      pass
+hints:
+- 'Keep one min-heap of node indices per free count (0..64). A node moves between heaps whenever its free
+  count changes, so use lazy deletion: an entry is valid only if free[node] still equals the bucket''s
+  count.'
+- 'best_fit: scan the non-empty buckets with count >= gpus in ascending order and take the first valid
+  top. first_fit: take the minimum node index over the valid tops of those buckets.'
+- At most 65 buckets, so each placement is O(65 + log N), independent of the node count.
+follow_ups:
+- Multi-GPU topology (NVLink islands) as a placement constraint.
+- Preemption and gang scheduling of multi-node jobs.
+- Fragmentation metric and defragmentation by migration.
+tests:
+- name: best fit vs first fit
+  code: |
+    s = GPUScheduler([6, 4])
+    assert s.place("a", 3, "best_fit") == 1, "node 1 has the smallest free count that still fits"
+    assert s.place("b", 4, "best_fit") == 0
+    f = GPUScheduler([6, 4])
+    assert f.place("a", 3, "first_fit") == 0
+    assert f.place("b", 4, "first_fit") == 1
+  hidden: false
+  tags:
+  - ordering
+  - boundary
+- name: 'gang constraint: the whole job must fit on one node'
+  code: |
+    s = GPUScheduler([4, 4])
+    assert s.place("big", 8) is None, "8 GPUs are free in total but not on one node"
+    assert s.place("ok", 4) == 0 and s.free(0) == 0
+    assert s.utilization() == 0.5
+  hidden: false
+  tags:
+  - boundary
+  - single
+- name: release frees GPUs for later jobs
+  code: |
+    s = GPUScheduler([8])
+    assert s.place("a", 5) == 0 and s.place("b", 4) is None
+    s.release("a")
+    assert s.free(0) == 8 and s.place("b", 4) == 0
+    try:
+        s.release("a")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("releasing an unknown job must raise KeyError")
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: ties between equal free counts go to the lowest node index
+  code: |
+    s = GPUScheduler([4, 4, 4])
+    assert [s.place(f"j{i}", 4) for i in range(4)] == [0, 1, 2, None]
+    s2 = GPUScheduler([8, 8, 8])
+    assert s2.place("a", 2) == 0 and s2.place("b", 2) == 0, "best fit keeps filling the already-used node"
+    assert s2.place("c", 2, "first_fit") == 0
+  hidden: true
+  tags:
+  - ordering
+  - duplicate
+- name: invalid input and empty cluster
+  code: |
+    s = GPUScheduler([])
+    assert s.place("a", 1) is None and s.utilization() == 0.0
+    z = GPUScheduler([0, 2])
+    assert z.place("a", 1) == 1
+    for args in [("a", 1), ("b", 0), ("c", -1), ("d", 1, "random")]:
+        try:
+            z.place(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    try:
+        GPUScheduler([65])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError
+  hidden: true
+  tags:
+  - invalid
+  - empty
+  - zero-capacity
+- name: sorting jobs by size first packs tighter than arrival order
+  code: |
+    caps = [10, 10]
+    jobs = [("a", 2), ("b", 4), ("c", 2), ("d", 6), ("e", 6)]
+    online = GPUScheduler(caps)
+    assert [j for j, g in jobs if online.place(j, g) is None] == ["e"]
+    placed, unplaced = pack_decreasing(caps, jobs)
+    assert unplaced == [] and set(placed) == {"a", "b", "c", "d", "e"}
+    assert placed["d"] == 0 and placed["e"] == 1, "largest jobs first, ties in given order"
+    placed2, unplaced2 = pack_decreasing([4], [("x", 3), ("y", 3), ("z", 1)])
+    assert placed2 == {"x": 0, "z": 0} and unplaced2 == ["y"]
+  hidden: true
+  tags:
+  - ordering
+  - boundary
+- name: 20k nodes, 100k place/release operations
+  code: |
+    s = GPUScheduler([8] * 20000)
+    live = []
+    for i in range(100000):
+        g = 1 + i % 8
+        node = s.place(i, g)
+        assert node is not None
+        live.append(i)
+        if len(live) > 30000:
+            s.release(live.pop(0))
+    assert 0 < s.utilization() < 1
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: place
+  time: O(K + log N)
+  space: O(N)
+- op: release
+  time: O(log N)
+  space: O(N)
+- op: pack_decreasing
+  time: O(J log J + J * (K + log N))
+  space: O(N + J)
+extensions:
+- q: 'Level 2: add priorities and preemption. A job with a higher priority may evict lower-priority jobs
+    from one node if that makes it fit. Which victims do you choose?'
+  kind: code
+  key_points:
+  - Per node, evict the fewest/lowest-priority jobs whose release frees enough GPUs; prefer the node needing
+    the least eviction
+  - Evicted jobs return to the pending queue and keep their ids for later re-placement
+  - 'All-or-nothing: if no single node can fit it even after eviction, change nothing'
+- q: Compare best fit, first fit and worst fit for GPU clusters, and when does fragmentation hurt?
+  kind: design
+  key_points:
+  - Best fit keeps big free holes for big jobs but fragments small leftovers; worst fit leaves usable
+    leftovers but burns large holes
+  - 'Gang constraints make fragmentation expensive: many nodes with 1-2 free GPUs cannot run an 8-GPU
+    job'
+  - Sort large jobs first (decreasing order) and reserve whole nodes for big training jobs
+- q: How does this change for a multi-tenant inference fleet with autoscaling?
+  kind: design
+  key_points:
+  - Model replicas have fixed GPU shapes, so bin packing is across replica types and quotas rather than
+    arbitrary sizes
+  - Bin-pack to free whole nodes for scale-down and cost savings, but keep headroom for bursts
+  - Combine with an autoscaler (see autoscaler-policy) that adds nodes when placement fails
+- q: Why bucketing by free count helps and what are the costs?
+  kind: complexity
+  key_points:
+  - Per operation O(K + log N) with K the number of distinct capacities (at most 65) instead of O(N)
+  - Lazy heaps accumulate stale entries; each state change pushes one, so memory is O(N + operations)
+    until popped
+  - A segment tree over nodes (max free per range) gives first fit in O(log N) for arbitrary capacities
+narration: []
+state_aloud:
+- 'Gang constraint: a job runs on exactly one node.'
+- Ties go to the lowest node index; best fit means the smallest free count that fits.
+- Failed placement must not change any state.
+- Duplicate job ids and unknown strategies are errors.
+- Offline sorting by size descending usually packs better than arrival order.
+walkthrough: |
+  Free counts per node are tracked in an array and nodes are grouped into per-free-count min-heaps with lazy validation (an entry is valid when the node still has exactly that free count). best_fit walks the non-empty buckets from the smallest count that fits; first_fit takes the smallest index among the bucket tops. Placement and release only touch one node, pushing it into its new bucket. pack_decreasing sorts jobs by size, the classic first-fit/best-fit-decreasing heuristic. Standard bin-packing formulation applied to GPU gang placement; no source note applies.
+categories:
+- ai-infra

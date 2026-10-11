@@ -1,0 +1,177 @@
+id: url-shortener
+title: URL Shortener
+bar_level: 2
+target_minutes: 22
+patterns:
+- url-shortener
+- base62
+- hash-map
+- bidirectional-map
+firm_tags:
+- distsys
+statement: |
+  Implement `UrlShortener(base="http://sho.rt/")`.
+
+  - `shorten(long_url, alias=None)` -> short URL string `base + code`.
+    - Without `alias`, codes are the base62 encoding of a counter starting at 1 using the
+      alphabet `"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"` (1 -> `"1"`,
+      62 -> `"10"`). If a generated code is already taken (by a custom alias) skip it and use the
+      next counter value.
+    - Shortening the same `long_url` again without alias returns the SAME short URL (no new
+      code is consumed).
+    - With `alias`: use it as the code. If that code already maps to a different URL raise
+      `ValueError`; if it maps to the same URL return the existing short URL. Aliases must be
+      1-16 characters of `[0-9a-zA-Z_-]` otherwise `ValueError`.
+  - `resolve(short_url)` -> the long URL, or `None` if unknown (also `None` if the prefix is not
+    `base`).
+  - Empty `long_url` raises `ValueError`.
+
+  Example
+  ```python
+  s = UrlShortener(); s.shorten("http://x.com/a") == "http://sho.rt/1"
+  s.shorten("http://x.com/a") == "http://sho.rt/1"; s.resolve("http://sho.rt/1") == "http://x.com/a"
+  ```
+starter: |
+  class UrlShortener:
+      def __init__(self, base="http://sho.rt/"):
+          pass
+
+      def shorten(self, long_url, alias=None):
+          pass
+
+      def resolve(self, short_url):
+          pass
+hints:
+- 'Two dicts: code -> url and url -> code (for dedup).'
+- Base62-encode an incrementing counter, skipping codes already taken by aliases.
+- Validate alias characters and length; an alias for the same URL is idempotent.
+follow_ups:
+- How would you add expiry?
+- How do you prevent users enumerating other users' links?
+tests:
+- name: shorten and resolve
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    s = UrlShortener()
+    a = s.shorten("http://x.com/a")
+    b = s.shorten("http://x.com/b")
+    assert a == "http://sho.rt/1" and b == "http://sho.rt/2"
+    assert s.shorten("http://x.com/a") == a
+    assert s.shorten("http://x.com/c") == "http://sho.rt/3"
+    assert s.resolve(a) == "http://x.com/a" and s.resolve(b) == "http://x.com/b"
+- name: unknown and foreign urls
+  tags:
+  - invalid
+  - empty
+  code: |
+    s = UrlShortener()
+    assert s.resolve("http://sho.rt/1") is None
+    s.shorten("http://x.com/a")
+    assert s.resolve("http://sho.rt/zzz") is None
+    assert s.resolve("http://other.io/1") is None
+    assert s.resolve("") is None
+    try:
+        s.shorten("")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError")
+- name: base62 rollover
+  tags:
+  - boundary
+  - scale
+  code: |
+    s = UrlShortener("https://t.co/")
+    codes = [s.shorten("http://x/%d" % i) for i in range(1, 64)]
+    assert codes[0] == "https://t.co/1"
+    assert codes[8] == "https://t.co/9" and codes[9] == "https://t.co/a"
+    assert codes[34] == "https://t.co/z" and codes[35] == "https://t.co/A"
+    assert codes[60] == "https://t.co/Z" and codes[61] == "https://t.co/10" and codes[62] == "https://t.co/11"
+- name: custom alias
+  hidden: true
+  tags:
+  - invalid
+  - duplicate
+  code: |
+    s = UrlShortener()
+    assert s.shorten("http://x/a", alias="docs") == "http://sho.rt/docs"
+    assert s.shorten("http://x/a", alias="docs") == "http://sho.rt/docs"
+    assert s.resolve("http://sho.rt/docs") == "http://x/a"
+    for bad in ("docs", "", "has space", "x" * 17, "bad/slash"):
+        try:
+            s.shorten("http://x/other", alias=bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for alias %r" % bad)
+    assert s.resolve("http://sho.rt/docs") == "http://x/a"
+- name: generated code skips taken alias
+  hidden: true
+  tags:
+  - state-reuse
+  - boundary
+  code: |
+    s = UrlShortener()
+    s.shorten("http://x/alias", alias="2")
+    assert s.shorten("http://x/1") == "http://sho.rt/1"
+    assert s.shorten("http://x/2") == "http://sho.rt/3"
+    assert s.resolve("http://sho.rt/2") == "http://x/alias"
+    assert s.shorten("http://x/alias") == "http://sho.rt/2"
+- name: many urls
+  hidden: true
+  tags:
+  - scale
+  - single
+  code: |
+    s = UrlShortener()
+    shorts = [s.shorten("http://x/%d" % i) for i in range(20000)]
+    assert len(set(shorts)) == 20000
+    assert s.resolve(shorts[12345]) == "http://x/12345"
+complexity:
+- op: shorten
+  time: O(L)
+  space: O(n)
+- op: resolve
+  time: O(L)
+  space: O(n)
+extensions:
+- q: Costs, and how many URLs does a k-character code cover?
+  kind: complexity
+  key_points:
+  - 'Both operations are O(L) in code/URL length: hashing plus a dict access, effectively O(1)'
+  - '62^k codes: 7 characters give about 3.5 trillion'
+  - Space is O(n) for two maps (code -> url, url -> code)
+- q: Sequential counter vs random codes vs hashing the URL?
+  kind: design
+  key_points:
+  - 'Counter: no collisions, but guessable/enumerable and needs a coordinated id generator'
+  - 'Random 7-char codes: unguessable, need collision retry'
+  - 'Hash prefix: deterministic dedup but collisions need resolution; add a salt or length bump'
+- q: Design the distributed production system.
+  kind: design
+  key_points:
+  - Pre-allocated id ranges per app server (or a snowflake-style id) avoid a global counter bottleneck
+  - Key-value store sharded by code; cache hot codes; 301 vs 302 redirect trade-off for analytics
+  - Expiry/ttl, abuse and malware checks, rate limits, and a read-heavy cache layer (reads far outnumber
+    writes)
+- q: How do you keep the same long URL mapping to one code safely under concurrency?
+  kind: reasoning
+  key_points:
+  - Lock or atomic check-and-insert on the url -> code map
+  - Unique constraint in the database with insert-or-fetch semantics
+  - Idempotent writes make retries safe
+narration: []
+state_aloud:
+- Same URL returns the same short URL.
+- Alias conflicts raise; same-URL alias is idempotent.
+- Counter must skip taken aliases.
+- Empty URL and unknown codes handled.
+walkthrough: Two dicts map code to URL and URL to code. Without an alias, the next free base62 code of
+  an incrementing counter is assigned (skipping codes already claimed by aliases) and reused for repeat
+  submissions of the same URL. Aliases are validated by a regex, conflict if they point elsewhere and
+  are idempotent for the same URL. resolve strips the base prefix and looks up the code.
+anki_queries: []
+categories:
+- systems-impl

@@ -1,0 +1,130 @@
+id: best-time-buy-sell-stock-ii
+title: Best Time to Buy/Sell Stock (II)
+bar_level: 2
+target_minutes: 20
+patterns:
+- dp-state-machine
+- greedy
+- transaction-fee
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  `max_profit(prices, fee=0) -> int`: with a list of int daily prices you may complete as many buy/sell transactions as you
+  like, but you can hold at most ONE share at a time (sell before buying again; you may sell and rebuy on the same day).
+  Each completed transaction (a buy followed by its sell) costs `fee` (a non-negative int) which is paid once, on the sell.
+  Return the maximum total profit; 0 if trading never pays. A trade that earns less than the fee is not worth taking.
+  `ValueError` if `fee < 0`.
+
+  With `fee == 0` this is the classic "unlimited transactions" problem. It must run in O(n) time.
+starter: |
+  def max_profit(prices, fee=0):
+      pass
+hints:
+- 'With fee 0 every upward step can be harvested: sum the positive day-to-day differences.'
+- 'With a fee, greedy by differences breaks; use two states: cash (not holding) and hold (holding one
+  share).'
+- 'Transition per price p: cash = max(cash, hold + p - fee); hold = max(hold, cash_prev - p). Start cash
+  = 0, hold = -prices[0].'
+follow_ups:
+- What if there is a one-day cooldown after selling?
+- What if at most k transactions are allowed? (see III/IV)
+- Why is the greedy sum of positive deltas valid without a fee?
+tests:
+- name: classic unlimited
+  code: |
+    assert max_profit([7, 1, 5, 3, 6, 4]) == 7
+    assert max_profit([1, 2, 3, 4, 5]) == 4
+    assert max_profit([7, 6, 4, 3, 1]) == 0
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: empty and single
+  code: |
+    assert max_profit([]) == 0
+    assert max_profit([5]) == 0
+    assert max_profit([5], 3) == 0
+  hidden: false
+  tags:
+  - empty
+  - single
+- name: with fee
+  code: |
+    assert max_profit([1, 3, 2, 8, 4, 9], 2) == 8
+    assert max_profit([1, 3, 7, 5, 10, 3], 3) == 6
+    assert max_profit([1, 2], 1) == 0, "gain equals the fee: not worth it"
+    assert max_profit([1, 5], 1) == 3
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: fee too large kills trading
+  code: |
+    assert max_profit([1, 100, 1, 100], 1000) == 0
+    assert max_profit([1, 100, 1, 100], 98) == 2
+  hidden: false
+  tags:
+  - boundary
+  - duplicate
+- name: rejects negative fee
+  code: |
+    try:
+        max_profit([1, 2], -1)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("negative fee")
+  hidden: true
+  tags:
+  - invalid
+- name: 'scale: 1M days with fee'
+  code: |
+    n = 1000000
+    prices = [1000 + (i * 7919) % 211 for i in range(n)]
+    a = max_profit(prices)
+    b = max_profit(prices, 5)
+    assert a > b >= 0
+    assert max_profit(list(range(n))) == n - 1
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: max_profit
+  time: O(n)
+  space: O(1)
+extensions:
+- q: 'Level 2: add a one-day cooldown after each sell (three-state DP: hold, sold, rest).'
+  key_points:
+  - States hold, sold (just sold today) and rest (free to buy)
+  - rest = max(rest, sold_prev); hold = max(hold, rest_prev - p); sold = hold_prev + p
+  - Answer is max(sold, rest) at the end
+  kind: code
+- q: 'Level 3: return the actual list of (buy_day, sell_day) trades for the fee-free case.'
+  key_points:
+  - Each maximal run of consecutive increases is one trade from valley to peak
+  - Equal prices end a run without adding profit
+  - Merging adjacent runs does not change profit but changes the transaction count
+  kind: code
+- q: Time and space of the DP versus brute force recursion.
+  key_points:
+  - Memoized recursion over (day, holding) is O(n) states but O(n) space and recursion depth
+  - Rolling two variables gives O(n) time and O(1) space
+  - Brute force over all trade sets is exponential
+  kind: complexity
+- q: 'Design: why does a fee change the optimal strategy in practice?'
+  key_points:
+  - Transaction costs mean small edges are not tradable, so signals must clear a cost hurdle
+  - The DP gives an upper bound with perfect hindsight, not an achievable strategy
+  - Real costs are asymmetric (maker rebate vs taker fee) and size-dependent, which this model ignores
+  kind: design
+narration: []
+state_aloud:
+- At most one share held; sell before rebuy, same-day sell then buy allowed.
+- Fee is charged once per completed transaction; fee 0 is the classic problem.
+- Empty or single-day input returns 0.
+walkthrough: |
+  Standard LeetCode 122 (unlimited transactions) with the LeetCode 714 transaction-fee variant folded in via a two-state DP (cash/hold). Source: standard formulation.
+categories:
+- trading

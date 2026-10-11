@@ -1,0 +1,95 @@
+id: palindromic-substrings
+title: Palindromic Substrings
+bar_level: 2
+target_minutes: 22
+patterns:
+- dp-1d
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Palindromic Substrings (LC 647)"
+statement: |
+  Count how many substrings of `s` are palindromes. Substrings at different positions count separately even if their text is identical. The empty string has 0.
+
+  Example: `count_substrings("aaa")` returns `6` (three `a`, two `aa`, one `aaa`).
+starter: |
+  def count_substrings(s):
+      pass
+hints:
+- Every palindrome extends a smaller palindrome with matching outer characters.
+- 'State: is_pal[i][j] for s[i..j]; the answer is the number of true cells. Or count expansions per centre.'
+- 'Base: all single characters; pairs are palindromes when equal.'
+follow_ups:
+- Return the number of distinct palindromic substrings.
+- Can you do it in O(n)?
+tests:
+- name: distinct chars
+  tags:
+  - boundary
+  code: |
+    assert count_substrings("abc")==3
+- name: all same
+  tags:
+  - duplicate
+  code: |
+    assert count_substrings("aaa")==6
+- name: single
+  tags:
+  - single
+  code: |
+    assert count_substrings("a")==1
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert count_substrings("")==0
+- name: even
+  tags:
+  - boundary
+  code: |
+    assert count_substrings("abba")==6
+    assert count_substrings("aa")==3
+- name: mixed
+  tags:
+  - ordering
+  code: |
+    assert count_substrings("abaab")==8
+- name: large
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n = 1500
+    assert count_substrings("a" * n)==n * (n + 1) // 2
+complexity:
+- op: overall
+  time: O(n^2)
+  space: O(1)
+  accepted_space:
+  - O(n^2)
+extensions:
+- q: Complexity
+  kind: complexity
+  key_points:
+  - 2n-1 centres, each expansion up to n
+  - O(n^2) time, constant extra space
+  - The table version needs O(n^2) space
+- q: Table version
+  kind: code
+  key_points:
+  - dp[i][j] = s[i]==s[j] and (j-i<2 or dp[i+1][j-1])
+  - Fill with i descending
+  - Sum true cells
+- q: Linear time
+  kind: design
+  key_points:
+  - Manacher's algorithm gives radius per centre
+  - Sum of radii yields the count
+  - Uses the mirror of the rightmost palindrome
+narration: []
+state_aloud:
+- Empty string gives 0.
+- Count occurrences by position, not by distinct text.
+- Odd and even centres both.
+walkthrough: Every palindrome grows from a centre, so for each of the `2n-1` centres (a character or a gap) expand outward while the ends match, adding 1 per successful expansion. This evaluates the recurrence `is_pal[i][j] = s[i]==s[j] and is_pal[i+1][j-1]` lazily. Time is O(n^2) in the worst case (all equal characters), space O(1).

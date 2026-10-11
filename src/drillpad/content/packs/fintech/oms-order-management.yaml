@@ -1,0 +1,301 @@
+id: oms-order-management
+title: Order Management System States
+bar_level: 3
+target_minutes: 35
+patterns:
+- state-machine
+- hash-map
+- idempotency
+- ordered-dict
+- weighted-average
+firm_tags:
+- quant-hft
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement `OMS`, the order-lifecycle core of an order management system. Prices are integer cents per unit
+  and quantities are positive integers.
+
+  Order states: `NEW`, `PARTIALLY_FILLED`, `FILLED`, `CANCELED`. `FILLED` and `CANCELED` are terminal; an order
+  in `NEW` or `PARTIALLY_FILLED` is OPEN.
+
+  * `submit(order_id, symbol, side, qty, limit_price)`: `side` is `"BUY"` or `"SELL"`; `qty` and `limit_price`
+    must be ints > 0; `order_id` must be new. Otherwise raise `OMSError`. The order starts `NEW`.
+  * `fill(order_id, qty, price, exec_id)` applies an execution report and returns `True`.
+    * An `exec_id` that was already applied (to any order) is a duplicate delivery: do nothing, return `False`.
+    * Otherwise the order must exist and be OPEN, `0 < qty <= leaves_qty`, and the price must respect the limit
+      (BUY: `price <= limit_price`; SELL: `price >= limit_price`); any violation raises `OMSError`, changes
+      nothing, and must NOT consume the `exec_id`.
+    * State becomes `PARTIALLY_FILLED`, or `FILLED` when `cum_qty == qty`.
+  * `cancel(order_id)` returns `True` for an OPEN order (state `CANCELED`, executions so far are kept);
+    anything else (unknown, terminal) raises `OMSError`.
+  * `amend(order_id, new_qty)` changes the total quantity of an OPEN order. `new_qty` must be an int > 0 and
+    `>= cum_qty`; `new_qty == cum_qty` completes the order (`FILLED`) if `cum_qty > 0`, otherwise it is an error.
+    Violations raise `OMSError` and change nothing.
+  * `get(order_id)` returns `{"state", "symbol", "side", "qty", "cum_qty", "leaves_qty", "avg_px"}`.
+    `leaves_qty = qty - cum_qty` for OPEN orders and 0 for terminal ones. `avg_px` is the volume-weighted average
+    execution price rounded half up to an integer cent (`0` while `cum_qty == 0`). Compute it from the exact
+    integer notional, never from a running float. Unknown id raises `OMSError`.
+  * `open_orders(symbol=None)` returns the ids of OPEN orders (optionally of one symbol) in SUBMISSION order.
+starter: |
+  class OMSError(Exception):
+      pass
+
+
+  class OMS:
+      def __init__(self):
+          pass
+
+      def submit(self, order_id, symbol, side, qty, limit_price):
+          pass
+
+      def fill(self, order_id, qty, price, exec_id):
+          pass
+
+      def cancel(self, order_id):
+          pass
+
+      def amend(self, order_id, new_qty):
+          pass
+
+      def get(self, order_id):
+          pass
+
+      def open_orders(self, symbol=None):
+          pass
+hints:
+- Keep one record per order with cum_qty and an integer notional (sum of qty*price); derive avg_px on
+  demand with a half-up integer division.
+- 'Validate first, mutate last: only after every check passes record the exec_id and update the order.'
+- Keep insertion-ordered dicts of OPEN orders (global and per symbol) and delete from them when an order
+  becomes terminal, so open_orders never scans closed orders.
+follow_ups:
+- How do you handle a fill that arrives after a cancel was acknowledged (cancel/fill race)?
+- How would you add a replace (cancel/replace) that changes the limit price, and what happens to queue
+  priority?
+- What belongs in an audit log and how do you rebuild order state from it?
+tests:
+- name: lifecycle new to partial to filled
+  tags:
+  - ordering
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except OMSError:
+            return True
+        return False
+
+    o = OMS()
+    o.submit("o1", "AAPL", "BUY", 100, 15000)
+    assert o.get("o1") == {"state": "NEW", "symbol": "AAPL", "side": "BUY", "qty": 100, "cum_qty": 0, "leaves_qty": 100, "avg_px": 0}
+    assert o.fill("o1", 40, 14950, "x1") is True
+    g = o.get("o1")
+    assert (g["state"], g["cum_qty"], g["leaves_qty"], g["avg_px"]) == ("PARTIALLY_FILLED", 40, 60, 14950)
+    assert o.fill("o1", 60, 15000, "x2") is True
+    g = o.get("o1")
+    assert (g["state"], g["cum_qty"], g["leaves_qty"]) == ("FILLED", 100, 0)
+    assert g["avg_px"] == 14980, "(40*14950 + 60*15000)/100"
+- name: average price rounds half up on exact notional
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except OMSError:
+            return True
+        return False
+
+    o = OMS()
+    o.submit("a", "X", "SELL", 4, 100)
+    o.fill("a", 1, 101, "e1")
+    o.fill("a", 1, 100, "e2")
+    assert o.get("a")["avg_px"] == 101, "100.5 rounds up"
+    o.fill("a", 1, 100, "e3")
+    assert o.get("a")["avg_px"] == 100, "301/3 = 100.33"
+- name: duplicate executions are ignored
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except OMSError:
+            return True
+        return False
+
+    o = OMS()
+    o.submit("o1", "A", "BUY", 10, 100)
+    o.submit("o2", "A", "BUY", 10, 100)
+    assert o.fill("o1", 5, 100, "e1") is True
+    assert o.fill("o1", 5, 100, "e1") is False
+    assert o.fill("o2", 5, 100, "e1") is False, "exec ids are global"
+    assert o.get("o1")["cum_qty"] == 5 and o.get("o2")["cum_qty"] == 0
+- name: invalid fills change nothing and do not consume the exec id
+  tags:
+  - invalid
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except OMSError:
+            return True
+        return False
+
+    o = OMS()
+    o.submit("b", "A", "BUY", 10, 100)
+    o.submit("s", "A", "SELL", 10, 100)
+    assert raises(o.fill, "b", 11, 100, "e1"), "overfill"
+    assert raises(o.fill, "b", 0, 100, "e1")
+    assert raises(o.fill, "b", 1, 101, "e1"), "buy above limit"
+    assert raises(o.fill, "s", 1, 99, "e1"), "sell below limit"
+    assert raises(o.fill, "nope", 1, 100, "e1")
+    assert o.get("b")["cum_qty"] == 0
+    assert o.fill("b", 10, 99, "e1") is True, "e1 was never consumed"
+    assert raises(o.fill, "b", 1, 100, "e2"), "filled orders are closed"
+    assert o.fill("s", 10, 101, "e3") is True
+- name: cancel and amend
+  tags:
+  - state-reuse
+  - invalid
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except OMSError:
+            return True
+        return False
+
+    o = OMS()
+    o.submit("o", "A", "BUY", 100, 50)
+    o.fill("o", 30, 50, "e1")
+    assert raises(o.amend, "o", 29)
+    assert raises(o.amend, "o", 0)
+    assert raises(o.amend, "o", 100.5)
+    o.amend("o", 80)
+    g = o.get("o")
+    assert (g["qty"], g["leaves_qty"], g["state"]) == (80, 50, "PARTIALLY_FILLED")
+    assert o.cancel("o") is True
+    g = o.get("o")
+    assert (g["state"], g["cum_qty"], g["leaves_qty"]) == ("CANCELED", 30, 0)
+    assert raises(o.cancel, "o") and raises(o.amend, "o", 90) and raises(o.fill, "o", 1, 50, "e9")
+    assert raises(o.cancel, "missing")
+- name: amend down to cum qty completes the order
+  tags:
+  - boundary
+  - single
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except OMSError:
+            return True
+        return False
+
+    o = OMS()
+    o.submit("o", "A", "SELL", 100, 50)
+    assert raises(o.amend, "o", 0)
+    o.fill("o", 40, 60, "e1")
+    o.amend("o", 40)
+    g = o.get("o")
+    assert (g["state"], g["qty"], g["leaves_qty"]) == ("FILLED", 40, 0)
+    assert o.open_orders() == []
+- name: open orders keep submission order
+  tags:
+  - ordering
+  - empty
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except OMSError:
+            return True
+        return False
+
+    o = OMS()
+    for i, sym in enumerate(["A", "B", "A", "B", "A"]):
+        o.submit("o%d" % i, sym, "BUY", 10, 10)
+    assert o.open_orders() == ["o0", "o1", "o2", "o3", "o4"]
+    assert o.open_orders("A") == ["o0", "o2", "o4"]
+    o.fill("o2", 10, 10, "e1")
+    o.cancel("o0")
+    o.fill("o4", 3, 10, "e2")
+    assert o.open_orders("A") == ["o4"] and o.open_orders() == ["o1", "o3", "o4"]
+    assert o.open_orders("Z") == []
+    assert raises(o.submit, "o1", "A", "BUY", 1, 1)
+    for bad in (("n", "A", "HOLD", 1, 1), ("n", "A", "BUY", 0, 1), ("n", "A", "BUY", 1, 0), ("n", "A", "BUY", 1.5, 1)):
+        assert raises(o.submit, *bad)
+- name: many orders with frequent open order queries
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except OMSError:
+            return True
+        return False
+
+    o = OMS()
+    n = 100000
+    syms = ["S%d" % i for i in range(5)]
+    for i in range(n):
+        sym = syms[i % 5]
+        o.submit(i, sym, "BUY", 10, 100)
+        if i % 500 != 0:
+            o.fill(i, 10, 100, "e%d" % i)
+        assert len(o.open_orders(sym)) <= i // 500 + 1
+    assert len(o.open_orders()) == n // 500
+complexity:
+- op: submit/fill/cancel/amend/get
+  time: O(1)
+  space: O(n)
+- op: open_orders
+  time: O(k)
+  space: O(k)
+extensions:
+- q: 'Level 2: add a `replace(order_id, new_qty, new_price)` that keeps cum_qty and re-validates fills
+    against the new limit.'
+  kind: code
+  key_points:
+  - Replace is only legal on open orders and new_qty >= cum_qty
+  - Executions already applied are not re-checked against the new price
+  - Model it as one atomic transition so a failed replace leaves the order unchanged
+- q: 'Level 3: add a risk check at submit: reject orders that would push the net position or open notional
+    per symbol over a limit.'
+  kind: code
+  key_points:
+  - Maintain per-symbol net position and open notional incrementally on submit, fill and cancel
+  - Fills move quantity from open to position; cancels release open notional
+  - Checks and updates must be atomic together
+- q: How do you make an OMS durable and replayable?
+  kind: design
+  key_points:
+  - Append-only event log of submit/fill/cancel/amend with sequence numbers; state is a fold over the
+    log
+  - Idempotent consumers keyed by exec_id so redelivered execution reports are harmless
+  - Handle the cancel-versus-fill race by treating the exchange's ack order as the source of truth
+- q: Why must open_orders avoid scanning every order ever submitted?
+  kind: complexity
+  key_points:
+  - A scan is O(total orders) per call; with frequent queries it becomes O(n^2)
+  - Insertion-ordered dicts of open orders give O(open) per call and O(1) removal on close
+  - Space is O(n) for the order table plus O(exec ids) for dedupe
+narration: []
+state_aloud:
+- Integer cents and integer quantities; average price from exact notional, rounded half up once.
+- 'Explicit transition table: only NEW/PARTIALLY_FILLED accept fills, cancels and amends.'
+- Validate everything first so a rejected fill does not consume its exec_id or half-apply.
+- 'Execution reports are redelivered: exec_id makes fills idempotent.'
+- Late fill after cancel is an error here; in production it is a race the exchange resolves.
+walkthrough: |
+  Orders live in a dict of small records (symbol, side, qty, limit, cum_qty, notional, state). Open orders are also kept in a global insertion-ordered dict and one per symbol, and removed on FILLED or CANCELED. fill checks the duplicate exec_id first, then validates state, quantity and limit, and only then records the exec_id and updates cum_qty and notional; avg_px is (2*notional + cum) // (2*cum). amend and cancel use the same open-state guard. Standard formulation (order lifecycle state machine); no source doc.

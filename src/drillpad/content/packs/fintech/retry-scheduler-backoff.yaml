@@ -1,0 +1,225 @@
+id: retry-scheduler-backoff
+title: Retry scheduler with exponential backoff and permanent-failure detection
+bar_level: 2
+target_minutes: 25
+patterns:
+- exponential-backoff
+- min-heap-scheduler
+- injected-clock
+- state-machine
+firm_tags:
+- distsys
+anki_queries: []
+statement: |
+  Implement `RetryScheduler(base_delay=1, max_delay=60, max_retries=5)` for failed bank/API
+  requests. It never reads a clock: methods take `now`. The module constant
+  `PERMANENT_ERRORS = {"INVALID_CREDENTIALS", "ACCOUNT_CLOSED", "ITEM_LOGIN_REQUIRED"}` lists
+  error codes that must never be retried.
+
+  - `submit(request_id, now)`: schedule the first attempt at `now`; `ValueError` if the id was
+    ever submitted. Status `"scheduled"`.
+  - `due(now) -> [ids]`: remove and return every scheduled request with `due_time <= now`,
+    ordered by `(due_time, id)`. They become `"in_flight"`.
+  - `report(request_id, now, ok, error_code=None) -> str` for an in-flight request
+    (`ValueError` otherwise): `ok=True` -> `"succeeded"`; an error in `PERMANENT_ERRORS` ->
+    `"failed_permanent"`; otherwise the f-th failure: if `f > max_retries` -> `"failed_exhausted"`,
+    else schedule a retry at `now + min(base_delay * 2**(f - 1), max_delay)` and return
+    `"retry"` (status `"scheduled"`). So total attempts allowed = `1 + max_retries`.
+  - `status(request_id)` (None if unknown) and `next_due_time()` (None if nothing scheduled).
+prelude: |
+  PERMANENT_ERRORS = {"INVALID_CREDENTIALS", "ACCOUNT_CLOSED", "ITEM_LOGIN_REQUIRED"}
+starter: |
+  class RetryScheduler:
+      def __init__(self, base_delay=1, max_delay=60, max_retries=5):
+          pass
+hints:
+- A min-heap of (due_time, request_id) gives both next_due_time and ordered due() in O(log n).
+- Keep a failure count per request; the delay for failure f is min(base * 2**(f-1), cap).
+- 'Decide retryable vs permanent BEFORE writing the retry logic: it is the judgment call interviewers
+  check.'
+follow_ups:
+- 'Add jitter (full jitter: uniform(0, delay)): why does it prevent thundering herds, and how do you keep
+  tests deterministic?'
+- Honour a Retry-After header.
+- Per-bank rate limits and concurrency caps on due().
+- Persist the schedule so retries survive a restart.
+tests:
+- name: request becomes due at its time
+  tags:
+  - time
+  - boundary
+  - single
+  code: |
+    s = RetryScheduler()
+    assert s.next_due_time() is None and s.due(0) == [] and s.status("r") is None
+    s.submit("r1", 10)
+    assert s.status("r1") == "scheduled" and s.next_due_time() == 10
+    assert s.due(9) == []
+    assert s.due(10) == ["r1"] and s.status("r1") == "in_flight"
+    assert s.due(10) == [], "a request is handed out once"
+    assert s.report("r1", 10, ok=True) == "succeeded" and s.status("r1") == "succeeded"
+- name: exponential backoff with a cap
+  tags:
+  - time
+  - ordering
+  code: |
+    s = RetryScheduler(base_delay=1, max_delay=6, max_retries=10)
+    s.submit("r", 0)
+    t, delays = 0, []
+    for _ in range(6):
+        assert s.due(t) == ["r"]
+        assert s.report("r", t, ok=False, error_code="TIMEOUT") == "retry"
+        nxt = s.next_due_time()
+        delays.append(nxt - t)
+        assert s.due(nxt - 1) == []
+        t = nxt
+    assert delays == [1, 2, 4, 6, 6, 6], delays
+- name: permanent errors are never retried
+  tags:
+  - invalid
+  code: |
+    s = RetryScheduler()
+    for code in ("INVALID_CREDENTIALS", "ACCOUNT_CLOSED", "ITEM_LOGIN_REQUIRED"):
+        s.submit(code, 0)
+    assert sorted(s.due(0)) == ["ACCOUNT_CLOSED", "INVALID_CREDENTIALS", "ITEM_LOGIN_REQUIRED"]
+    assert s.report("ACCOUNT_CLOSED", 0, ok=False, error_code="ACCOUNT_CLOSED") == "failed_permanent"
+    assert s.status("ACCOUNT_CLOSED") == "failed_permanent" and s.next_due_time() is None
+    s.submit("x", 0); s.due(0)
+    assert s.report("x", 0, ok=False, error_code="HTTP_503") == "retry", "5xx is retryable"
+- name: gives up after max_retries retries
+  tags:
+  - boundary
+  - state-reuse
+  code: |
+    s = RetryScheduler(base_delay=1, max_delay=60, max_retries=2)
+    s.submit("r", 0)
+    results = []
+    t = 0
+    for _ in range(3):
+        assert s.due(t) == ["r"]
+        results.append(s.report("r", t, ok=False, error_code="E"))
+        t = s.next_due_time() if s.next_due_time() is not None else t
+    assert results == ["retry", "retry", "failed_exhausted"], results
+    assert s.status("r") == "failed_exhausted" and s.next_due_time() is None
+    assert s.due(10**6) == []
+- name: success after failures stops retrying
+  tags:
+  - state-reuse
+  hidden: true
+  code: |
+    s = RetryScheduler()
+    s.submit("r", 0); s.due(0)
+    assert s.report("r", 0, ok=False, error_code="E") == "retry"
+    assert s.due(1) == ["r"]
+    assert s.report("r", 1, ok=True) == "succeeded"
+    assert s.due(1000) == [] and s.next_due_time() is None
+- name: max_retries zero means a single attempt
+  tags:
+  - zero-capacity
+  - boundary
+  hidden: true
+  code: |
+    s = RetryScheduler(max_retries=0)
+    s.submit("r", 0); s.due(0)
+    assert s.report("r", 0, ok=False, error_code="E") == "failed_exhausted"
+- name: many requests come out in time then id order
+  tags:
+  - ordering
+  - duplicate
+  hidden: true
+  code: |
+    s = RetryScheduler()
+    s.submit("b", 5); s.submit("a", 5); s.submit("c", 1); s.submit("d", 9)
+    assert s.next_due_time() == 1
+    assert s.due(5) == ["c", "a", "b"], "ties broken by request id"
+    assert s.due(100) == ["d"]
+- name: misuse raises
+  tags:
+  - invalid
+  - state-reuse
+  hidden: true
+  code: |
+    s = RetryScheduler()
+    s.submit("r", 5)
+    for fn in (lambda: s.submit("r", 6),                       # duplicate id
+               lambda: s.report("r", 5, ok=True),              # not in flight yet
+               lambda: s.report("nope", 5, ok=True)):
+        try:
+            fn()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+    s.due(5); s.report("r", 5, ok=True)
+    try:
+        s.report("r", 6, ok=False)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("already finished")
+- name: many scheduled requests
+  tags:
+  - scale
+  - time
+  hidden: true
+  code: |
+    s = RetryScheduler(base_delay=2, max_delay=50, max_retries=3)
+    n = 30000
+    for i in range(n):
+        s.submit(i, i % 100)
+    done = 0
+    for t in range(0, 400):
+        for rid in s.due(t):
+            if rid % 3:
+                s.report(rid, t, ok=False, error_code="E")
+            else:
+                s.report(rid, t, ok=True)
+                done += 1
+    assert done == 10000
+    assert sum(1 for i in range(n) if s.status(i) == "failed_exhausted") == 20000
+complexity:
+- op: submit/report
+  time: O(log n)
+  space: O(n)
+- op: due
+  time: O(k log n)
+  space: O(k)
+- op: next_due_time
+  time: O(1)
+  space: O(1)
+extensions:
+- q: 'Level 2: add full jitter with an injected rng, keeping tests deterministic.'
+  kind: code
+  key_points:
+  - delay = rng.uniform(0, min(base * 2**(f-1), cap)) with rng passed in or seeded
+  - Cap before jitter so the maximum wait stays bounded
+  - 'Explain thundering herd: synchronized retries hit a recovering bank in lockstep'
+- q: 'Level 3: add a global concurrency limit so due(now, limit) returns at most `limit` requests.'
+  kind: code
+  key_points:
+  - Leftover due requests stay scheduled and keep their ordering
+  - In-flight count is tracked so report() frees capacity
+  - 'Starvation: ordering by (due_time, id) means older work goes first'
+- q: How do retries stay safe in a payments system?
+  kind: design
+  key_points:
+  - Idempotency keys so a retried request cannot double-execute
+  - Distinguish retryable (timeouts, 5xx, rate limit) from permanent errors before retrying
+  - Dead-letter permanently failed requests and alert; persist schedule state
+- q: Why a heap and what does a poll cost?
+  kind: complexity
+  key_points:
+  - Heap gives O(log n) insert/pop versus O(n) for a sorted list insert
+  - due(now) costs O(k log n) for k due requests
+  - Space is O(n) for outstanding requests plus O(n) status records
+narration: []
+state_aloud:
+- 'Which errors are retryable versus permanent: that check comes first.'
+- Delay for the f-th failure is base * 2^(f-1) capped; total attempts = 1 + max_retries.
+- Time is injected through `now` so the scheduler is deterministic.
+- Ties are broken by request id for stable ordering.
+walkthrough: |
+  A min-heap of (due_time, request_id) is the schedule; a dict tracks each request's status and failure count. due(now) pops everything whose time has come and marks it in flight. report() decides the outcome in a fixed order: success, permanent error, retries exhausted, otherwise push the request back with a capped exponential delay. Because every decision depends only on the arguments, the whole thing is deterministic. Source: standard formulation.
+categories:
+- fintech
+- systems-impl

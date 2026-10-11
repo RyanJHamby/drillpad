@@ -1,0 +1,173 @@
+id: flatten-nested-iterator
+title: Flatten Nested List Iterator
+bar_level: 2
+target_minutes: 22
+patterns:
+- stack
+- iterator
+- lazy-evaluation
+firm_tags: []
+statement: |
+  Implement `NestedIterator(nested)` (LeetCode 341, with plain Python values): `nested` is a list
+  whose elements are either ints or (arbitrarily deeply nested) lists of the same shape.
+
+  - `has_next()` -> `True` if another integer remains. It may do work to find out, but must not
+    consume the integer, and calling it repeatedly is harmless.
+  - `next()` -> the next integer in left-to-right order. Raises `StopIteration` if none remain.
+  - Empty lists (also nested ones) contribute nothing.
+  - Lazy and non-recursive: use an explicit stack of iterators. The input may be nested thousands
+    of levels deep, which would overflow the recursion limit, and `nested` must not be copied or
+    flattened up front.
+
+  Example
+  ```python
+  it = NestedIterator([[1, 1], 2, [1, 1]]); out = []
+  while it.has_next(): out.append(it.next())     # [1, 1, 2, 1, 1]
+  ```
+starter: |
+  class NestedIterator:
+      def __init__(self, nested):
+          pass
+
+      def has_next(self):
+          pass
+
+      def next(self):
+          pass
+hints:
+- Keep a stack of iterators over the lists; the top is the one currently being walked.
+- 'To find the next integer, loop: pull from the top iterator, push list items, pop exhausted iterators.'
+- Buffer the integer you found so has_next is idempotent.
+follow_ups:
+- How would you also support remove()?
+- How do you handle a cyclic structure?
+tests:
+- name: leetcode examples
+  tags:
+  - ordering
+  - duplicate
+  code: |
+    def drain(x):
+        it = NestedIterator(x); out = []
+        while it.has_next():
+            out.append(it.next())
+        return out
+    assert drain([[1, 1], 2, [1, 1]]) == [1, 1, 2, 1, 1]
+    assert drain([1, [4, [6]]]) == [1, 4, 6]
+    assert drain([1, 2, 3]) == [1, 2, 3]
+- name: empty lists everywhere
+  tags:
+  - empty
+  - boundary
+  code: |
+    def drain(x):
+        it = NestedIterator(x); out = []
+        while it.has_next():
+            out.append(it.next())
+        return out
+    assert drain([]) == [] and drain([[]]) == [] and drain([[], [[]], []]) == []
+    assert drain([[], 1, [[], [2]], []]) == [1, 2]
+    it = NestedIterator([[], []])
+    assert it.has_next() is False
+    try:
+        it.next()
+    except StopIteration:
+        pass
+    else:
+        raise AssertionError("expected StopIteration")
+- name: has_next is idempotent and next works alone
+  tags:
+  - state-reuse
+  - single
+  code: |
+    it = NestedIterator([[5], 6])
+    assert it.has_next() and it.has_next() and it.has_next()
+    assert it.next() == 5
+    assert it.next() == 6          # next without calling has_next first
+    assert it.has_next() is False and it.has_next() is False
+- name: does not mutate input and is lazy
+  hidden: true
+  tags:
+  - invalid
+  - ordering
+  code: |
+    data = [[1, [2, 3]], 4]
+    snapshot = repr(data)
+    it = NestedIterator(data)
+    assert it.next() == 1
+    assert repr(data) == snapshot
+    class Bomb(list):
+        def __iter__(self):
+            raise AssertionError("inner list touched before it was needed")
+    lazy = NestedIterator([1, Bomb([2])])
+    assert lazy.next() == 1
+- name: very deep nesting
+  hidden: true
+  tags:
+  - scale
+  - boundary
+  code: |
+    depth = 5000
+    x = [7]
+    for _ in range(depth):
+        x = [x]
+    it = NestedIterator(x)
+    assert it.has_next() and it.next() == 7 and it.has_next() is False
+- name: wide input
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    data = [[i, [i + 1]] for i in range(0, 20000, 2)]
+    it = NestedIterator(data)
+    out = []
+    while it.has_next():
+        out.append(it.next())
+    assert out == list(range(20000))
+complexity:
+- op: next
+  time: O(1) amortized
+  space: O(d)
+- op: has_next
+  time: O(1) amortized
+  space: O(d)
+extensions:
+- q: Total and per-call cost, and the memory the iterator needs?
+  kind: complexity
+  key_points:
+  - Total O(N + L) for N integers and L lists; each element and list is visited once, so O(1) amortized
+    per call
+  - 'Space is O(d) for nesting depth d: one iterator per level'
+  - Eager flatten is O(N) space and O(N) work before the first next()
+- q: Why an explicit stack of iterators rather than recursion or a generator?
+  kind: design
+  key_points:
+  - Recursion is limited by the interpreter stack on deeply nested input
+  - A recursive generator also nests one frame per level; the explicit stack does not
+  - The stack makes laziness and has_next semantics easy to control
+- q: Support other container types, dicts, and strings (which are iterable but should be atoms).
+  kind: design
+  key_points:
+  - Pass an is_container predicate; treat str/bytes as leaves
+  - Guard against cyclic structures with an id() set of containers on the stack
+  - Generalise to a visitor/adapter that yields leaves of any tree
+- q: Where does has_next do its work, and why?
+  kind: reasoning
+  key_points:
+  - has_next must locate the next integer (skipping empty lists), so it advances and buffers
+  - next then just returns the buffered value
+  - Calling has_next twice must not skip an element
+narration: []
+state_aloud:
+- Empty nested lists.
+- has_next idempotent; next works without has_next.
+- Deep nesting must not hit the recursion limit.
+- Do not flatten eagerly.
+walkthrough: An explicit stack holds an iterator for each list being traversed. A private advance routine
+  pulls from the top iterator, pushes iterators for nested lists, pops exhausted ones and stops on the
+  first integer, buffering it. has_next calls advance only if nothing is buffered, so repeated calls are
+  harmless, and next returns the buffered value. Each element is visited once and space is O(depth).
+anki_queries: []
+categories:
+- systems-impl

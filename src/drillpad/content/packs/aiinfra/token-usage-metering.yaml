@@ -1,0 +1,190 @@
+id: token-usage-metering
+title: Sliding-window Token Usage Metering
+bar_level: 2
+target_minutes: 25
+patterns:
+- sliding-window
+- rate-limiting
+- metering
+- deque
+- injected-clock
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  An LLM gateway meters tokens per API key over a sliding time window (for example 100,000 tokens per
+  minute). Implement the meter. Time is passed explicitly and never decreases.
+
+  `UsageMeter(window, limit)`: `ValueError` if `window <= 0` or `limit < 0`.
+  - `record(key, tokens, now)`: add `tokens` (>= 0, else `ValueError`) to `key` at time `now`.
+  - `usage(key, now) -> int`: tokens recorded for `key` at times `ts` with `now - ts < window`.
+    An unknown key has usage 0.
+  - `allow(key, tokens, now) -> bool`: if `usage + tokens <= limit`, record the tokens and return `True`;
+    otherwise return `False` and record nothing. `tokens == 0` is always allowed (when it fits).
+  - `retry_after(key, tokens, now) -> float | int | None`: the smallest wait `w >= 0` after which
+    `allow(key, tokens, now + w)` would succeed assuming nothing else is recorded: `0` if it fits now,
+    `None` if `tokens > limit` (never fits), otherwise walk the key's events oldest first until the
+    freed tokens cover the excess and return `ts + window - now` of the last event needed.
+  - Any call with a `now` earlier than a previous call's `now` raises `ValueError`.
+
+  Example (window 60, limit 100): events 40@0, 40@20, 20@30. `retry_after("k", 10, 30) == 30`.
+
+  Calls must be amortised O(1) per event regardless of how many events are in the window.
+starter: |
+  class UsageMeter:
+      def __init__(self, window, limit):
+          pass
+
+      def record(self, key, tokens, now):
+          pass
+
+      def usage(self, key, now):
+          pass
+
+      def allow(self, key, tokens, now):
+          pass
+
+      def retry_after(self, key, tokens, now):
+          pass
+hints:
+- 'Per key: a deque of (ts, tokens) and a running sum. Expire from the left while now - ts >= window,
+  subtracting as you go.'
+- allow() = expire + check + append; the rejection path must not touch the deque.
+- retry_after walks the deque once from the oldest event; it is the only operation that scans.
+follow_ups:
+- Replace the event log with fixed buckets to bound memory per key (sliding window counter).
+- Reserve estimated tokens at admission and reconcile with actual usage afterwards.
+- Share the meter across processes with a central store and atomic scripts.
+tests:
+- name: usage counts tokens inside the window
+  code: |
+    m = UsageMeter(window=60, limit=1000)
+    m.record("k", 100, now=0)
+    m.record("k", 50, now=30)
+    assert m.usage("k", 30) == 150
+    assert m.usage("k", 59) == 150
+    assert m.usage("k", 60) == 50, "an event at ts is expired when now - ts >= window"
+    assert m.usage("k", 90) == 0
+  hidden: false
+  tags:
+  - time
+  - boundary
+- name: allow admits up to the limit and rejects without recording
+  code: |
+    m = UsageMeter(10, 100)
+    assert m.allow("a", 60, 0) and m.allow("a", 40, 1)
+    assert not m.allow("a", 1, 2)
+    assert m.usage("a", 2) == 100, "rejected requests are not charged"
+    assert m.allow("a", 60, 10), "the t=0 event expired"
+    assert not m.allow("a", 1, 10)
+    assert m.allow("a", 40, 11), "the t=1 event expired at t=11"
+  hidden: false
+  tags:
+  - boundary
+  - state-reuse
+- name: keys are independent
+  code: |
+    m = UsageMeter(10, 10)
+    assert m.allow("x", 10, 0) and m.allow("y", 10, 0)
+    assert not m.allow("x", 1, 1) and not m.allow("y", 1, 1)
+    assert m.usage("never-seen", 1) == 0
+  hidden: false
+  tags:
+  - duplicate
+  - ordering
+- name: retry_after tells when enough usage expires
+  code: |
+    m = UsageMeter(60, 100)
+    m.record("k", 40, 0); m.record("k", 40, 20); m.record("k", 20, 30)
+    assert m.retry_after("k", 0, 30) == 0
+    assert m.retry_after("k", 10, 30) == 30, "must free 10: the t=0 event (40) expires at t=60"
+    assert m.retry_after("k", 70, 30) == 50, "free 70: t=0 and t=20 events, last expires at t=80"
+    assert m.retry_after("k", 101, 30) is None, "can never fit"
+    assert m.retry_after("fresh", 100, 30) == 0
+  hidden: true
+  tags:
+  - time
+  - ordering
+- name: zero tokens, zero limit, invalid input and backwards time
+  code: |
+    m = UsageMeter(5, 0)
+    assert m.allow("k", 0, 0) is True and m.allow("k", 1, 0) is False
+    for fn in [lambda: m.record("k", -1, 1), lambda: m.allow("k", -1, 1), lambda: UsageMeter(0, 5)]:
+        try:
+            fn()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError
+    m.usage("k", 10)
+    try:
+        m.usage("k", 9)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("time must not go backwards")
+  hidden: true
+  tags:
+  - zero-capacity
+  - invalid
+  - empty
+- name: 1000 tenants, 500k events
+  code: |
+    m = UsageMeter(window=300, limit=10**9)
+    for t in range(500000):
+        m.record(t % 1000, 1 + t % 7, t // 10)
+    total = sum(m.usage(k, 50000) for k in range(1000))
+    assert total > 0
+    assert sum(m.usage(k, 50000 + 301) for k in range(1000)) == 0
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: record
+  time: O(1) amortized
+  space: O(E)
+- op: usage
+  time: O(1) amortized
+  space: O(E)
+- op: retry_after
+  time: O(E)
+  space: O(1)
+extensions:
+- q: 'Level 2: add a per-key request limit as well as the token limit, and return a reason string (''tokens''
+    or ''requests'') when rejecting.'
+  kind: code
+  key_points:
+  - Keep the number of events in the deque as the request count; it is len(deque) after expiry
+  - Evaluate both limits before recording so a rejection charges nothing
+  - Decide which reason wins when both fail and document it
+- q: The output length is unknown at admission. How do you meter and limit tokens fairly?
+  kind: design
+  key_points:
+  - Reserve prompt tokens plus max_new_tokens at admission, then refund the unused part when generation
+    ends
+  - Or charge as tokens stream out and cut off when the window budget is exhausted
+  - Reconcile asynchronously so an abandoned request still releases its reservation
+- q: How would you run this across many gateway instances?
+  kind: design
+  key_points:
+  - Central store with per-key sorted sets or counters per time bucket and atomic check-and-add
+  - Or local meters with a share of the global budget refreshed periodically, accepting a small overshoot
+  - 'Clock skew between instances: use the store''s clock or bucketed counters'
+- q: Cost of each operation and the memory footprint.
+  kind: complexity
+  key_points:
+  - 'record, usage and allow are O(1) amortised: every event is appended once and removed once'
+  - Memory is O(events in window) per key; idle keys leave an empty deque until cleaned up
+  - A fixed-bucket approximation bounds memory at O(buckets) per key
+narration: []
+state_aloud:
+- 'Window semantics: events with now - ts >= window are expired (half-open window).'
+- Rejected requests are not charged.
+- Time must not go backwards; say what you do if it does.
+- tokens greater than the limit can never be admitted.
+- Idle keys keep a small deque; mention cleanup.
+walkthrough: |
+  Each key owns a deque of (timestamp, tokens) and a running total. Every operation first expires events from the left of the deque (timestamp at least window old), subtracting them from the total, so each event is added and removed once. allow checks usage + tokens against the limit and only then appends. retry_after scans the remaining events oldest-first until the freed tokens cover the excess and reports when the last needed one expires. Standard sliding-window log; it supports the token-metering idea in the gateway context of the user's AI-infra prep, but the code is the problem's own.
+categories:
+- ai-infra

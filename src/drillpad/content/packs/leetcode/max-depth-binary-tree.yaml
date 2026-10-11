@@ -1,0 +1,114 @@
+id: max-depth-binary-tree
+title: Maximum Depth of Binary Tree
+bar_level: 1
+target_minutes: 10
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Max Depth Binary Tree (LC 104)"
+statement: |
+  Return the number of nodes on the longest root-to-leaf path of a binary tree (0 for an empty tree). `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `max_depth(build_tree([3,9,20,None,None,15,7]))` returns `3`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def max_depth(root):
+      pass
+hints:
+- A tree's depth is one more than the deeper of its two subtrees.
+- The empty tree has depth 0, which is the recursion base case.
+- Mind recursion limits on skewed trees; an explicit stack or BFS avoids them.
+follow_ups:
+- Do it iteratively.
+- How would you compute the minimum depth, and why is that trickier?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert max_depth(build_tree([3,9,20,None,None,15,7]))==3
+- name: empty tree
+  tags:
+  - empty
+  code: |
+    assert max_depth(None)==0
+    assert max_depth(build_tree([1]))==1
+- name: single node
+  tags:
+  - single
+  code: |
+    assert max_depth(build_tree([1]))==1
+- name: left-skewed
+  tags:
+  - boundary
+  code: |
+    assert max_depth(build_tree([1,2,None,3,None,4]))==4
+- name: deep skewed tree
+  tags:
+  - scale
+  hidden: true
+  code: |
+    r=TreeNode(0)
+    c=r
+    for i in range(500):
+        c.right=TreeNode(i)
+        c=c.right
+    assert max_depth(r)==501
+complexity:
+- op: overall
+  time: O(n)
+  space: O(h)
+extensions:
+- q: Iterative version?
+  kind: code
+  key_points:
+  - Use an explicit stack of (node, depth)
+  - Or BFS counting levels
+  - Avoids Python recursion limits
+- q: Space in terms of height
+  kind: complexity
+  key_points:
+  - Recursion stack is O(h)
+  - O(log n) balanced, O(n) skewed
+  - 'Time O(n): each node visited once'
+- q: Minimum depth pitfall
+  kind: design
+  key_points:
+  - A node with one child is not a leaf
+  - Cannot just take min of both sides when one is empty
+  - BFS finds the first leaf and exits early
+narration: []
+state_aloud:
+- Empty tree is 0.
+- Skewed trees hit recursion limits.
+- Define depth in nodes versus edges.
+walkthrough: |
+  The depth of a tree is 1 plus the larger depth of its left and right subtrees, with the empty tree contributing 0. A post-order recursion computes this directly, visiting every node once. Space is the call stack, proportional to the tree height.

@@ -1,0 +1,100 @@
+id: max-area-of-island
+title: Max Area of Island
+bar_level: 2
+target_minutes: 22
+patterns:
+- graph-bfs-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Max Area of Island (LC 695)"
+statement: |
+  You are given a grid of 0s (water) and 1s (land). An island is a group of land cells connected horizontally or vertically. Return the size (number of cells) of the largest island, or 0 if the grid has no land.
+
+  Example: a grid where the biggest 4-connected block of 1s has 6 cells returns `6`.
+starter: |
+  def max_area_of_island(grid):
+      pass
+hints:
+- Scan every cell; whenever you meet unvisited land, flood-fill it and count the cells.
+- Mark cells visited (set, or overwrite the 1 with 0) so nothing is counted twice.
+- Use an explicit stack or queue; recursion can overflow on a large single island.
+follow_ups:
+- Return the coordinates of the largest island.
+- Support diagonal connectivity.
+tests:
+- name: two islands
+  tags:
+  - boundary
+  code: |
+    g=[[1,1,0,0],[1,0,0,1],[0,0,1,1],[0,0,1,1]]
+    assert max_area_of_island(g)==5
+- name: no land
+  tags:
+  - invalid
+  code: |
+    assert max_area_of_island([[0,0],[0,0]])==0
+- name: single cell
+  tags:
+  - single
+  code: |
+    assert max_area_of_island([[1]])==1
+    assert max_area_of_island([[0]])==0
+- name: empty grid
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert max_area_of_island([])==0
+    assert max_area_of_island([[]])==0
+- name: diagonal is not connected
+  tags:
+  - boundary
+  hidden: true
+  code: |
+    assert max_area_of_island([[1,0],[0,1]])==1
+- name: snaking island
+  tags:
+  - ordering
+  hidden: true
+  code: |
+    g=[[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]]
+    assert max_area_of_island(g)==11
+- name: large all-land grid
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=600
+    assert max_area_of_island([[1]*n for _ in range(n)])==n*n
+complexity:
+- op: overall
+  time: O(R * C)
+  space: O(R * C)
+extensions:
+- q: Why is it linear despite nested loops and flood fills?
+  kind: complexity
+  key_points:
+  - Each cell is pushed at most once because it is marked when discovered
+  - Outer scan visits R*C cells
+  - Worst-case stack/queue holds O(R*C) cells
+- q: Solve it with union-find instead.
+  kind: code
+  key_points:
+  - Union each land cell with its right and down land neighbours
+  - Track component sizes at the roots
+  - Answer is the max size; handy when cells arrive online
+- q: How would you handle a grid too large for memory?
+  kind: design
+  key_points:
+  - Process row by row keeping only two rows plus a DSU of boundary labels
+  - Merge components across row boundaries
+  - Keep a running maximum of finished component sizes
+narration: []
+state_aloud:
+- No land returns 0.
+- Diagonals do not connect.
+- Avoid recursion depth issues on a huge island.
+walkthrough: |
+  Sweep over the grid. When a land cell has not been visited, start an iterative DFS from it, marking cells as they are pushed and counting how many are popped; that count is the island's area. Keep the maximum across all starts. Marking on push rather than on pop guarantees every cell enters the stack at most once.

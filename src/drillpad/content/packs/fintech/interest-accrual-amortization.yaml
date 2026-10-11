@@ -1,0 +1,248 @@
+id: interest-accrual-amortization
+title: Interest Accrual / Loan Amortization
+bar_level: 2
+target_minutes: 25
+patterns:
+- rounding
+- exact-arithmetic
+- fractions
+- simulation
+firm_tags: []
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Implement loan math in integer cents with explicit rounding.
+
+  `round_half_up(x)` below means: round to the nearest integer, exact halves go up (2.5 -> 3). Compute with
+  integers or `fractions.Fraction`, never floats.
+
+  1. `accrued_interest(balance, annual_bps, days, basis=365)` returns the simple interest for `days` days:
+     `round_half_up(balance * annual_bps * days / (10000 * basis))`. `balance` and `days` must be ints >= 0,
+     `annual_bps` an int >= 0 (basis points, 1 bp = 0.01%), `basis` must be 360 or 365; else `ValueError`.
+
+  2. `amortization_schedule(principal, annual_bps, months)` returns a list of `months` rows
+     `(payment, interest, principal_paid, balance)`, all ints, for a level-payment loan (`principal` > 0,
+     `months` >= 1, `annual_bps` >= 0, else `ValueError`).
+     * Monthly rate `r = annual_bps / 120000` (exact fraction).
+     * Level payment `pmt = round_half_up(principal * r / (1 - (1 + r) ** -months))`, or
+       `round_half_up(principal / months)` when `annual_bps == 0`. Compute it exactly with `Fraction`.
+     * Each month: `interest = round_half_up(balance * annual_bps / 120000)` on the balance at the start of
+       the month; `payment = pmt`; `principal_paid = payment - interest`; `balance -= principal_paid`.
+     * The LAST row absorbs rounding drift: its payment is `balance + interest` so the final balance is exactly
+       0. If at any earlier row the payment would exceed `balance + interest`, pay only `balance + interest`
+       (the loan finishes early); remaining rows are still emitted with payment 0, interest 0, principal 0,
+       balance 0.
+
+  3. `total_interest(schedule)` sums the interest column.
+starter: |
+  from fractions import Fraction
+
+
+  def accrued_interest(balance, annual_bps, days, basis=365):
+      pass
+
+
+  def amortization_schedule(principal, annual_bps, months):
+      pass
+
+
+  def total_interest(schedule):
+      pass
+hints:
+- Half-up integer division for non-negative n/d is (2*n + d) // (2*d); use it for every rounding point.
+- Compute the level payment with Fraction so (1+r)**months is exact; round once at the end.
+- Run the month loop on integer balances; on the last row set payment = balance + interest so the loan
+  closes at exactly 0.
+follow_ups:
+- Why do real systems use banker's rounding in some places and half-up in others, and how do you document
+  the choice?
+- How do you handle extra principal payments mid-loan (re-amortise vs shorten the term)?
+- How do day-count conventions (30/360, actual/365, actual/actual) change accrual?
+tests:
+- name: daily accrual and rounding
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    assert accrued_interest(100000, 500, 30) == 411, "100000*500*30/(10000*365) = 410.96"
+    assert accrued_interest(100000, 500, 30, basis=360) == 417
+    assert accrued_interest(0, 500, 30) == 0 and accrued_interest(100000, 0, 30) == 0
+    assert accrued_interest(100000, 500, 0) == 0
+    assert accrued_interest(10, 5000, 1, basis=360) == 0, "10*5000/(3600000)=0.0139"
+    assert accrued_interest(73000, 10000, 1) == 200, "exact"
+    assert accrued_interest(1, 5000, 73) == 0, "0.1 rounds down"
+- name: half rounds up
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    assert accrued_interest(5, 10000, 1, basis=360) == 0
+    assert accrued_interest(360, 5000, 1, basis=360) == 1, "0.5 rounds up"
+    assert accrued_interest(1080, 5000, 1, basis=360) == 2, "1.5 rounds up, not banker's"
+    assert accrued_interest(720, 5000, 1, basis=360) == 1, "1.0"
+- name: classic 12 month loan
+  tags:
+  - ordering
+  - boundary
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    s = amortization_schedule(120000, 1200, 12)
+    assert len(s) == 12
+    assert s[0] == (10662, 1200, 9462, 110538)
+    assert s[-1][3] == 0
+    assert sum(r[2] for r in s) == 120000
+    assert all(r[0] == s[0][0] for r in s[:-1])
+    assert total_interest(s) == sum(r[0] for r in s) - 120000
+- name: zero interest loan splits evenly with drift in the last payment
+  tags:
+  - zero-capacity
+  - single
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    s = amortization_schedule(1000, 0, 3)
+    assert s == [(333, 0, 333, 667), (333, 0, 333, 334), (334, 0, 334, 0)]
+    assert amortization_schedule(100, 0, 1) == [(100, 0, 100, 0)]
+    assert total_interest(s) == 0
+- name: invalid input
+  tags:
+  - invalid
+  - empty
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    assert raises(amortization_schedule, 0, 100, 12)
+    assert raises(amortization_schedule, -5, 100, 12)
+    assert raises(amortization_schedule, 1000, -1, 12)
+    assert raises(amortization_schedule, 1000, 100, 0)
+    assert raises(accrued_interest, -1, 100, 1)
+    assert raises(accrued_interest, 1, 100, -1)
+    assert raises(accrued_interest, 1, 100, 1, basis=364)
+    assert total_interest([]) == 0
+- name: balances decline and close exactly
+  tags:
+  - boundary
+  - ordering
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    s = amortization_schedule(25000000, 675, 360)
+    assert len(s) == 360 and s[-1][3] == 0
+    bal = 25000000
+    for pay, interest, princ, after in s:
+        assert pay - interest == princ and after == bal - princ and after >= 0
+        bal = after
+    assert s[0][0] == s[1][0] == s[100][0]
+    assert 0 < s[-1][0] <= s[0][0] + 1000
+- name: tiny loan finishes early without negative payments
+  tags:
+  - single
+  - boundary
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    s = amortization_schedule(1, 100000, 5)
+    assert len(s) == 5 and s[-1][3] == 0
+    assert all(r[0] >= 0 and r[2] >= 0 and r[3] >= 0 for r in s)
+    assert sum(r[2] for r in s) == 1
+- name: many loans
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def raises(fn, *a, **k):
+        try:
+            fn(*a, **k)
+        except ValueError:
+            return True
+        return False
+
+    total = 0
+    for k in range(1500):
+        s = amortization_schedule(100000 + k * 137, 300 + k % 900, 360)
+        assert s[-1][3] == 0
+        total += total_interest(s)
+    assert total > 0
+complexity:
+- op: amortization_schedule
+  time: O(n)
+  space: O(n)
+extensions:
+- q: 'Level 2: support extra principal payments in given months and return the shortened schedule.'
+  kind: code
+  key_points:
+  - Subtract the extra from the balance after the regular payment and recompute interest from the new
+    balance
+  - The schedule ends early; the final payment must not exceed what is owed
+  - Report total interest saved against the original schedule
+- q: 'Level 3: daily-accrual loan: interest compounds on actual days between payment dates.'
+  kind: code
+  key_points:
+  - Use accrued_interest per period with the actual day count and the chosen basis
+  - Carry unrounded fractions or document where rounding happens each period
+  - Payment dates on weekends/holidays shift the day count
+- q: How should a lending system store and audit amortization?
+  kind: design
+  key_points:
+  - Persist the rounding policy and the inputs with each schedule; schedules must be reproducible
+  - Ledger entries for interest accrual and payments are append-only, never recomputed in place
+  - 'Property tests: balance never negative, principal sums to the original amount, final balance 0'
+- q: What is the cost and where can precision go wrong?
+  kind: complexity
+  key_points:
+  - O(n) for n months, constant work per row once the payment is computed
+  - Fraction exponentiation for the payment costs a few big-integer multiplications, O(log n) of them
+  - Float math would drift by cents and break the final balance of 0
+narration: []
+state_aloud:
+- Integer cents and basis points; one rounding rule (half up) applied at named points only.
+- The level payment is rounded once; the last payment absorbs the drift so the balance ends at exactly
+  0.
+- Interest each month is on the opening balance, rounded per month, not accumulated as an unrounded float.
+- Zero-rate loan needs its own branch because the annuity formula divides by zero.
+- Day-count basis (360 vs 365) is an input, not an assumption.
+walkthrough: |
+  Rounding uses a single helper (2n + d) // (2d). The payment is computed with Fraction from r = bps/120000 so (1+r)^-n is exact, then rounded once. The month loop works on integer balances: interest is rounded on the opening balance, the payment is capped at balance + interest, and the last row pays balance + interest exactly so drift lands in the final payment. Rows after an early payoff are zero rows. Source: standard formulation; rounding policy stated explicitly.

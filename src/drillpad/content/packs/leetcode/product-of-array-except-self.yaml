@@ -1,0 +1,96 @@
+id: product-of-array-except-self
+title: Product of Array Except Self
+bar_level: 2
+target_minutes: 20
+patterns:
+- prefix-sum
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Product of Array Except Self (LC 238)"
+statement: |
+  Return a list `out` where `out[i]` is the product of every element of `nums` except `nums[i]`. Do not use division, and aim for O(n) time.
+
+  Example: `product_except_self([1,2,3,4])` returns `[24,12,8,6]`.
+starter: |
+  def product_except_self(nums):
+      pass
+hints:
+- out[i] = (product of everything left of i) * (product of everything right of i).
+- Build the left products in a forward pass into the output array.
+- Then sweep right to left with a running right product and multiply it in.
+follow_ups:
+- How would you handle it with division and zeros?
+- Same idea for sums or max instead of products?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert product_except_self([1,2,3,4])==[24,12,8,6]
+- name: one zero
+  tags:
+  - boundary
+  code: |
+    assert product_except_self([-1,1,0,-3,3])==[0,0,9,0,0]
+- name: two zeros
+  tags:
+  - duplicate
+  code: |
+    assert product_except_self([0,0,2])==[0,0,0]
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert product_except_self([])==[]
+- name: single element has an empty product
+  tags:
+  - single
+  code: |
+    assert product_except_self([7])==[1]
+- name: two elements
+  tags:
+  - boundary
+  code: |
+    assert product_except_self([3,4])==[4,3]
+- name: large input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    a=[1]*100000
+    a[5]=2
+    r=product_except_self(a)
+    assert r[5]==1 and r[0]==2 and len(r)==100000
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Extra space
+  kind: complexity
+  key_points:
+  - Output array does not count as extra space
+  - Left pass fills the output; right pass uses one running variable
+  - O(1) auxiliary, O(n) time
+- q: Using division
+  kind: reasoning
+  key_points:
+  - Total product divided by nums[i] works if no zeros
+  - 'One zero: only that index is nonzero'
+  - 'Two or more zeros: everything is zero'
+- q: Generalize to other operations
+  kind: design
+  key_points:
+  - Any associative operation works with prefix/suffix arrays
+  - Sum, max, gcd, bitwise AND
+  - Non-invertible ops (max, gcd) show why division is not general
+narration: []
+state_aloud:
+- Zeros, one or several.
+- Single element returns [1].
+- Integer overflow in other languages.
+- Division is prohibited.
+walkthrough: |
+  First pass: store in `out[i]` the product of all elements to the left of i. Second pass from the right: keep a running product of elements to the right and multiply it into `out[i]`. Each position ends with left times right products, without division, in O(n) time and O(1) extra space beyond the output.

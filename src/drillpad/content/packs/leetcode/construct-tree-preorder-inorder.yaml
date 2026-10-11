@@ -1,0 +1,155 @@
+id: construct-tree-preorder-inorder
+title: Construct Binary Tree from Preorder and Inorder
+bar_level: 2
+target_minutes: 25
+patterns:
+- tree-dfs
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Construct Tree Pre/Inorder (LC 105)"
+statement: |
+  You are given the preorder and inorder traversals of a binary tree whose values are all distinct. Reconstruct the tree and return its root. The traversal lists have the same length (possibly 0). `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter. `tree_to_list(root)` returns the level-order list for comparison.
+
+  Example: preorder `[3,9,20,15,7]` with inorder `[9,3,15,20,7]` gives the tree `[3,9,20,None,None,15,7]`.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+
+  def tree_to_list(root):
+      """Level-order list with None for missing children (trailing Nones trimmed)."""
+      out, q = [], deque([root])
+      while q:
+          n = q.popleft()
+          if n is None:
+              out.append(None)
+              continue
+          out.append(n.val)
+          q.append(n.left)
+          q.append(n.right)
+      while out and out[-1] is None:
+          out.pop()
+      return out
+starter: |
+  def build_from_traversals(preorder, inorder):
+      pass
+hints:
+- The first preorder value is always the root of the current (sub)tree.
+- 'Find that root in the inorder list: everything to its left is the left subtree, everything to its right
+  is the right subtree.'
+- Precompute value-to-inorder-index so each split is O(1), and consume preorder values in order.
+follow_ups:
+- Reconstruct from inorder and postorder instead.
+- Why does preorder plus postorder not determine a unique tree?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    r = build_from_traversals([3,9,20,15,7], [9,3,15,20,7])
+    assert tree_to_list(r) == [3,9,20,None,None,15,7]
+- name: empty input
+  tags:
+  - empty
+  code: |
+    assert build_from_traversals([], []) is None
+    assert tree_to_list(build_from_traversals([1,2], [2,1])) == [1,2]
+- name: single node
+  tags:
+  - single
+  code: |
+    assert tree_to_list(build_from_traversals([-1], [-1])) == [-1]
+- name: left skewed
+  tags:
+  - boundary
+  code: |
+    assert tree_to_list(build_from_traversals([3,2,1], [1,2,3])) == [3,2,None,1]
+- name: right skewed
+  tags:
+  - boundary
+  code: |
+    assert tree_to_list(build_from_traversals([1,2,3], [1,2,3])) == [1,None,2,None,3]
+- name: inputs are not modified
+  tags:
+  - state-reuse
+  code: |
+    pre, ino = [1,2,3], [2,1,3]
+    r = build_from_traversals(pre, ino)
+    assert tree_to_list(r) == [1,2,3]
+    assert pre == [1,2,3] and ino == [2,1,3]
+- name: big balanced tree
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 2**16 - 1
+    vals = list(range(1, n + 1))
+    root = build_tree(vals)
+    pre, ino = [], []
+
+    def walk(node):
+        if not node:
+            return
+        pre.append(node.val)
+        walk(node.left)
+        ino.append(node.val)
+        walk(node.right)
+
+    walk(root)
+    assert tree_to_list(build_from_traversals(pre, ino)) == vals
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why the hash map?
+  kind: complexity
+  key_points:
+  - Scanning inorder for the root each time is O(n) per node
+  - That is O(n^2) on skewed trees
+  - A value-to-index map makes each split O(1) for O(n) total
+- q: Why are distinct values required?
+  kind: reasoning
+  key_points:
+  - Duplicates make the root position in inorder ambiguous
+  - Different splits could yield different valid trees
+  - Distinctness gives a unique reconstruction
+- q: Avoid slicing lists?
+  kind: design
+  key_points:
+  - Pass index bounds into the inorder array instead of slices
+  - Use a shared iterator or index for preorder
+  - Slicing copies make it O(n^2) in the worst case
+narration: []
+state_aloud:
+- Empty traversals give None.
+- Values are distinct.
+- Skewed trees in both directions.
+- Avoid O(n) searches or list slicing.
+walkthrough: |
+  Build a map from value to its inorder index. Walk preorder with an iterator: the next value is the current subtree's root. Its inorder index splits the current inorder range into a left range and a right range; recursively build the left subtree first (preorder lists the left subtree before the right), then the right. Index bounds replace slicing, so the whole build is linear.

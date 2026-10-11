@@ -1,0 +1,259 @@
+id: read-write-lock
+title: Read-Write Lock
+bar_level: 4
+target_minutes: 42
+patterns:
+- read-write-lock
+- condition-variable
+- writer-preference
+firm_tags:
+- ai-infra
+- distsys
+- quant-hft
+statement: |
+  Implement `RWLock`, a reader-writer lock built from `threading.Condition` (do not use any
+  third-party RW lock).
+
+  API
+  - `acquire_read()` / `release_read()`: any number of readers may hold the lock together, but not
+    while a writer holds it.
+  - `acquire_write()` / `release_write()`: exclusive; waits until there are no readers and no
+    writer.
+  - Writer preference: once a writer is waiting, newly arriving readers must queue behind it so a
+    stream of readers cannot starve writers.
+  - `release_read()` without a held read lock, or `release_write()` without a held write lock,
+    raises `RuntimeError`.
+  - Locks are not reentrant and are not tied to a thread identity (release may come from any thread).
+
+  Example
+  ```python
+  lock = RWLock()
+  lock.acquire_read(); lock.acquire_read()      # two readers at once
+  lock.release_read(); lock.release_read()
+  lock.acquire_write()                          # exclusive
+  lock.release_write()
+  ```
+starter: |
+  import threading
+
+  class RWLock:
+      def __init__(self):
+          pass
+
+      def acquire_read(self):
+          pass
+
+      def release_read(self):
+          pass
+
+      def acquire_write(self):
+          pass
+
+      def release_write(self):
+          pass
+hints:
+- 'Track three things under one Condition: active readers, whether a writer is active, and how many writers
+  are waiting.'
+- Readers wait while a writer is active OR a writer is waiting (that is the writer preference).
+- Release by a writer or the last reader should notify_all; decrement waiting_writers in a finally block.
+follow_ups:
+- How would you test for starvation?
+- What changes to make it reentrant per thread?
+- How do Python's GIL and the real-world C++ std::shared_mutex differ in this problem?
+tests:
+- name: readers share the lock
+  tags:
+  - concurrency
+  - boundary
+  code: |
+    import threading
+    lock = RWLock()
+    barrier = threading.Barrier(4, timeout=5)
+    errors = []
+    def reader():
+        try:
+            lock.acquire_read()
+            try:
+                barrier.wait()   # only passes if all 4 hold the read lock simultaneously
+            finally:
+                lock.release_read()
+        except Exception as e:
+            errors.append(repr(e))
+    ts = [threading.Thread(target=reader, daemon=True) for _ in range(4)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=8)
+    assert not errors, errors
+    assert not any(t.is_alive() for t in ts)
+    lock.acquire_read()
+    got = threading.Event()
+    def w():
+        lock.acquire_write(); got.set(); lock.release_write()
+    wt = threading.Thread(target=w, daemon=True); wt.start()
+    assert not got.wait(0.2), "writer entered while a reader held the lock"
+    lock.release_read()
+    assert got.wait(5)
+- name: writer excludes readers
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading, time
+    lock = RWLock()
+    lock.acquire_write()
+    got = threading.Event()
+    def reader():
+        lock.acquire_read()
+        got.set()
+        lock.release_read()
+    t = threading.Thread(target=reader, daemon=True); t.start()
+    assert not got.wait(0.3), "reader entered while a writer held the lock"
+    lock.release_write()
+    assert got.wait(5), "reader never woke after writer released"
+    t.join(timeout=5)
+- name: readers exclude writer
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading
+    lock = RWLock()
+    lock.acquire_read(); lock.acquire_read()
+    got = threading.Event()
+    def writer():
+        lock.acquire_write()
+        got.set()
+        lock.release_write()
+    t = threading.Thread(target=writer, daemon=True); t.start()
+    assert not got.wait(0.3), "writer entered while readers held the lock"
+    lock.release_read()
+    assert not got.wait(0.2), "writer entered with one reader still active"
+    lock.release_read()
+    assert got.wait(5)
+    t.join(timeout=5)
+- name: release without hold raises
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    lock = RWLock()
+    for fn in (lock.release_read, lock.release_write):
+        try:
+            fn()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("expected RuntimeError")
+    lock.acquire_write(); lock.release_write()
+    lock.acquire_read(); lock.release_read()
+- name: waiting writer blocks new readers
+  hidden: true
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading, time
+    lock = RWLock()
+    lock.acquire_read()
+    writer_started = threading.Event(); writer_done = threading.Event()
+    reader_in = threading.Event()
+    def writer():
+        writer_started.set()
+        lock.acquire_write()
+        writer_done.set()
+        time.sleep(0.05)
+        lock.release_write()
+    def late_reader():
+        lock.acquire_read()
+        reader_in.set()
+        lock.release_read()
+    w = threading.Thread(target=writer, daemon=True); w.start()
+    writer_started.wait(3)
+    time.sleep(0.4)                      # let the writer block inside acquire_write
+    r = threading.Thread(target=late_reader, daemon=True); r.start()
+    assert not reader_in.wait(0.3), "new reader overtook a waiting writer (writer starvation)"
+    lock.release_read()
+    assert writer_done.wait(5)
+    assert reader_in.wait(5)
+    w.join(5); r.join(5)
+- name: stress invariants
+  hidden: true
+  tags:
+  - concurrency
+  - scale
+  code: |
+    import threading, time
+    lock = RWLock()
+    state = {"r": 0, "w": 0, "bad": 0, "writes": 0}
+    guard = threading.Lock()
+    def reader():
+        for _ in range(15):
+            lock.acquire_read()
+            with guard:
+                state["r"] += 1
+                if state["w"]: state["bad"] += 1
+            time.sleep(0.001)
+            with guard:
+                if state["w"]: state["bad"] += 1
+                state["r"] -= 1
+            lock.release_read()
+    def writer():
+        for _ in range(8):
+            lock.acquire_write()
+            with guard:
+                state["w"] += 1
+                if state["w"] > 1 or state["r"]: state["bad"] += 1
+            time.sleep(0.001)
+            with guard:
+                state["w"] -= 1
+                state["writes"] += 1
+            lock.release_write()
+    ts = [threading.Thread(target=reader, daemon=True) for _ in range(5)] + [threading.Thread(target=writer, daemon=True) for _ in range(3)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=8)
+    assert not any(t.is_alive() for t in ts), "deadlock"
+    assert state["bad"] == 0 and state["writes"] == 24
+complexity:
+- op: acquire/release
+  time: O(1)
+  space: O(1)
+- op: notify_all wakeup
+  time: O(n) worst case
+  space: O(1)
+extensions:
+- q: What does each acquire/release cost, and what is the wake-up cost under contention?
+  kind: complexity
+  key_points:
+  - Uncontended operations are O(1) under a single mutex
+  - notify_all wakes every waiter so a release costs O(waiters) worst case (thundering herd)
+  - 'State is O(1): a reader count, a writer flag and a waiting-writer count'
+- q: 'Reader preference vs writer preference vs fair: which would you choose and why?'
+  kind: design
+  key_points:
+  - Reader preference maximises read throughput but can starve writers
+  - Writer preference (as here) bounds writer latency but can starve readers under constant writes
+  - Fair FIFO ticketing avoids both at some throughput cost
+- q: How would you add a timeout and upgrade/downgrade (read -> write) support?
+  kind: design
+  key_points:
+  - Condition.wait(timeout) with a deadline loop; decrement waiting_writers on timeout
+  - Upgrade is deadlock-prone if two readers upgrade at once; allow only one upgrader or fail fast
+  - 'Downgrade (write -> read) is safe: set readers=1 and clear writer atomically'
+- q: Why might this still be slow, and what lock-free alternatives exist?
+  kind: reasoning
+  key_points:
+  - Every read takes the shared mutex, which bounces a cache line between cores
+  - Per-core/striped reader counters or RCU/seqlock give near-free read paths
+  - Mention the write-heavy case where a plain mutex is simpler and faster
+narration: []
+state_aloud:
+- Writer preference and the starvation trade-off it creates for readers.
+- Invalid release must raise, not corrupt counts.
+- Always wait in a while loop (spurious wakeups).
+- Use try/finally so a failed waiter does not leak the waiting-writer count.
+walkthrough: One Condition guards a reader count, a writer flag and a count of waiting writers. Readers
+  wait while a writer is active or waiting; writers register as waiting, wait until no readers or writer
+  remain, then take the lock. Releases update the state and notify_all so waiters recheck their predicates
+  in while loops. Invalid releases raise RuntimeError.
+anki_queries: []
+categories:
+- systems-impl

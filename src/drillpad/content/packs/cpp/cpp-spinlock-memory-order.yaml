@@ -1,0 +1,303 @@
+id: cpp-spinlock-memory-order
+title: Spinlock with std::atomic
+language: cpp
+bar_level: 4
+target_minutes: 45
+patterns:
+- spinlock
+- memory-order
+- ttas
+- backoff
+- acquire-release
+- false-sharing
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Implement `class SpinLock` (C++20) using one `std::atomic` flag, satisfying the standard `Lockable` requirements so it
+  works with `std::lock_guard`, `std::unique_lock` and `std::scoped_lock`. No `std::mutex`, no `std::atomic_flag::wait`/
+  `std::binary_semaphore`.
+
+  API:
+  - `void lock() noexcept`: spin until acquired. Use test-and-test-and-set (TTAS): try an atomic exchange, and while it is held
+    spin on a plain `load` (not on the exchange) so waiting threads do not bounce the cache line. Add backoff: a bounded number
+    of CPU relax hints (`pause`/`yield` instruction, grown exponentially) and, after a long wait, `std::this_thread::yield()`.
+  - `bool try_lock() noexcept`: acquire if free, never block
+  - `void unlock() noexcept`
+  - Not copyable. Not recursive: `try_lock` by the owner returns false.
+
+  Memory ordering is the point: choose the weakest orders that are still correct. Everything the previous owner wrote inside its
+  critical section must be visible to the next owner, and nothing from inside the critical section may leak outside it. Plain
+  (non-atomic) data protected by the lock is what tests use to check this. Put the flag on its own cache line (`alignas(64)`).
+
+  The tests check mutual exclusion, blocking, `try_lock` semantics, RAII guards (including exceptions), opposite-order locking
+  through `std::scoped_lock` (needs a correct `try_lock`), and that the lock occupies a full cache line.
+
+  Example:
+  ```cpp
+  SpinLock lk;
+  { std::lock_guard<SpinLock> g(lk); ++shared_counter; }
+  ```
+starter: |
+  // A spinlock usable with std::lock_guard / std::unique_lock / std::scoped_lock (BasicLockable + Lockable).
+  class SpinLock {
+      // TODO: one atomic flag
+  public:
+      SpinLock() = default;
+      SpinLock(const SpinLock&) = delete;
+      SpinLock& operator=(const SpinLock&) = delete;
+
+      void lock() noexcept {}
+      bool try_lock() noexcept { return false; }   // true if the lock was acquired
+      void unlock() noexcept {}
+  };
+hints:
+- 'One std::atomic<bool> locked_. lock(): `if (!locked_.exchange(true, acquire)) return;` then wait with
+  `while (locked_.load(relaxed))` before retrying the exchange.'
+- 'Why acquire/release: exchange(acquire) on lock and store(false, release) on unlock form a synchronizes-with
+  edge, so the critical section''s plain reads and writes cannot move above the acquire or below the release,
+  and the next owner sees them. With relaxed on both, the compiler or CPU (especially ARM) may reorder
+  them across the lock boundary.'
+- 'Backoff: spin `spins` relax hints (`asm volatile("pause")` on x86, `"yield"` on AArch64), double `spins`
+  up to a cap, then call std::this_thread::yield() so a descheduled holder gets CPU time. alignas(64)
+  keeps the flag away from neighbouring data.'
+follow_ups:
+- Why is memory_order_relaxed on lock or unlock a bug even if every test passes on x86?
+- Why is TTAS better than plain test-and-set under contention (cache coherence traffic)?
+- What are the downsides of spinlocks in user space (preempted holder, priority inversion) and when does
+  a mutex win?
+- Could unlock use seq_cst or lock use acq_rel? What does each cost, and what does C++20's atomic wait/notify
+  change?
+tests:
+- name: try_lock on a single thread
+  tags:
+  - single
+  - boundary
+  code: |
+    SpinLock lk;
+    CHECK(lk.try_lock());
+    CHECK(!lk.try_lock());          // not recursive
+    lk.unlock();
+    CHECK(lk.try_lock());
+    lk.unlock();
+    lk.lock();
+    CHECK(!lk.try_lock());
+    lk.unlock();
+- name: another thread cannot take a held lock
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    SpinLock lk;
+    lk.lock();
+    bool got = true;
+    std::thread t([&] { got = lk.try_lock(); if (got) lk.unlock(); });
+    t.join();
+    CHECK(!got);
+    lk.unlock();
+    bool got2 = false;
+    std::thread t2([&] { got2 = lk.try_lock(); if (got2) lk.unlock(); });
+    t2.join();
+    CHECK(got2);
+- name: guards release on scope exit and on exceptions
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    SpinLock lk;
+    {
+        std::lock_guard<SpinLock> g(lk);
+        CHECK(!lk.try_lock());
+    }
+    CHECK(lk.try_lock());
+    lk.unlock();
+    try {
+        std::lock_guard<SpinLock> g(lk);
+        throw std::runtime_error("boom");
+    } catch (const std::runtime_error&) {}
+    CHECK(lk.try_lock());
+    lk.unlock();
+    std::unique_lock<SpinLock> u(lk, std::defer_lock);
+    CHECK(!u.owns_lock());
+    CHECK(u.try_lock());
+    CHECK(u.owns_lock());
+- name: lock blocks until the holder unlocks
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    SpinLock lk;
+    CHECK(lk.try_lock());               // sanity: we hold it now
+    std::atomic<bool> about_to_lock{false}, acquired{false};
+    std::thread t([&] {
+        about_to_lock = true;
+        lk.lock();
+        acquired = true;
+        lk.unlock();
+    });
+    while (!about_to_lock) std::this_thread::yield();
+    for (int i = 0; i < 500; i++) std::this_thread::yield();    // give the thread every chance to (wrongly) get in
+    CHECK(!acquired);
+    lk.unlock();
+    t.join();
+    CHECK(acquired);
+- name: mutual exclusion under contention
+  tags:
+  - concurrency
+  - scale
+  code: |
+    SpinLock lk;
+    CHECK(lk.try_lock());
+    lk.unlock();
+    long counter = 0;               // deliberately NOT atomic: only the lock protects it
+    std::atomic<int> inside{0};
+    std::atomic<bool> violated{false};
+    std::vector<std::thread> ts;
+    for (int t = 0; t < 4; t++) {
+        ts.emplace_back([&] {
+            for (int i = 0; i < 50000; i++) {
+                std::lock_guard<SpinLock> g(lk);
+                if (inside.fetch_add(1, std::memory_order_relaxed) != 0) violated = true;
+                ++counter;
+                inside.fetch_sub(1, std::memory_order_relaxed);
+            }
+        });
+    }
+    for (auto& t : ts) t.join();
+    CHECK(!violated);
+    CHECK_EQ(counter, 200000L);
+- name: writes inside the critical section are published to the next owner
+  hidden: true
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    SpinLock lk;
+    CHECK(lk.try_lock());
+    lk.unlock();
+    // a and b are plain ints: they stay equal for every observer only if unlock releases and lock acquires
+    int a = 0, b = 0;
+    std::atomic<bool> torn{false};
+    std::vector<std::thread> ts;
+    for (int w = 0; w < 2; w++) {
+        ts.emplace_back([&] {
+            for (int i = 0; i < 30000; i++) { std::lock_guard<SpinLock> g(lk); ++a; ++b; }
+        });
+    }
+    for (int r = 0; r < 2; r++) {
+        ts.emplace_back([&] {
+            for (int i = 0; i < 30000; i++) {
+                std::lock_guard<SpinLock> g(lk);
+                if (a != b) torn = true;
+            }
+        });
+    }
+    for (auto& t : ts) t.join();
+    CHECK(!torn);
+    CHECK_EQ(a, 60000);
+    CHECK_EQ(b, 60000);
+- name: works with std::scoped_lock on two locks in opposite orders
+  hidden: true
+  tags:
+  - concurrency
+  - duplicate
+  code: |
+    SpinLock x, y;
+    CHECK(x.try_lock());
+    x.unlock();
+    long counter = 0;
+    std::thread t1([&] { for (int i = 0; i < 5000; i++) { std::scoped_lock g(x, y); ++counter; } });
+    std::thread t2([&] { for (int i = 0; i < 5000; i++) { std::scoped_lock g(y, x); ++counter; } });
+    t1.join(); t2.join();
+    CHECK_EQ(counter, 10000L);
+    CHECK(x.try_lock() && y.try_lock());
+- name: the flag lives on its own cache line
+  hidden: true
+  tags:
+  - boundary
+  - single
+  code: |
+    SpinLock lk;
+    CHECK(lk.try_lock());
+    lk.unlock();
+    CHECK(alignof(SpinLock) >= 64);
+    CHECK(sizeof(SpinLock) >= 64);
+    CHECK(!std::is_copy_constructible_v<SpinLock>);
+- name: eight threads, tiny critical sections
+  hidden: true
+  tags:
+  - concurrency
+  - scale
+  code: |
+    SpinLock lk;
+    CHECK(lk.try_lock());
+    lk.unlock();
+    std::uint64_t sum = 0;
+    std::vector<std::thread> ts;
+    for (int t = 0; t < 8; t++) {
+        ts.emplace_back([&, t] {
+            for (int i = 0; i < 10000; i++) { lk.lock(); sum += static_cast<std::uint64_t>(t + 1); lk.unlock(); }
+        });
+    }
+    for (auto& t : ts) t.join();
+    CHECK_EQ(sum, std::uint64_t{10000} * 36);
+complexity:
+- op: lock / unlock (uncontended)
+  time: O(1)
+  space: O(1)
+- op: lock (contended)
+  time: O(n) worst case
+  space: O(1)
+- op: try_lock
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Which memory orders and why, and what is wrong with relaxed?
+  kind: reasoning
+  key_points:
+  - 'lock: exchange with acquire, so later operations in the critical section cannot be reordered before
+    it and they observe the previous owner''s writes'
+  - 'unlock: store with release, so earlier writes cannot be reordered after it and are published to the
+    next acquirer'
+  - 'Relaxed provides atomicity but no ordering: plain data in the critical section may be observed stale
+    or torn, and on ARM the hardware really reorders'
+- q: What are the progress guarantees and cost under contention?
+  kind: complexity
+  key_points:
+  - 'Not lock-free or wait-free in the progress-guarantee sense: a thread that holds the lock can block
+    everyone (a preempted holder stalls all spinners)'
+  - 'Individual lock attempts have no bound: O(number of contenders) handoffs, unfair (no FIFO), starvation
+    is possible'
+  - 'TTAS keeps waiters on a shared cache line so only the release and the winning exchange invalidate
+    it: O(1) coherence transactions per handoff instead of O(waiters)'
+- q: How do layout and ABI affect a spinlock embedded in a larger struct?
+  kind: design
+  key_points:
+  - Put the lock on its own cache line (alignas(64), or std::hardware_destructive_interference_size, which
+    varies by target) so spinning does not invalidate neighbouring hot data (false sharing)
+  - Conversely, if the lock and the data it protects are always used together, putting them on the same
+    line avoids a second miss
+  - 'alignas on a class raises its alignment and sizeof: over-aligned heap allocation needs aligned new
+    (C++17)'
+- q: When would you replace this with something better?
+  kind: design
+  key_points:
+  - 'Use a mutex (futex-based) when critical sections can be long or threads exceed cores: it sleeps instead
+    of burning CPU'
+  - Use a ticket lock for fairness, or MCS/CLH queue locks to give each waiter its own cache line to spin
+    on
+  - 'Better still, avoid the lock: per-thread data, a single-writer design, or an SPSC queue as in a trading
+    pipeline'
+narration: []
+state_aloud:
+- 'Memory order: acquire on lock, release on unlock; say it synchronizes-with the next owner.'
+- 'TTAS: spin on a relaxed load, not on the exchange, to avoid coherence traffic.'
+- 'Spinlocks burn CPU and misbehave when the holder is preempted: add backoff and yield, and say when
+  you would use a mutex.'
+- Not recursive, not fair, not copyable; try_lock must be correct so std::scoped_lock can avoid deadlock.
+walkthrough: |
+  `lock()` acquires with an atomic exchange and, while contended, waits on a relaxed load (TTAS) with exponentially growing CPU relax hints and an occasional yield; `unlock()` is a release store. The acquire/release pair is a synchronizes-with edge that keeps the critical section's plain accesses inside the lock and visible to the next owner, which relaxed ordering does not guarantee (it merely hides on x86). Python's `threading.Lock` blocks in the kernel and the GIL masks races; a C++ spinlock trades CPU for latency and puts memory ordering and cache-line layout in your hands.
+anki_queries: []
+categories:
+- trading
+- systems-impl

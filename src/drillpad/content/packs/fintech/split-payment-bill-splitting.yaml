@@ -1,0 +1,245 @@
+id: split-payment-bill-splitting
+title: Bill Splitting / Min Cash Flow
+bar_level: 3
+target_minutes: 35
+patterns:
+- bitmask-dp
+- subset-sum
+- backtracking
+- remainder-distribution
+- optimal-account-balancing
+firm_tags: []
+categories:
+- fintech
+anki_queries: []
+statement: |
+  Two related functions for splitting shared expenses. Money is integer cents.
+
+  1. `split_bill(total, people)` divides `total` (int >= 0) among `people` (a non-empty list of distinct names;
+     otherwise `ValueError`) as evenly as possible and returns `{name: share}`. Every share is
+     `total // n`; the `total % n` leftover cents are distributed ONE cent each to the first names in
+     ALPHABETICAL order (so shares differ by at most 1 cent and always sum to `total`).
+
+  2. `min_cash_flow(net)` settles debts. `net` is `{name: balance}` where a positive balance means the person
+     is owed money, a negative one that they owe money; the balances must sum to 0, else `ValueError`.
+     Return a list of transfers `(debtor, creditor, amount)` with `amount > 0` such that, after applying
+     them, every balance is 0, money only flows from a debtor (negative) to a creditor (positive), and the
+     NUMBER OF TRANSFERS IS THE MINIMUM POSSIBLE. Any minimum solution is accepted. Zero balances take no part.
+     Inputs have up to about 18 non-zero people.
+
+  Greedy "largest debtor pays largest creditor" is not minimal in general. The key fact: a group of k people
+  whose balances sum to 0 can always be settled in k-1 transfers, so the minimum number of transfers is
+  `(number of non-zero people) - (maximum number of disjoint zero-sum groups)`.
+starter: |
+  def split_bill(total, people):
+      pass
+
+
+  def min_cash_flow(net):
+      pass
+hints:
+- 'For split_bill: base = total // n, extra = total % n; sort the names and give the first `extra` of
+  them one more cent.'
+- 'Minimum transfers = non-zero people minus the largest number of disjoint zero-sum groups. Find the
+  largest partition with a bitmask DP: dp[mask] = max over removed bit of dp[mask without bit], plus 1
+  if sum(mask) == 0.'
+- Once you know the groups, settle each group greedily with two pointers (largest debtor with largest
+  creditor); a group of k people needs at most k-1 transfers.
+follow_ups:
+- Why is the general problem NP-hard, and why is a bitmask DP acceptable for n up to about 18-20?
+- How would you present a result that is not minimal but easy for humans to follow?
+- How do you split unevenly by weights (e.g. by income or by items) while keeping cents exact?
+tests:
+- name: even and uneven splits
+  tags:
+  - boundary
+  - ordering
+  code: |
+    assert split_bill(900, ["a", "b", "c"]) == {"a": 300, "b": 300, "c": 300}
+    assert split_bill(1000, ["c", "a", "b"]) == {"a": 334, "b": 333, "c": 333}
+    assert split_bill(1001, ["c", "a", "b"]) == {"a": 334, "b": 334, "c": 333}
+    assert split_bill(1, ["x", "y", "z"]) == {"x": 1, "y": 0, "z": 0}
+    s = split_bill(10**9 + 7, ["p%d" % i for i in range(13)])
+    assert sum(s.values()) == 10**9 + 7 and max(s.values()) - min(s.values()) <= 1
+- name: split validation and edge cases
+  tags:
+  - single
+  - invalid
+  code: |
+    assert split_bill(0, ["a", "b"]) == {"a": 0, "b": 0}
+    assert split_bill(500, ["solo"]) == {"solo": 500}
+    for bad in (lambda: split_bill(100, []), lambda: split_bill(100, ["a", "a"]), lambda: split_bill(-1, ["a"])):
+        try:
+            bad()
+            assert False
+        except ValueError:
+            pass
+- name: simple settlements
+  tags:
+  - empty
+  - single
+  code: |
+    def apply(net, transfers):
+        bal = dict(net)
+        for d, c, a in transfers:
+            assert a > 0, "amounts must be positive"
+            assert net[d] < 0 and net[c] > 0, "money flows from debtor to creditor"
+            bal[d] += a
+            bal[c] -= a
+        assert all(v == 0 for v in bal.values()), "all balances must settle to zero"
+
+    net = {"a": 50, "b": -20, "c": -30}
+    t = min_cash_flow(net)
+    apply(net, t)
+    assert len(t) == 2
+    assert min_cash_flow({}) == [] and min_cash_flow({"a": 0, "b": 0}) == []
+    n2 = {"a": 100, "b": -100}
+    assert min_cash_flow(n2) == [("b", "a", 100)]
+- name: zero sum groups reduce the transfer count
+  tags:
+  - ordering
+  - boundary
+  code: |
+    def apply(net, transfers):
+        bal = dict(net)
+        for d, c, a in transfers:
+            assert a > 0, "amounts must be positive"
+            assert net[d] < 0 and net[c] > 0, "money flows from debtor to creditor"
+            bal[d] += a
+            bal[c] -= a
+        assert all(v == 0 for v in bal.values()), "all balances must settle to zero"
+
+    net = {"a": 5, "b": 5, "c": -5, "d": -5, "e": 3, "f": -3}
+    t = min_cash_flow(net)
+    apply(net, t)
+    assert len(t) == 3, "three disjoint pairs: 3 transfers, not 5"
+    net2 = {"a": 10, "b": -3, "c": -7, "d": 6, "e": -6}
+    t2 = min_cash_flow(net2)
+    apply(net2, t2)
+    assert len(t2) == 3, "{d,e} settle together; {a,b,c} need 2"
+- name: greedy trap
+  tags:
+  - boundary
+  - duplicate
+  code: |
+    def apply(net, transfers):
+        bal = dict(net)
+        for d, c, a in transfers:
+            assert a > 0, "amounts must be positive"
+            assert net[d] < 0 and net[c] > 0, "money flows from debtor to creditor"
+            bal[d] += a
+            bal[c] -= a
+        assert all(v == 0 for v in bal.values()), "all balances must settle to zero"
+
+    net = {"a": 6, "b": 4, "c": -7, "d": -3}
+    t = min_cash_flow(net)
+    apply(net, t)
+    assert len(t) == 3, "no zero-sum proper subset: n-1 transfers"
+    net = {"a": 8, "b": 2, "c": -5, "d": -5}
+    t = min_cash_flow(net)
+    apply(net, t)
+    assert len(t) == 3
+    net = {"a": 5, "b": 5, "c": -4, "d": -6}
+    t = min_cash_flow(net)
+    apply(net, t)
+    assert len(t) == 3
+    net = {"a": 4, "b": 6, "c": -4, "d": -6}
+    t = min_cash_flow(net)
+    apply(net, t)
+    assert len(t) == 2
+- name: balances must sum to zero
+  tags:
+  - invalid
+  - zero-capacity
+  hidden: true
+  code: |
+    def apply(net, transfers):
+        bal = dict(net)
+        for d, c, a in transfers:
+            assert a > 0, "amounts must be positive"
+            assert net[d] < 0 and net[c] > 0, "money flows from debtor to creditor"
+            bal[d] += a
+            bal[c] -= a
+        assert all(v == 0 for v in bal.values()), "all balances must settle to zero"
+
+    try:
+        min_cash_flow({"a": 5, "b": -4})
+        assert False
+    except ValueError:
+        pass
+    net = {"a": 1, "b": -1, "z": 0}
+    t = min_cash_flow(net)
+    assert t == [("b", "a", 1)], "people with zero balance take no part"
+- name: eighteen people
+  tags:
+  - scale
+  hidden: true
+  code: |
+    def apply(net, transfers):
+        bal = dict(net)
+        for d, c, a in transfers:
+            assert a > 0, "amounts must be positive"
+            assert net[d] < 0 and net[c] > 0, "money flows from debtor to creditor"
+            bal[d] += a
+            bal[c] -= a
+        assert all(v == 0 for v in bal.values()), "all balances must settle to zero"
+
+    import random
+    rng = random.Random(7)
+    debt = [rng.randint(10**6, 10**9) for _ in range(9)]
+    cred = [rng.randint(10**6, 10**9) for _ in range(8)]
+    cred.append(sum(debt) - sum(cred))
+    assert cred[-1] > 0
+    net = {}
+    for i, v in enumerate(debt):
+        net["d%d" % i] = -v
+    for i, v in enumerate(cred):
+        net["c%d" % i] = v
+    t = min_cash_flow(net)
+    apply(net, t)
+    assert len(t) == 17, "random amounts have no proper zero-sum subset"
+complexity:
+- op: split_bill
+  time: O(n log n)
+  space: O(n)
+- op: min_cash_flow
+  time: O(n * 2^n)
+  space: O(2^n)
+extensions:
+- q: 'Level 2: return the transfers in a deterministic order and prefer fewer, larger payments from the
+    same person.'
+  kind: code
+  key_points:
+  - Sort names and amounts so output is stable across runs
+  - Within a group pair largest debtor with largest creditor first
+  - Document that minimality is about count, not total money moved (the total is fixed)
+- q: 'Level 3: weighted splits: share of the bill proportional to integer weights, still exact to the
+    cent.'
+  kind: code
+  key_points:
+  - 'Use the largest remainder method: floor shares then give leftover cents to the largest fractional
+    parts'
+  - Break ties by name for determinism
+  - Shares must still sum to exactly the total
+- q: How would an expense-sharing app compute and store balances over time?
+  kind: design
+  key_points:
+  - Append-only expense events; balances are derived and can be recomputed
+  - Simplify debts only on demand (it changes who pays whom) and keep original IOUs for audit
+  - Settlements are idempotent transfers that net against open balances
+- q: Why is the DP exponential, and how does the group formulation reduce the search?
+  kind: complexity
+  key_points:
+  - The partition into maximum zero-sum groups is NP-hard (related to subset sum / 3-partition)
+  - Bitmask DP is O(n * 2^n) time and O(2^n) space, fine up to about 20 people
+  - A naive backtracking over every debtor/creditor pairing explodes factorially when no subgroup balances
+narration: []
+state_aloud:
+- Integer cents everywhere; the remainder cents go to a stated, deterministic set of people (first names
+  alphabetically).
+- 'Balances must sum to zero, otherwise the input is inconsistent: validate.'
+- Minimum transfers = people - maximum number of zero-sum groups; greedy cannot find that.
+- n is small (about 18) so a 2^n bitmask DP is acceptable; say so and name the complexity.
+- Drop zero-balance people first; they never need to transact.
+walkthrough: |
+  split_bill: base share total // n, give total % n extra single cents to the alphabetically first names. min_cash_flow: drop zeros, compute subset sums for every mask with the lowest-bit recurrence, then dp[mask] = max over bits of dp[mask without the bit], plus 1 when sum[mask] == 0. Walk back from the full mask following the choice that keeps dp consistent and record each mask where the sum is zero as a group boundary; the difference between consecutive boundary masks is one zero-sum group. Each group is settled with two pointers (sorted debtors and creditors), producing at most size-1 transfers. Source: standard formulation.

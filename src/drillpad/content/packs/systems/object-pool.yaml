@@ -1,0 +1,219 @@
+id: object-pool
+title: Object Pool
+bar_level: 3
+target_minutes: 35
+patterns:
+- object-pool
+- reset-on-release
+- lifo
+- thread-safety
+firm_tags:
+- ai-infra
+- quant-hft
+statement: |
+  Implement `ObjectPool(factory, reset=None, max_idle=8)` for reusable, expensive-to-build
+  objects (buffers, parsers, ...). Unlike a connection pool it never blocks and never limits how
+  many objects are in use; it only bounds how many *idle* objects it keeps.
+
+  - `acquire()`: pop the most recently released idle object (LIFO) or build a new one with
+    `factory()`.
+  - `release(obj)`: call `reset(obj)` if given (so the next user sees a clean object), then keep
+    the object if fewer than `max_idle` are idle, otherwise drop it. Releasing an object that is
+    not currently checked out (never acquired, or already released) raises `ValueError`.
+  - `lease()`: context manager that acquires, yields and always releases.
+  - `stats()` -> `{"created": int, "reused": int, "idle": int, "in_use": int}` where `reused`
+    counts acquires satisfied from the idle list.
+  - Thread-safe. Do not call `factory`/`reset` while holding your lock.
+
+  Example
+  ```python
+  pool = ObjectPool(list, reset=lambda l: l.clear(), max_idle=2)
+  with pool.lease() as buf: buf.append(1)
+  pool.acquire() is buf   # same (cleared) object
+  ```
+starter: |
+  import threading
+  from contextlib import contextmanager
+
+  class ObjectPool:
+      def __init__(self, factory, reset=None, max_idle=8):
+          pass
+
+      def acquire(self):
+          pass
+
+      def release(self, obj):
+          pass
+
+      @contextmanager
+      def lease(self):
+          yield None
+
+      def stats(self):
+          pass
+hints:
+- Keep an idle list and a registry of checked-out objects keyed by id().
+- Run factory and reset outside the lock to avoid deadlocks and long critical sections.
+- Keep an idle object only if len(idle) < max_idle.
+follow_ups:
+- How would you detect objects used after release?
+- How would you warm the pool at startup?
+tests:
+- name: reuse after reset
+  tags:
+  - state-reuse
+  - single
+  code: |
+    pool = ObjectPool(list, reset=lambda l: l.clear())
+    a = pool.acquire()
+    a.append(1)
+    pool.release(a)
+    b = pool.acquire()
+    assert b is a and b == []
+    assert pool.stats() == {"created": 1, "reused": 1, "idle": 0, "in_use": 1}
+- name: lifo and unbounded in use
+  tags:
+  - ordering
+  - scale
+  code: |
+    pool = ObjectPool(dict)
+    objs = [pool.acquire() for _ in range(20)]
+    assert pool.stats()["in_use"] == 20 and pool.stats()["created"] == 20
+    pool.release(objs[0]); pool.release(objs[1])
+    assert pool.acquire() is objs[1]
+    assert pool.acquire() is objs[0]
+- name: max idle drops extras
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    pool = ObjectPool(object, max_idle=2)
+    objs = [pool.acquire() for _ in range(4)]
+    for o in objs: pool.release(o)
+    assert pool.stats()["idle"] == 2 and pool.stats()["in_use"] == 0
+    p0 = ObjectPool(object, max_idle=0)
+    o = p0.acquire(); p0.release(o)
+    assert p0.stats()["idle"] == 0
+    assert p0.acquire() is not o and p0.stats()["created"] == 2
+- name: double and foreign release
+  tags:
+  - invalid
+  - duplicate
+  code: |
+    pool = ObjectPool(list)
+    a = pool.acquire()
+    pool.release(a)
+    for bad in (a, [], None):
+        try:
+            pool.release(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+    assert pool.stats()["idle"] == 1
+- name: lease releases on error
+  hidden: true
+  tags:
+  - state-reuse
+  - empty
+  code: |
+    pool = ObjectPool(list, reset=lambda l: l.clear())
+    with pool.lease() as x:
+        x.append(5)
+    assert pool.stats() == {"created": 1, "reused": 0, "idle": 1, "in_use": 0}
+    try:
+        with pool.lease() as y:
+            assert y is x and y == []
+            raise KeyError()
+    except KeyError:
+        pass
+    assert pool.stats()["in_use"] == 0 and pool.stats()["reused"] == 1
+- name: factory and reset run outside the lock
+  hidden: true
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading
+    pool = None
+    def factory():
+        return pool.stats()      # would deadlock if factory ran under a non-reentrant lock
+    def reset(o):
+        pool.stats()
+    pool = ObjectPool(factory, reset=reset)
+    res = []
+    t = threading.Thread(target=lambda: res.append(pool.acquire()), daemon=True); t.start(); t.join(5)
+    assert not t.is_alive() and len(res) == 1
+    t = threading.Thread(target=lambda: pool.release(res[0]), daemon=True); t.start(); t.join(5)
+    assert not t.is_alive() and pool.stats()["idle"] == 1
+- name: concurrent borrowers get distinct objects
+  hidden: true
+  tags:
+  - concurrency
+  - scale
+  code: |
+    import threading
+    pool = ObjectPool(lambda: {"owner": None})
+    errors = []
+    def worker(n):
+        try:
+            for i in range(200):
+                with pool.lease() as o:
+                    if o["owner"] is not None: errors.append("shared")
+                    o["owner"] = n
+                    o["owner"] = None
+        except Exception as e:
+            errors.append(repr(e))
+    ts = [threading.Thread(target=worker, args=(i,), daemon=True) for i in range(8)]
+    for t in ts: t.start()
+    for t in ts: t.join(timeout=8)
+    assert not any(t.is_alive() for t in ts)
+    assert not errors, errors
+    s = pool.stats()
+    assert s["in_use"] == 0 and s["created"] <= 8 and s["created"] + s["reused"] == 1600
+complexity:
+- op: acquire
+  time: O(1)
+  space: O(n)
+- op: release
+  time: O(1)
+  space: O(n)
+extensions:
+- q: Costs, and what bounds memory?
+  kind: complexity
+  key_points:
+  - 'Both operations are O(1): list push/pop and a dict update'
+  - Idle memory is bounded by max_idle; in-use objects are bounded only by callers
+  - 'Reset cost is paid on release and can dominate: prefer cheap resets'
+- q: Why LIFO and why reset on release rather than on acquire?
+  kind: design
+  key_points:
+  - LIFO keeps the hottest (cache-warm) objects in use and lets cold ones age out
+  - Resetting at release ensures no data from one user leaks to the next and avoids doing work on the
+    acquire hot path
+  - Zeroing secrets/buffers on release is a security requirement in some systems
+- q: Make it bounded and blocking, or per-thread, for hot paths.
+  kind: design
+  key_points:
+  - Add a semaphore of max_total permits to block acquire when exhausted (that is a connection pool)
+  - Thread-local free lists remove lock contention entirely for allocation-heavy code
+  - Add shrink-on-idle-timeout and a metrics hook for pool hit rate
+- q: When is pooling a bad idea?
+  kind: reasoning
+  key_points:
+  - 'Cheap objects: allocation is faster than synchronisation and the GC handles them well'
+  - Pooled objects can retain references and hide use-after-release bugs
+  - 'Benchmark: pool hit rate and contention decide the win'
+narration: []
+state_aloud:
+- Reset on release so state does not leak between users.
+- 'Double release is a bug: raise.'
+- Never run user callbacks under the lock.
+- max_idle=0 degenerates into no pooling.
+walkthrough: The pool keeps a LIFO list of idle objects and a dict of checked-out ones keyed by identity
+  under a lock. acquire pops an idle object or builds one outside the lock; release validates ownership,
+  runs the reset callback outside the lock and re-adds the object unless max_idle objects are already
+  idle. lease wraps the pair in a context manager. Operations are O(1).
+anki_queries: []
+categories:
+- systems-impl

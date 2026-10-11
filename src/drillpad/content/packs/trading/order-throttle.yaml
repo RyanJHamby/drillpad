@@ -1,0 +1,172 @@
+id: order-throttle
+title: Order Throttle (messages/sec per venue)
+bar_level: 2
+target_minutes: 20
+patterns:
+- sliding-window
+- rate-limiting
+- deque
+- timestamps-injected
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Exchanges disconnect sessions that exceed a message rate. Implement `Throttle(limit, window)`, a per-venue
+  sliding-window limiter driven by caller-supplied timestamps (no wall clock).
+
+  - `allow(venue, ts) -> bool`: True and the message is counted if fewer than `limit` messages were ACCEPTED for that
+    venue in the half-open window `(ts - window, ts]`; otherwise False and nothing is counted (rejected messages do not
+    consume budget). Venues are independent.
+  - `retry_after(venue, ts) -> int`: how long until `allow(venue, ts + d)` would succeed: 0 if it would succeed now, else
+    the smallest `d >= 1` at which the oldest accepted message in the window expires, i.e. `oldest_ts + window - ts`.
+    It does not count a message.
+  - Timestamps are ints and non-decreasing per venue across `allow` calls: raise `ValueError` if a venue's timestamp goes
+    backwards. `ValueError` for `limit < 1` or `window < 1`.
+
+  Each call must be O(1) amortized; memory per venue is at most `limit` timestamps.
+starter: |
+  class Throttle:
+      def __init__(self, limit, window):
+          pass
+hints:
+- One deque of accepted timestamps per venue; evict while the oldest is <= ts - window, then compare its
+  length with limit.
+- 'Only append when you accept: rejected messages must not consume budget.'
+- 'retry_after is oldest + window - ts when the deque is full: the moment the oldest entry leaves the
+  window.'
+follow_ups:
+- 'Sliding window log vs token bucket: when do you pick which?'
+- How would a global limit plus per-venue limits work?
+- What does the exchange do when you breach (disconnect, penalty)?
+tests:
+- name: limit within window then recovery
+  code: |
+    t = Throttle(3, 10)
+    assert [t.allow("X", ts) for ts in (0, 1, 2)] == [True, True, True]
+    assert t.allow("X", 3) is False
+    assert t.allow("X", 9) is False
+    assert t.allow("X", 10) is True, "ts=0 is exactly 10 old and expired"
+    assert t.allow("X", 10) is False
+  hidden: false
+  tags:
+  - time
+  - boundary
+- name: rejections do not consume budget
+  code: |
+    t = Throttle(1, 5)
+    assert t.allow("X", 0) is True
+    for ts in range(1, 5):
+        assert t.allow("X", ts) is False
+    assert t.allow("X", 5) is True, "rejected attempts did not extend the block"
+  hidden: false
+  tags:
+  - state-reuse
+  - time
+- name: venues are independent
+  code: |
+    t = Throttle(2, 10)
+    assert t.allow("A", 0) and t.allow("A", 0)
+    assert t.allow("A", 0) is False
+    assert t.allow("B", 0) and t.allow("B", 1)
+    assert t.allow("B", 2) is False
+  hidden: false
+  tags:
+  - duplicate
+  - ordering
+- name: retry_after
+  code: |
+    t = Throttle(2, 10)
+    assert t.retry_after("X", 0) == 0
+    t.allow("X", 3); t.allow("X", 5)
+    assert t.retry_after("X", 6) == 7, "oldest at 3 expires at 13"
+    assert t.retry_after("X", 12) == 1
+    assert t.retry_after("X", 13) == 0
+    assert t.allow("X", 6) is False
+  hidden: false
+  tags:
+  - time
+  - single
+- name: invalid input
+  code: |
+    for args in [(0, 5), (3, 0), (-1, 5)]:
+        try:
+            Throttle(*args)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(args)
+    t = Throttle(1, 5)
+    t.allow("X", 10)
+    try:
+        t.allow("X", 9)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("backwards")
+    assert t.allow("Y", 1) is True, "other venues keep their own clock"
+  hidden: true
+  tags:
+  - invalid
+  - zero-capacity
+- name: limit 1 acts as a min-gap spacer
+  code: |
+    t = Throttle(1, 3)
+    out = [t.allow("X", ts) for ts in range(10)]
+    assert out == [True, False, False, True, False, False, True, False, False, True]
+  hidden: true
+  tags:
+  - boundary
+  - ordering
+- name: 'scale: 300k messages over 50 venues'
+  code: |
+    t = Throttle(50, 1000)
+    ok = 0
+    for i in range(300000):
+        ok += t.allow(f"V{i % 50}", i // 5)
+    assert 100000 < ok < 250000
+  hidden: true
+  tags:
+  - scale
+  - time
+complexity:
+- op: allow
+  time: O(1) amortized
+  space: O(V * L)
+- op: retry_after
+  time: O(1) amortized
+  space: O(1)
+extensions:
+- q: 'Level 2: add a token-bucket variant with burst capacity and compare behaviour.'
+  key_points:
+  - Tokens refill continuously from timestamps; capacity bounds bursts
+  - State is O(1) per venue (tokens, last_ts) instead of a log
+  - 'Fractional tokens: use integer micro-tokens or exact rational math'
+  kind: code
+- q: 'Level 3: two-tier limits (e.g. 100/s and 5000/min) evaluated atomically.'
+  key_points:
+  - Accept only if every tier allows, and record in all tiers only on accept
+  - Each tier keeps its own deque or counters
+  - retry_after is the max over blocking tiers
+  kind: code
+- q: Memory and time per call, and the fixed-window alternative.
+  key_points:
+  - Sliding log is exact but O(limit) memory per venue; each timestamp is pushed and popped once
+  - Fixed window counters are O(1) memory but allow 2x bursts at boundaries
+  - Sliding window counter (two buckets) approximates in O(1)
+  kind: complexity
+- q: 'Design: where does the throttle live relative to the risk engine?'
+  key_points:
+  - 'It is a pre-trade check in the order path, local
+    and in-process'
+  - Throttle slightly under the exchange limit to leave headroom for cancels, which should be prioritised
+  - 'Inject time from message timestamps so behaviour is testable and replayable (inject the clock)'
+  kind: design
+narration: []
+state_aloud:
+- Window is (ts - window, ts]; a message exactly window old has expired.
+- Rejected messages do not count against the budget.
+- Timestamps are monotonic per venue; venues are independent.
+walkthrough: |
+  One deque of accepted timestamps per venue gives exact semantics in O(1) amortized. Source: standard formulation.
+categories:
+- trading

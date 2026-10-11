@@ -1,0 +1,103 @@
+id: valid-sudoku
+title: Valid Sudoku
+bar_level: 2
+target_minutes: 20
+patterns:
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Valid Sudoku (LC 36)"
+statement: |
+  You are given a 9x9 board as a list of 9 lists of single-character strings: digits `"1"`-`"9"` or `"."` for an empty cell. Return `True` if the filled cells do not break Sudoku rules: no digit repeats within a row, within a column, or within any of the nine 3x3 boxes. You are only validating what is present; the board need not be solvable.
+
+  Example: a board whose first row is `["5","3",".",".","7",".",".",".","."]` and has no clashes returns `True`; putting a second `"5"` anywhere in that row (or its column or its box) makes it `False`.
+starter: |
+  def is_valid_sudoku(board):
+      pass
+hints:
+- 'Three kinds of groups must have no repeats: rows, columns, boxes.'
+- Keep a set per row, per column and per box as you scan every cell once.
+- The box index of cell (r, c) is (r // 3, c // 3).
+follow_ups:
+- How would you also check whether the board is solvable?
+- How would this change for a 16x16 board?
+tests:
+- name: empty board
+  tags:
+  - empty
+  code: |
+    b=[['.']*9 for _ in range(9)]
+    assert is_valid_sudoku(b) is True
+- name: valid partial board
+  tags:
+  - ordering
+  code: |
+    b=[['.']*9 for _ in range(9)]
+    b[0][0]='5';b[0][1]='3';b[1][0]='6';b[4][4]='5'
+    assert is_valid_sudoku(b) is True
+- name: row clash
+  tags:
+  - duplicate
+  code: |
+    b=[['.']*9 for _ in range(9)]
+    b[2][0]='8';b[2][8]='8'
+    assert is_valid_sudoku(b) is False
+- name: column clash
+  tags:
+  - boundary
+  code: |
+    b=[['.']*9 for _ in range(9)]
+    b[0][4]='1';b[8][4]='1'
+    assert is_valid_sudoku(b) is False
+- name: box clash only
+  tags:
+  - invalid
+  code: |
+    b=[['.']*9 for _ in range(9)]
+    b[0][0]='9';b[2][2]='9'
+    assert is_valid_sudoku(b) is False
+    b=[['.']*9 for _ in range(9)]
+    b[0][2]='9';b[3][3]='9'
+    assert is_valid_sudoku(b) is True
+- name: fully solved board
+  tags:
+  - single
+  hidden: true
+  code: |
+    g=['534678912','672195348','198342567','859761423','426853791','713924856','961537284','287419635','345286179']
+    b=[list(r) for r in g]
+    assert is_valid_sudoku(b) is True
+    b[8][8]='8'
+    assert is_valid_sudoku(b) is False
+complexity:
+- op: overall
+  time: O(1)
+  space: O(1)
+extensions:
+- q: State the complexity for a fixed 9x9 board and for NxN.
+  kind: complexity
+  key_points:
+  - Fixed 9x9 is O(81) which is O(1)
+  - General N x N is O(N^2) time and O(N^2) space for the sets
+  - Bitmasks per row/col/box reduce constant factors
+- q: Replace three sets-of-sets with bitmasks.
+  kind: design
+  key_points:
+  - One integer per row, column, box
+  - Test and set bit (1 << d) in O(1)
+  - Compact and cache friendly
+- q: 'Validate versus solve: what changes?'
+  kind: reasoning
+  key_points:
+  - Solving needs backtracking over empty cells
+  - Validity is a necessary precondition checked incrementally
+  - Constraint propagation (most constrained cell first) prunes search
+narration: []
+state_aloud:
+- Only filled cells are checked.
+- Box index is (r // 3, c // 3).
+- A valid board may be unsolvable.
+walkthrough: |
+  Scan all 81 cells once. For each digit, look up whether it already appears in its row set, its column set, or its 3x3 box set (keyed by `(r//3, c//3)`); a hit means invalid. Otherwise record it in all three. Empty cells are skipped.

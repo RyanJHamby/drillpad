@@ -1,0 +1,162 @@
+id: lfu-cache
+title: LFU cache with O(1) get and put
+bar_level: 3
+target_minutes: 35
+patterns: [frequency-buckets, doubly-linked-list, min-freq-tracking]
+firm_tags: [quant-hft, ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:23 - *"'
+statement: |
+  Implement `LFUCache(capacity)` with `get(key)` (value or -1) and `put(key, value)`, both
+  O(1). When full, evict the least frequently used key; break ties by evicting the least
+  recently used among the tied keys. Every `get` hit and every `put` on an existing key counts
+  as a use. A new key starts at frequency 1. Capacity 0 stores nothing.
+starter: |
+  class LFUCache:
+      def __init__(self, capacity: int):
+          pass
+hints:
+  - key -> node, plus frequency -> doubly linked list of nodes at that frequency.
+  - Track min_freq; it advances only when its bucket empties, and resets to 1 on every new insert.
+  - Evicting from the tail of the min_freq list gives LRU tie-breaking for free.
+follow_ups:
+  - Why not a min-heap keyed by frequency?
+  - How do you age frequencies so old popular items do not stick forever?
+  - Frequencies span a huge range; does that cost anything (sparse dict)?
+  - How does this behave under high write concurrency (shard by key hash)?
+tests:
+  - name: classic sequence
+    tags: [ordering, boundary]
+    code: |
+      c = LFUCache(2)
+      c.put(1, 1); c.put(2, 2)
+      assert c.get(1) == 1
+      c.put(3, 3)
+      assert c.get(2) == -1
+      assert c.get(3) == 3
+      c.put(4, 4)
+      assert c.get(1) == -1 and c.get(3) == 3 and c.get(4) == 4
+  - name: tie broken by least recently used
+    tags: [ordering, duplicate]
+    code: |
+      c = LFUCache(2)
+      c.put(1, 1); c.put(2, 2)
+      c.put(3, 3)
+      assert c.get(1) == -1 and c.get(2) == 2 and c.get(3) == 3
+  - name: put on existing key counts as use
+    tags: [duplicate]
+    code: |
+      c = LFUCache(2)
+      c.put(1, 1); c.put(2, 2)
+      c.put(1, 100)
+      c.put(3, 3)
+      assert c.get(2) == -1 and c.get(1) == 100
+  - name: capacity zero
+    tags: [zero-capacity, empty]
+    hidden: true
+    code: |
+      c = LFUCache(0)
+      c.put(1, 1)
+      assert c.get(1) == -1
+  - name: new key after heavy use resets min frequency
+    tags: [state-reuse, boundary]
+    hidden: true
+    code: |
+      c = LFUCache(2)
+      c.put(1, 1)
+      for _ in range(5): c.get(1)
+      c.put(2, 2)
+      c.put(3, 3)           # evicts 2 (freq 1) not 1 (freq 6)
+      assert c.get(1) == 1 and c.get(2) == -1 and c.get(3) == 3
+      c.put(4, 4)           # 3 has freq 2, 1 has freq 7 -> evict 3
+      assert c.get(3) == -1 and c.get(4) == 4 and c.get(1) == 1
+  - name: randomized against brute force model
+    tags: [scale, ordering, state-reuse]
+    hidden: true
+    code: |
+      import random
+      rng = random.Random(5)
+      cap = 4
+      c = LFUCache(cap)
+      freq, last, val, tick = {}, {}, {}, 0
+      for _ in range(3000):
+          tick += 1
+          k = rng.randrange(9)
+          if rng.random() < 0.5:
+              v = rng.randrange(1000)
+              c.put(k, v)
+              if k in val:
+                  val[k] = v; freq[k] += 1; last[k] = tick
+              else:
+                  if len(val) >= cap:
+                      victim = min(val, key=lambda x: (freq[x], last[x]))
+                      for d in (val, freq, last): del d[victim]
+                  val[k] = v; freq[k] = 1; last[k] = tick
+          else:
+              exp = -1
+              if k in val: exp = val[k]; freq[k] += 1; last[k] = tick
+              assert c.get(k) == exp
+  - name: capacity one
+    tags: [zero-capacity, single, boundary]
+    hidden: true
+    code: |
+      c = LFUCache(1)
+      c.put(1, 1); c.put(2, 2)
+      assert c.get(1) == -1 and c.get(2) == 2
+      c.put(2, 3)
+      assert c.get(2) == 3
+complexity:
+- op: get/put
+  time: O(1)
+  space: O(capacity)
+- op: eviction with a min-heap (contrast)
+  time: O(log n)
+  space: O(capacity)
+extensions:
+- q: Why not a min-heap keyed by frequency?
+  kind: reasoning
+  key_points:
+  - Heap push/pop and updates are O(log n), breaking the O(1) requirement
+  - Frequency buckets (frequency to DLL) give true O(1)
+  - Costs extra bookkeeping (min_freq)
+- q: How do you age frequencies so old popular items do not stick forever?
+  kind: design
+  key_points:
+  - Periodically halve all frequencies
+  - Or use a windowed/decayed frequency count
+  - Otherwise a once-hot key can never be evicted by newer items
+- q: Frequencies span a huge range; does that cost anything?
+  kind: complexity
+  key_points:
+  - freq_map is a sparse dict, so unused frequencies cost nothing
+  - 'Space O(capacity): key to node map plus one DLL per used frequency'
+  - get/put remain O(1)
+- q: How does this behave under high write concurrency?
+  kind: design
+  key_points:
+  - Needs external locking; min_freq and frequency bump race
+  - One global lock is simplest
+  - Shard by key hash into independent LFU instances (approximate global order)
+- q: What are the common min_freq bugs?
+  kind: reasoning
+  key_points:
+  - Reset min_freq to 1 on every new insert
+  - Advance it only when its bucket empties
+  - Evict from the tail of the min_freq list for LRU tie-breaking
+  - A put on an existing key counts as a use
+  - Capacity 0 must be a guarded no-op
+narration:
+- This is LRU's building block, bucketed by frequency — a hashmap from frequency to a doubly linked list of keys at that frequency.
+- I need a second hashmap from key to node so get and put stay O(1).
+- The tricky invariant is min_freq — it only advances when its bucket empties, and resets to 1 on every new insert.
+- Ties within a frequency bucket resolve to LRU automatically since I evict from the tail.
+- Let me trace two puts at the same frequency to confirm the tie-break evicts the right one.
+state_aloud:
+- 'Capacity 0: `put` must be a no-op (guard before touching maps).'
+- 'Tie on frequency: the DLL''s tail-eviction gives LRU-among-equal-frequency for free — call this out, it''s the whole point of nesting DLL inside frequency buckets.'
+- '`min_freq` bookkeeping is the easiest place to introduce a bug — it must reset to 1 on every fresh insert, and only advance when the bucket it points to empties out.'
+- Re-`put` on an existing key counts as an access (bump frequency), not just a value overwrite.
+- Concurrent get/put racing on the same key's frequency bump — same caveat as LRU, needs external locking.
+walkthrough: |
+  This is LRU bucketed by frequency: a map from key to node, plus a map from frequency to a doubly linked list of the keys at that frequency. Evicting from the tail of the lowest-frequency list gives least-recently-used tie-breaking among equal frequencies for free. The tricky invariant is `min_freq`, which resets to 1 on every fresh insert and advances only when its bucket empties. A re-`put` on an existing key counts as an access and bumps frequency. Both operations are O(1), space is O(capacity), and capacity 0 makes `put` a no-op.
+categories: [systems-impl]

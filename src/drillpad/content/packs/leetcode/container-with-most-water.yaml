@@ -1,0 +1,89 @@
+id: container-with-most-water
+title: Container With Most Water
+bar_level: 2
+target_minutes: 20
+patterns:
+- two-pointers
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Container With Most Water (LC 11)"
+statement: |
+  `heights[i]` is the height of a vertical wall at x = i. Choose two walls; the water they hold is `min(height) * distance_between_them`. Return the largest amount of water any pair can hold.
+
+  Example: `max_water([1,8,6,2,5,4,8,3,7])` returns `49` (walls at index 1 and 8).
+starter: |
+  def max_water(heights):
+      pass
+hints:
+- Brute force is all pairs, O(n^2). Start with the widest pair.
+- Area is limited by the shorter wall, so moving the taller wall inward can never help.
+- Move the pointer at the shorter wall inward and keep the max.
+follow_ups:
+- Prove why discarding the shorter wall is safe.
+- How does this differ from Trapping Rain Water?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    assert max_water([1,8,6,2,5,4,8,3,7])==49
+- name: two walls
+  tags:
+  - boundary
+  code: |
+    assert max_water([1,1])==1
+- name: single wall holds nothing
+  tags:
+  - single
+  code: |
+    assert max_water([5])==0
+- name: empty
+  tags:
+  - empty
+  code: |
+    assert max_water([])==0
+- name: zeros and equal heights
+  tags:
+  - duplicate
+  code: |
+    assert max_water([0,0,0])==0
+    assert max_water([4,4,4,4])==12
+- name: large input
+  tags:
+  - scale
+  hidden: true
+  code: |
+    h=list(range(1,100001))
+    assert max_water(h)==2500000000
+complexity:
+- op: overall
+  time: O(n)
+  space: O(1)
+extensions:
+- q: Why can we discard the shorter wall?
+  kind: reasoning
+  key_points:
+  - Any pair using that wall with a closer partner has smaller width
+  - Its height already caps the area so a closer partner can't beat the current pair
+  - So the shorter wall is exhausted and can be skipped
+- q: Complexity compared with brute force
+  kind: complexity
+  key_points:
+  - Brute force O(n^2) pairs
+  - Each pointer moves at most n times, O(n) total
+  - Space O(1)
+- q: 'Variant: count trapped water between bars'
+  kind: design
+  key_points:
+  - 'Different problem: water at i is min(maxL,maxR)-h[i]'
+  - Two pointers with running maxima or prefix/suffix arrays
+  - Answer is a sum, not a max of pairs
+narration: []
+state_aloud:
+- Fewer than two walls returns 0.
+- Heights of 0.
+- 'Ties: move either pointer.'
+walkthrough: |
+  Start with pointers at both ends, the widest possible container. Compute its area, then move the pointer sitting at the shorter wall inward: the width shrinks, so the only way to improve is a taller limiting wall. Tracking the maximum area while the pointers meet finds the optimum in one pass because every discarded wall provably cannot be part of a better pair.

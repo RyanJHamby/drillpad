@@ -1,0 +1,220 @@
+title: 'Lifetimes: Longest Common Prefix and Splitters'
+target_minutes: 25
+patterns:
+- lifetimes
+- string-slices
+- struct-with-borrow
+- iterator-over-slices
+- char-boundaries
+firm_tags: []
+categories:
+- leetcode
+statement: |2
+
+  Practice returning borrowed slices with explicit lifetimes.
+
+  ```rust
+  fn longest_common_prefix<'a>(words: &[&'a str]) -> &'a str;
+  fn split_at_delim<'a>(s: &'a str, delim: char) -> (&'a str, &'a str);
+
+  struct Tokenizer<'a> { /* borrows the source text */ }
+  impl<'a> Tokenizer<'a> { fn new(src: &'a str) -> Tokenizer<'a>; }
+  impl<'a> Iterator for Tokenizer<'a> { type Item = &'a str; /* ... */ }
+  ```
+
+  - `longest_common_prefix`: a slice of the first word (so it borrows from the *words' text*, `'a`, not from the outer
+    slice), `""` for an empty list or no shared prefix. Compare by `char`, and never cut inside a UTF-8 character.
+  - `split_at_delim`: split at the FIRST occurrence of `delim`; returns `(before, after)` with the delimiter dropped. If the
+    delimiter is absent, returns `(s, "")`.
+  - `Tokenizer`: yields tokens as `&'a str` slices of the source with no allocation. Whitespace separates tokens and is
+    skipped. These single characters are always their own token: `( ) , ; + - * / =`. Everything else forms maximal runs
+    of non-whitespace, non-punctuation characters. So `"f(x1, y) = 2*x1"` gives
+    `f ( x1 , y ) = 2 * x1`.
+
+  Important: the tokens must be tied to the *source text* (`'a`), not to the `Tokenizer` value, so you can collect them
+  and drop the tokenizer while still using them.
+starter: |2
+
+  fn longest_common_prefix<'a>(words: &[&'a str]) -> &'a str {
+      todo!()
+  }
+
+  fn split_at_delim<'a>(s: &'a str, delim: char) -> (&'a str, &'a str) {
+      todo!()
+  }
+
+  struct Tokenizer<'a> {
+      src: &'a str,
+      pos: usize,
+  }
+
+  impl<'a> Tokenizer<'a> {
+      fn new(src: &'a str) -> Tokenizer<'a> {
+          todo!()
+      }
+  }
+
+  impl<'a> Iterator for Tokenizer<'a> {
+      type Item = &'a str;
+
+      fn next(&mut self) -> Option<&'a str> {
+          todo!()
+      }
+  }
+hints:
+- For the prefix, compare `first.chars()` against each other word's chars and track the BYTE length with `char_indices()` / `len_utf8()`; then `&first[..end]`. Slicing at a byte index that is not a char boundary panics, which is exactly what the unicode tests probe.
+- 'In `next`, copy the reference out first: `let src: &''a str = self.src;`. A slice of `self.src` taken through `&mut self` would get the shorter lifetime of the `&mut self` borrow and the compiler would reject returning it as `&''a str`; slicing the copied `&''a str` keeps `''a`.'
+- '`rest.trim_start()` tells you how many whitespace bytes to skip (`rest.len() - trimmed.len()`). Then: if the first char is punctuation the token is that one char (`c.len_utf8()` bytes), otherwise `trimmed.find(|c: char| c.is_whitespace() || is_punct(c)).unwrap_or(trimmed.len())`. Advance `self.pos` by those byte counts.'
+follow_ups:
+- What would the compiler complain about if longest_common_prefix returned a slice tied to the outer &[&str]?
+- Why does Tokenizer need a lifetime parameter, and what does `impl<'a> Iterator for Tokenizer<'a>` say?
+- What is lifetime elision, and in which of these signatures could you omit the annotations?
+- Why can't you implement a 'lending iterator' (items borrowing from the iterator) with std::iter::Iterator?
+tests:
+- name: longest common prefix basics
+  tags:
+  - single
+  - ordering
+  code: |
+    assert_eq!(longest_common_prefix(&["flower", "flow", "flight"]), "fl");
+    assert_eq!(longest_common_prefix(&["interview", "internet", "interval"]), "inter");
+    assert_eq!(longest_common_prefix(&["dog", "racecar", "car"]), "");
+    assert_eq!(longest_common_prefix(&["same", "same"]), "same");
+    let owned = vec![String::from("prefix-a"), String::from("prefix-b")];
+    let refs: Vec<&str> = owned.iter().map(|s| s.as_str()).collect();
+    let p = longest_common_prefix(&refs);
+    drop(refs); // result borrows the words' text, not the Vec of refs
+    assert_eq!(p, "prefix-");
+  hidden: false
+- name: prefix edge cases
+  tags:
+  - empty
+  - single
+  - boundary
+  code: |
+    let none: [&str; 0] = [];
+    assert_eq!(longest_common_prefix(&none), "");
+    assert_eq!(longest_common_prefix(&["alone"]), "alone");
+    assert_eq!(longest_common_prefix(&["abc", ""]), "");
+    assert_eq!(longest_common_prefix(&["abc", "abcdef", "ab"]), "ab");
+    assert_eq!(longest_common_prefix(&["", ""]), "");
+  hidden: false
+- name: prefix never splits a utf-8 character
+  tags:
+  - invalid
+  - boundary
+  hidden: true
+  code: |
+    // 'é' = C3 A9 and 'è' = C3 A8 share their first byte
+    assert_eq!(longest_common_prefix(&["café", "cafè"]), "caf");
+    assert_eq!(longest_common_prefix(&["日本語", "日本人"]), "日本");
+    assert_eq!(longest_common_prefix(&["über", "über-cool"]), "über");
+- name: split_at_delim
+  tags:
+  - single
+  - invalid
+  - duplicate
+  code: |
+    assert_eq!(split_at_delim("key=value", '='), ("key", "value"));
+    assert_eq!(split_at_delim("a=b=c", '='), ("a", "b=c")); // first occurrence only
+    assert_eq!(split_at_delim("novalue", '='), ("novalue", ""));
+    assert_eq!(split_at_delim("=x", '='), ("", "x"));
+    assert_eq!(split_at_delim("x=", '='), ("x", ""));
+    assert_eq!(split_at_delim("", ','), ("", ""));
+    assert_eq!(split_at_delim("a→b", '→'), ("a", "b"));
+  hidden: false
+- name: tokenizer splits words and punctuation
+  tags:
+  - ordering
+  - single
+  code: |
+    let toks: Vec<&str> = Tokenizer::new("f(x1, y) = 2*x1").collect();
+    assert_eq!(toks, vec!["f", "(", "x1", ",", "y", ")", "=", "2", "*", "x1"]);
+    let toks: Vec<&str> = Tokenizer::new("  hello   big\tworld \n").collect();
+    assert_eq!(toks, vec!["hello", "big", "world"]);
+    let toks: Vec<&str> = Tokenizer::new("a-b;c").collect();
+    assert_eq!(toks, vec!["a", "-", "b", ";", "c"]);
+  hidden: false
+- name: tokenizer empty input
+  tags:
+  - empty
+  code: |
+    assert_eq!(Tokenizer::new("").count(), 0);
+    assert_eq!(Tokenizer::new("   \t\n ").count(), 0);
+    assert_eq!(Tokenizer::new("()").collect::<Vec<_>>(), vec!["(", ")"]);
+  hidden: false
+- name: tokens outlive the tokenizer and point into the source
+  tags:
+  - state-reuse
+  - boundary
+  hidden: true
+  code: |
+    let text = String::from("let total = price*qty");
+    let tokens: Vec<&str>;
+    {
+        let tk = Tokenizer::new(&text);
+        tokens = tk.collect();
+    } // tokenizer gone; tokens must still be valid borrows of `text`
+    assert_eq!(tokens, vec!["let", "total", "=", "price", "*", "qty"]);
+    let base = text.as_ptr() as usize;
+    for t in &tokens {
+        let p = t.as_ptr() as usize;
+        assert!(p >= base && p + t.len() <= base + text.len(), "token {:?} is a copy, not a slice", t);
+    }
+    let mut tk = Tokenizer::new(&text);
+    let a = tk.next().unwrap();
+    let b = tk.next().unwrap(); // `a` still usable after calling next again
+    assert_eq!((a, b), ("let", "total"));
+- name: unicode tokens and large input
+  tags:
+  - scale
+  - invalid
+  hidden: true
+  code: |
+    let toks: Vec<&str> = Tokenizer::new("naïve 日本,語 (ü)").collect();
+    assert_eq!(toks, vec!["naïve", "日本", ",", "語", "(", "ü", ")"]);
+    let big = "ab,cd ".repeat(100_000);
+    assert_eq!(Tokenizer::new(&big).count(), 300_000);
+complexity:
+- op: longest_common_prefix
+  time: O(total chars)
+  space: O(1)
+- op: split_at_delim
+  time: O(n)
+  space: O(1)
+- op: Tokenizer (full pass)
+  time: O(n)
+  space: O(1)
+extensions:
+- q: 'Explain the lifetimes in longest_common_prefix<''a>(words: &[&''a str]) -> &''a str. Why two different borrows?'
+  kind: reasoning
+  key_points:
+  - The outer slice reference has its own (elided) lifetime; the strings inside it have lifetime 'a. The result is a slice of one of the inner strings, so it only needs 'a
+  - Tying the result to the outer slice would force callers to keep the Vec of &strs alive for no reason (the test drops it)
+  - 'The compiler checks this: returning data derived from the outer borrow as &''a str would be a lifetime error'
+- q: Why must Tokenizer copy `self.src` into a local before slicing, and what does Item = &'a str promise callers?
+  kind: design
+  key_points:
+  - Slicing through `&mut self` produces a reference whose lifetime is limited to that borrow; copying the `&'a str` out (it is Copy) preserves the full 'a
+  - 'Item = &''a str means items are independent of the iterator: you can collect, drop the tokenizer, and keep using them'
+  - A lending iterator (items borrowing from `&mut self`) cannot be expressed with the Iterator trait; that needs GATs or a custom trait
+- q: What do these functions cost, and why is the tokenizer allocation-free?
+  kind: complexity
+  key_points:
+  - 'Each byte is examined a constant number of times: O(n) for the tokenizer and O(sum of compared chars) for the prefix, O(1) extra space'
+  - Tokens are (pointer, length) views into the source, so no String is built; Python's str.split copies each token
+  - 'Cost of the zero-copy design: the source must outlive every token (the borrow checker enforces it)'
+state_aloud:
+- 'Never slice a str at an arbitrary byte index: it panics unless the index is a char boundary. Use char_indices and len_utf8.'
+- Empty word list, empty strings, and no common prefix all return an empty slice.
+- Returned slices borrow from the input text; say which lifetime ('a) each result is tied to and why.
+- Tokenizer items are &'a str tied to the source, so copy self.src out before slicing.
+- Delimiter absent in split_at_delim returns (s, ""), not a panic.
+walkthrough: |2
+
+  All three pieces return views into existing text, so their types carry a lifetime `'a` that says "this slice is valid as long as the source text is". `longest_common_prefix` walks the first word's `char_indices` and takes `&first[..end]` at a char boundary; `Tokenizer` copies `self.src` (a `&'a str`, which is `Copy`) into a local before slicing, so the item type `&'a str` is tied to the text and not to the `&mut self` borrow. That is why tokens can be collected and used after the tokenizer is gone; Python's `str.split` copies every token and has no concept of this.
+id: rs-lifetimes-longest-prefix
+language: rust
+bar_level: 2
+narration: []
+anki_queries: []

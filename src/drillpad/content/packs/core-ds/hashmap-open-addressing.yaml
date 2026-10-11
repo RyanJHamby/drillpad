@@ -1,0 +1,133 @@
+id: hashmap-open-addressing
+title: Hash map with open addressing and tombstones
+bar_level: 2
+target_minutes: 25
+patterns: [hash-table, open-addressing, tombstones, linear-probing]
+firm_tags: [quant-hft, ai-infra]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:9 - *"'
+statement: |
+  Implement `HashMapOpenAddressing(capacity=8, load_factor=0.5)` from scratch with linear
+  probing (no chaining, no dict). API: `put(k, v)` (overwrite allowed), `get(k)` and
+  `delete(k)` (KeyError if missing), `len()` (live entries only).
+  Deletes must leave tombstones so probe chains stay intact, and tombstones must count toward
+  the resize trigger. Resize (double) when used slots / capacity exceeds the load factor.
+starter: |
+  class HashMapOpenAddressing:
+      def __init__(self, capacity=8, load_factor=0.5):
+          pass
+hints:
+  - Two sentinels: EMPTY (ends a probe) and TOMBSTONE (does not).
+  - On put, remember the first tombstone passed and reuse it if the key is not found.
+  - Resize re-inserts only live entries, which also clears tombstones.
+follow_ups:
+  - Why does open addressing need a lower load factor than chaining?
+  - Linear versus quadratic probing tradeoffs?
+  - Why not clear the slot to empty on delete?
+  - How does double hashing help?
+tests:
+  - name: basic put get delete
+    tags: [duplicate, invalid]
+    code: |
+      m = HashMapOpenAddressing()
+      m.put("a", 1); m.put("b", 2); m.put("a", 9)
+      assert m.get("a") == 9 and m.get("b") == 2 and len(m) == 2
+      m.delete("a")
+      assert len(m) == 1
+      try: m.get("a")
+      except KeyError: pass
+      else: raise AssertionError("expected KeyError")
+  - name: delete does not break probe chain
+    tags: [boundary, state-reuse, duplicate]
+    code: |
+      class K:
+          def __init__(self, n): self.n = n
+          def __hash__(self): return 5
+          def __eq__(self, o): return isinstance(o, K) and o.n == self.n
+      m = HashMapOpenAddressing(capacity=16)
+      for i in range(4): m.put(K(i), i)
+      m.delete(K(1))
+      assert m.get(K(2)) == 2 and m.get(K(3)) == 3
+      m.put(K(1), "again")
+      assert m.get(K(1)) == "again" and len(m) == 4
+  - name: grows
+    tags: [scale, boundary]
+    code: |
+      m = HashMapOpenAddressing(capacity=2)
+      for i in range(500): m.put(i, -i)
+      assert len(m) == 500 and all(m.get(i) == -i for i in range(500))
+  - name: churn terminates and stays correct
+    tags: [scale, state-reuse]
+    hidden: true
+    code: |
+      m = HashMapOpenAddressing()
+      for i in range(2000):
+          m.put(i, i)
+          if i >= 3: m.delete(i - 3)
+      assert len(m) == 3
+      assert [m.get(i) for i in (1997, 1998, 1999)] == [1997, 1998, 1999]
+      try: m.get(100)
+      except KeyError: pass
+      else: raise AssertionError("expected KeyError")
+  - name: missing delete raises
+    tags: [empty, invalid]
+    hidden: true
+    code: |
+      m = HashMapOpenAddressing()
+      try: m.delete("nope")
+      except KeyError: pass
+      else: raise AssertionError("expected KeyError")
+complexity:
+- op: get/put/delete
+  time: O(1) expected
+  space: O(n)
+- op: get/put/delete (worst case)
+  time: O(n) worst case
+  space: O(n)
+- op: resize
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Why does open addressing need a lower load factor than chaining?
+  kind: reasoning
+  key_points:
+  - Expected probes grow like 1/(1 - load factor) as the table fills
+  - Clustering makes it degrade faster than chain length
+  - Typical resize at 0.5 to 0.6
+  - Tombstones count toward the load
+- q: Why not clear the slot to EMPTY on delete?
+  kind: reasoning
+  key_points:
+  - EMPTY terminates a probe
+  - Keys that probed past this slot become unreachable (false misses)
+  - Tombstone keeps the chain intact; put reuses the first tombstone seen
+- q: What happens to performance with many tombstones, and what resets them?
+  kind: complexity
+  key_points:
+  - Probe length grows even if live size is small
+  - Resize trigger must use used slots (live + tombstones), not just live size
+  - Resize re-inserts only live entries and clears tombstones
+  - Worst case O(n) per op under heavy clustering
+- q: Linear versus quadratic probing, and how does double hashing help?
+  kind: design
+  key_points:
+  - 'Linear: cache-friendly but primary clustering'
+  - Quadratic spreads out but may not visit all slots unless capacity/formula chosen carefully
+  - Double hashing uses a second hash as step size, avoiding primary and secondary clustering
+  - Costs a second hash computation
+narration:
+- I'll use linear probing with two sentinel values — empty and tombstone — so deletes don't break probe chains.
+- '[silent] silently write put/get'
+- 'Key detail: on put I remember the first tombstone I pass so repeated insert/delete doesn''t leak slots.'
+- '[silent] silently write delete and resize'
+- Delete writes a tombstone instead of clearing the slot — clearing would break lookups for keys that probed past it.
+- Let me trace insert, delete, then insert-again on the same key to confirm the tombstone gets reused.
+state_aloud:
+- Delete must write a tombstone, not `_EMPTY` — clearing to `_EMPTY` would break the probe chain for keys inserted after it that probed past this slot.
+- Table full of tombstones — `_used` (live + tombstones) must drive resizing, not just `_size`, or probing degenerates to O(n) without ever triggering a resize.
+- Re-inserting a previously deleted key — put must reuse the first tombstone seen along the probe path to avoid unbounded tombstone buildup.
+- Resize clears all tombstones by re-inserting only live entries — this is the natural point to reclaim tombstone-wasted space.
+- Clustering with linear probing — mention primary clustering as a known weakness vs. quadratic probing or double hashing.
+walkthrough: |
+  Collisions probe to the next slot (linear probing here) instead of chaining, using two sentinels, empty and tombstone. Delete must write a tombstone, because clearing to empty would break the probe chain for keys that probed past that slot. `put` remembers the first tombstone on its probe path and reuses it so repeated insert/delete does not leak slots. Resize is driven by `_used` (live entries plus tombstones), not just the live size, at a lower load factor than chaining since probe length grows sharply as the table fills. Resize re-inserts only live entries, which clears the tombstones. Operations are O(1) expected and O(n) worst case under clustering.
+categories: [systems-impl]

@@ -1,0 +1,97 @@
+id: permutations
+title: Permutations
+bar_level: 2
+target_minutes: 22
+patterns:
+- backtracking
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Permutations (LC 46)"
+statement: |
+  Given an array `nums` of distinct integers, return all of its permutations (every possible ordering of all the elements). You may return them in any order.
+
+  Example: `permute([1,2,3])` returns the six lists `[1,2,3]`, `[1,3,2]`, `[2,1,3]`, `[2,3,1]`, `[3,1,2]`, `[3,2,1]` in some order.
+starter: |
+  def permute(nums):
+      pass
+hints:
+- Build the permutation one position at a time; every unused element is a candidate for the next slot.
+- Track which elements are in the path with a `used` boolean array (or swap elements in place).
+- When the path length equals len(nums) record a copy; undo the choice after the recursive call.
+follow_ups:
+- Handle duplicates in the input without repeating permutations.
+- Generate the next lexicographic permutation without recursion.
+tests:
+- name: three elements
+  tags:
+  - ordering
+  code: |
+    import itertools
+    r=permute([1,2,3])
+    assert sorted(map(tuple,r))==sorted(itertools.permutations([1,2,3]))
+- name: two elements
+  tags:
+  - boundary
+  code: |
+    assert sorted(permute([0,1]))==[[0,1],[1,0]]
+- name: single element
+  tags:
+  - single
+  code: |
+    assert permute([7])==[[7]]
+- name: empty input
+  tags:
+  - empty
+  hidden: true
+  code: |
+    assert permute([])==[[]]
+- name: negative values and no repeats
+  tags:
+  - invalid
+  - duplicate
+  hidden: true
+  code: |
+    r=permute([-1,0,5,9])
+    assert len(r)==24 and len({tuple(p) for p in r})==24
+    assert all(sorted(p)==[-1,0,5,9] for p in r)
+- name: eight elements
+  tags:
+  - scale
+  hidden: true
+  code: |
+    import itertools
+    r=permute(list(range(8)))
+    assert len(r)==40320
+    assert set(map(tuple,r))==set(itertools.permutations(range(8)))
+complexity:
+- op: overall
+  time: O(n * n!)
+  space: O(n)
+extensions:
+- q: What are the time and extra space of the standard solution?
+  kind: complexity
+  key_points:
+  - n! permutations each copied in O(n), so O(n * n!)
+  - Extra space O(n) for the path, used array and recursion stack
+  - The output itself is O(n * n!) and is not counted as extra
+- q: Do it with in-place swapping instead of a used array.
+  kind: code
+  key_points:
+  - Swap index i with each j >= i, recurse on i + 1, swap back
+  - Record nums copy when i reaches n
+  - Saves the used array but changes the output order
+- q: How would you stream permutations if n is too large to store them all?
+  kind: design
+  key_points:
+  - Use a generator that yields instead of appending
+  - Or iterate with next-permutation, O(1) extra state
+  - Callers consume lazily so memory stays O(n)
+narration: []
+state_aloud:
+- Elements are distinct, so no duplicate handling.
+- Empty input returns [[]].
+- Copy the path when recording.
+walkthrough: |
+  Recurse on the partially built permutation. Whenever the path has every element, store a copy. Otherwise loop over all indices that are not yet marked used, mark one, append it, recurse, then unmark and pop. Since each level picks from exactly the remaining elements, every ordering is visited exactly once, giving n! leaves.

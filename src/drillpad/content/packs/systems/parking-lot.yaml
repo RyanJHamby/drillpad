@@ -1,0 +1,191 @@
+id: parking-lot
+title: Parking Lot
+bar_level: 2
+target_minutes: 22
+patterns:
+- object-oriented-design
+- best-fit-allocation
+- pricing
+firm_tags: []
+statement: |
+  Implement `ParkingLot(spots)` where `spots` is a dict like `{"small": 1, "medium": 2, "large": 1}`
+  (missing sizes mean 0).
+
+  Vehicle types and the spot sizes they fit:
+  - `"motorcycle"`: small, medium or large
+  - `"car"`: medium or large
+  - `"truck"`: large only
+  Always assign the *smallest* spot size that fits (best fit).
+
+  API
+  - `park(plate, vehicle_type, now)` -> int ticket id (1, 2, ...), or `None` if no fitting spot is
+    free. Parking a plate that is already parked raises `ValueError`; an unknown vehicle type
+    raises `ValueError`.
+  - `unpark(ticket_id, now)` -> fee (int): `rate[size] * hours` where hours is the elapsed
+    seconds divided by 3600 rounded UP, minimum 1; rates per hour: small 1, medium 2, large 4,
+    by the size of the spot used. The spot becomes free. Unknown/already-used ticket raises
+    `KeyError`.
+  - `available()` -> dict of free spots per size (all three sizes present).
+  - `spot_of(ticket_id)` -> the spot size assigned.
+
+  Example
+  ```python
+  lot = ParkingLot({"small": 1, "medium": 1}); t = lot.park("AB1", "motorcycle", now=0)  # small
+  lot.unpark(t, now=3601) == 2     # 2 started hours at rate 1
+  ```
+starter: |
+  class ParkingLot:
+      def __init__(self, spots):
+          pass
+
+      def park(self, plate, vehicle_type, now):
+          pass
+
+      def unpark(self, ticket_id, now):
+          pass
+
+      def available(self):
+          pass
+
+      def spot_of(self, ticket_id):
+          pass
+hints:
+- Keep a free count per size and a table from vehicle type to the sizes it fits, smallest first.
+- Tickets store (plate, size, start time) so unpark can free the right size and price the stay.
+- hours = ceil(seconds / 3600) with a minimum of 1; use integer arithmetic.
+follow_ups:
+- How would you support reservations and EV charging spots?
+- How would you test pricing across day boundaries?
+tests:
+- name: best fit assignment
+  tags:
+  - ordering
+  - boundary
+  code: |
+    lot = ParkingLot({"small": 1, "medium": 1, "large": 1})
+    t1 = lot.park("M1", "motorcycle", 0)
+    assert lot.spot_of(t1) == "small"
+    t2 = lot.park("M2", "motorcycle", 0)
+    assert lot.spot_of(t2) == "medium"
+    t3 = lot.park("C1", "car", 0)
+    assert lot.spot_of(t3) == "large"
+    assert lot.available() == {"small": 0, "medium": 0, "large": 0}
+    assert lot.park("C2", "car", 0) is None
+    assert (t1, t2, t3) == (1, 2, 3)
+- name: trucks only large and full lot
+  tags:
+  - boundary
+  - zero-capacity
+  code: |
+    lot = ParkingLot({"medium": 2})
+    assert lot.park("T1", "truck", 0) is None
+    assert lot.available() == {"small": 0, "medium": 2, "large": 0}
+    assert lot.park("C1", "car", 0) == 1
+    empty = ParkingLot({})
+    assert empty.park("X", "motorcycle", 0) is None
+    assert empty.available() == {"small": 0, "medium": 0, "large": 0}
+- name: fees round up to started hours
+  tags:
+  - time
+  - boundary
+  code: |
+    lot = ParkingLot({"small": 1, "medium": 1, "large": 1})
+    a = lot.park("A", "motorcycle", 100)
+    b = lot.park("B", "car", 100)
+    c = lot.park("C", "truck", 100)
+    assert lot.unpark(a, 100) == 1                 # minimum one hour
+    assert lot.unpark(b, 100 + 3600) == 2          # exactly one hour
+    assert lot.unpark(c, 100 + 3601) == 8          # two started hours at 4
+    assert lot.available() == {"small": 1, "medium": 1, "large": 1}
+- name: invalid operations
+  tags:
+  - invalid
+  - duplicate
+  code: |
+    lot = ParkingLot({"medium": 2})
+    t = lot.park("A", "car", 0)
+    assert t == 1
+    for fn, exc in ((lambda: lot.park("A", "car", 1), ValueError), (lambda: lot.park("B", "bike", 1), ValueError),
+                    (lambda: lot.unpark(99, 5), KeyError)):
+        try:
+            fn()
+        except exc:
+            pass
+        else:
+            raise AssertionError("expected %s" % exc.__name__)
+    assert lot.unpark(t, 10) == 2
+    try:
+        lot.unpark(t, 11)
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("ticket already used")
+    assert lot.park("A", "car", 20) == 2        # plate can park again after leaving
+- name: spot reuse after leaving
+  hidden: true
+  tags:
+  - state-reuse
+  - single
+  code: |
+    lot = ParkingLot({"large": 1})
+    t = lot.park("T", "truck", 0)
+    assert t == 1 and lot.park("U", "truck", 0) is None
+    lot.unpark(t, 10)
+    assert lot.spot_of(lot.park("U", "truck", 20)) == "large"
+- name: busy lot
+  hidden: true
+  tags:
+  - scale
+  - ordering
+  code: |
+    lot = ParkingLot({"small": 100, "medium": 100, "large": 100})
+    ids = [lot.park("p%d" % i, "motorcycle", 0) for i in range(300)]
+    assert None not in ids and lot.park("extra", "motorcycle", 0) is None
+    total = sum(lot.unpark(i, 3600) for i in ids)
+    assert total == 100 * 1 + 100 * 2 + 100 * 4
+complexity:
+- op: park
+  time: O(1)
+  space: O(n)
+- op: unpark
+  time: O(1)
+  space: O(n)
+extensions:
+- q: Costs, and how would you scale to many levels with many spots?
+  kind: complexity
+  key_points:
+  - With counters per size, park and unpark are O(1); per-spot tracking with a free list per size is also
+    O(1)
+  - Space is O(spots + tickets)
+  - 'Nearest-spot-to-entrance needs a min-heap per size: O(log n)'
+- q: Model individual spots, levels and nearest-spot allocation.
+  kind: design
+  key_points:
+  - Spot objects with level/position, a min-heap or sorted set of free spots per size ordered by distance
+  - Strategy pattern for allocation (nearest, best fit, cheapest) and for pricing
+  - Return the specific spot on the ticket so the driver can find it
+- q: Make it concurrent and multi-gate.
+  kind: design
+  key_points:
+  - 'Allocation must be atomic: lock around check-and-take, or per-size locks'
+  - Idempotency on plate/ticket prevents double-parking under retries
+  - Persist tickets so the lot recovers after a crash; payment is a separate service
+- q: Why best fit rather than first fit?
+  kind: reasoning
+  key_points:
+  - Keeps large spots available for large vehicles
+  - 'Trade-off: motorcycles occupying medium spots when small are full is a policy choice'
+  - Policies should be swappable without changing the data model
+narration: []
+state_aloud:
+- Duplicate plate is rejected.
+- Tickets are single-use.
+- Exactly one hour is one hour; one second over is two.
+- Time is injected, not read from a clock.
+walkthrough: 'A free-spot counter per size and a table of which sizes each vehicle type fits (smallest
+  first) give best-fit allocation: park takes the first size with space, records a ticket with plate,
+  size and start time, and rejects duplicate plates. unpark pops the ticket, frees the size and charges
+  rate times the started hours (integer ceiling, minimum one). All operations are O(1).'
+anki_queries: []
+categories:
+- systems-impl

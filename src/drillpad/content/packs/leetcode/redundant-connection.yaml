@@ -1,0 +1,89 @@
+id: redundant-connection
+title: Redundant Connection
+bar_level: 2
+target_minutes: 20
+patterns:
+- union-find
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Redundant Connection (LC 684)"
+statement: |
+  A tree with nodes `1..n` had one extra edge added, producing exactly one cycle. Given the edges in the order they were added, return the edge that can be removed to restore a tree; if several qualify, return the one that appears last in the input.
+
+  Example: `find_redundant([[1,2],[1,3],[2,3]])` returns `[2,3]`.
+starter: |
+  def find_redundant(edges):
+      pass
+hints:
+- Add edges one at a time and track connectivity.
+- An edge whose endpoints are already connected closes the cycle.
+- Union-Find detects that in near O(1); return the first such edge you meet.
+follow_ups:
+- What if the graph is directed (Redundant Connection II)?
+- How would you recover the whole cycle?
+tests:
+- name: triangle
+  tags:
+  - ordering
+  code: |
+    assert find_redundant([[1,2],[1,3],[2,3]])==[2,3]
+- name: cycle closes late
+  tags:
+  - boundary
+  code: |
+    assert find_redundant([[1,2],[2,3],[3,4],[1,4],[1,5]])==[1,4]
+- name: two-node duplicate edge
+  tags:
+  - duplicate
+  code: |
+    assert find_redundant([[1,2],[1,2]])==[1,2]
+- name: single cycle edge at the front of a star
+  tags:
+  - single
+  code: |
+    assert find_redundant([[1,2],[2,3],[3,1]])==[3,1]
+- name: no edges
+  tags:
+  - empty
+  code: |
+    assert find_redundant([])==[]
+- name: long chain
+  tags:
+  - scale
+  hidden: true
+  code: |
+    n=100000
+    e=[[i,i+1] for i in range(1,n)]+[[1,n]]
+    assert find_redundant(e)==[1,n]
+complexity:
+- op: overall
+  time: O(n * α(n))
+  space: O(n)
+extensions:
+- q: Why is the first cycle-closing edge the answer?
+  kind: reasoning
+  key_points:
+  - Input has exactly one extra edge
+  - All earlier edges form a forest
+  - So the first edge joining already-connected nodes is the one forming the cycle
+- q: Cost and the DSU optimizations
+  kind: complexity
+  key_points:
+  - Each find is amortized near O(1)
+  - n edges so near-linear total
+  - Space O(n) for parents
+- q: Directed variant
+  kind: design
+  key_points:
+  - 'Cases: a node with two parents, or a cycle'
+  - Record both candidate edges and test with DSU
+  - Pick the candidate that breaks the cycle
+narration: []
+state_aloud:
+- Edges up to n nodes, labels 1-indexed.
+- Parallel edge counts as a cycle.
+- Empty input returns no edge.
+walkthrough: |
+  Process the edges in order with a Union-Find. For each edge, find the roots of its endpoints. If they match, those nodes were already connected, so this edge closes the cycle and is returned; otherwise union the two sets. Since exactly one extra edge exists, the first such edge is the answer.

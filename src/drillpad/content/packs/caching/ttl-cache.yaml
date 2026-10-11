@@ -1,0 +1,161 @@
+id: ttl-cache
+title: TTL cache with lazy expiry and background sweeper
+bar_level: 3
+target_minutes: 25
+patterns: [ttl, lazy-expiry, background-sweeper, monotonic-clock]
+firm_tags: [ai-infra, distsys]
+anki_queries:
+  - 'deck:"Interview Prep*" "Item:56 - *"'
+statement: |
+  Implement `TTLCache(sweep_interval=1.0)`. `put(key, val, ttl_seconds)` stores a value that
+  expires `ttl_seconds` later; `get(key)` returns the value, or None if absent or expired
+  (expired exactly at the boundary: `now >= expiry`). Two mechanisms: lazy expiry on `get`,
+  and a daemon sweeper thread that every `sweep_interval` seconds deletes expired entries.
+  `stop()` stops and joins the sweeper.
+  Rules: always call `time.monotonic()` (as `time.monotonic()`, not imported by name) for time;
+  keep entries in a dict attribute `self.data` (key -> (val, expiry)) guarded by a lock.
+starter: |
+  class TTLCache:
+      def __init__(self, sweep_interval=1.0):
+          pass
+hints:
+  - Store the absolute expiry timestamp, not the TTL.
+  - Wait on a threading.Event with a timeout as the sweeper's sleep, so stop() wakes it immediately.
+follow_ups:
+  - Why have both lazy expiry and a sweeper?
+  - How would you avoid scanning the whole cache each sweep (min-heap by expiry)?
+  - How does TTL interact with LRU/LFU eviction?
+  - How do you stop the sweep from blocking gets during a large scan?
+tests:
+  - name: expires after ttl
+    tags: [time, boundary, invalid]
+    code: |
+      import time
+      clock = [100.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          c = TTLCache(sweep_interval=60)
+          c.put("a", 1, ttl_seconds=10)
+          assert c.get("a") == 1 and c.get("missing") is None
+          clock[0] = 109.9
+          assert c.get("a") == 1
+          clock[0] = 110.0
+          assert c.get("a") is None, "entry must be expired at now >= expiry"
+          c.stop()
+      finally:
+          time.monotonic = real
+  - name: overwrite refreshes ttl
+    tags: [duplicate, time]
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          c = TTLCache(sweep_interval=60)
+          c.put("k", "old", 5)
+          clock[0] = 4.0
+          c.put("k", "new", 5)
+          clock[0] = 8.0
+          assert c.get("k") == "new"
+          clock[0] = 9.0
+          assert c.get("k") is None
+          c.stop()
+      finally:
+          time.monotonic = real
+  - name: sweeper removes expired entries without any get
+    tags: [time, concurrency]
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          c = TTLCache(sweep_interval=0.01)
+          c.put("gone", 1, 5); c.put("stay", 2, 500)
+          clock[0] = 10.0
+          deadline = real() + 3
+          while "gone" in c.data and real() < deadline: time.sleep(0.01)
+          assert "gone" not in c.data, "sweeper never removed the expired entry"
+          assert "stay" in c.data
+          c.stop()
+      finally:
+          time.monotonic = real
+  - name: stop joins promptly
+    tags: [concurrency, state-reuse]
+    hidden: true
+    code: |
+      import threading, time
+      c = TTLCache(sweep_interval=30)
+      c.put("a", 1, 100)
+      assert c.get("a") == 1
+      t = threading.Thread(target=c.stop, daemon=True)
+      t.start(); t.join(3)
+      assert not t.is_alive(), "stop() must wake the sweeper rather than wait out the interval"
+  - name: zero and negative ttl expire immediately
+    tags: [time, boundary, invalid]
+    hidden: true
+    code: |
+      import time
+      clock = [0.0]; real = time.monotonic; time.monotonic = lambda: clock[0]
+      try:
+          c = TTLCache(sweep_interval=60)
+          c.put("z", 1, 0)
+          assert c.get("z") is None, "ttl 0 is already expired (now >= expiry)"
+          c.put("n", 1, -5)
+          assert c.get("n") is None
+          c.stop()
+      finally:
+          time.monotonic = real
+complexity:
+- op: get/put
+  time: O(1) amortized
+  space: O(capacity)
+- op: sweep pass
+  time: O(n)
+  space: O(n)
+- op: sweep with min-heap (contrast)
+  time: O(k log n)
+  space: O(n)
+extensions:
+- q: Why have both lazy expiry and a sweeper?
+  kind: reasoning
+  key_points:
+  - Lazy-only never reclaims memory for keys nobody reads again
+  - Sweeper-only leaves a window where stale values are served between sweeps
+  - Combining bounds both failure modes
+- q: How would you avoid scanning the whole cache each sweep?
+  kind: design
+  key_points:
+  - Min-heap (or sorted structure) keyed by expiry
+  - 'Sweeper pops only entries whose time has passed: O(k log n) for k expired'
+  - Handle overwritten keys (stale heap entries) by checking the dict on pop
+- q: How does TTL interact with LRU/LFU eviction?
+  kind: design
+  key_points:
+  - 'Independent axes: an entry can be evicted by capacity or expire by TTL, whichever fires first'
+  - Both mechanisms must clear the other's bookkeeping
+  - Expired entries should not occupy capacity
+- q: Which clock and boundary rule, and why?
+  kind: reasoning
+  key_points:
+  - 'time.monotonic, not time.time: wall clock jumps on NTP/DST'
+  - Use now >= expiry consistently in sweeper and lazy path
+  - Sweeper thread daemonized and joined by stop(); Event.wait(timeout) so stop wakes it immediately
+- q: What does a sweep cost, and what is the memory cost of lingering expired entries?
+  kind: complexity
+  key_points:
+  - Naive sweep is O(n) over all entries per interval, run off the critical path
+  - Min-heap by expiry makes it O(k log n) for k expired entries
+  - Space O(capacity) plus an expiry timestamp per entry
+  - Long interval lets expired entries linger (memory); short interval wastes CPU scanning
+narration:
+- I'll store an expiry timestamp per entry using a monotonic clock, not wall-clock time, to avoid clock-skew bugs.
+- Lazy expiry checks the timestamp on every get, so a stale read never leaks out even between sweeps.
+- A background daemon thread sweeps periodically to reclaim memory for keys nobody's actively reading.
+- The two mechanisms cover each other's blind spot — lazy expiry bounds staleness, the sweeper bounds memory.
+- For a large cache I'd swap the linear sweep scan for a min-heap ordered by expiry, happy to extend that if useful.
+state_aloud:
+- 'Clock choice: use `time.monotonic()`, not `time.time()` — wall clock can jump on NTP sync/DST and cause premature or delayed expiry; state this unprompted, it''s a common trap.'
+- 'Sweep interval vs. memory pressure tradeoff: a long interval means expired entries linger and waste memory between sweeps; a short interval wastes CPU scanning — both lazy expiry and sweeping together (as above) bound the worst case from both sides.'
+- Entry expiring exactly at the boundary during a concurrent `get` — use `>=` consistently so sweeper and lazy path agree on the boundary.
+- Sweep holds the lock for the whole scan in the naive version above — for large caches, batch/chunk the scan or use a min-heap ordered by expiry so the sweeper only looks at the next-to-expire entries instead of scanning everything.
+- Sweeper thread must be daemonized or explicitly joined on shutdown, or it can leak/hang the process.
+walkthrough: |
+  Each entry stores an expiry timestamp taken from `time.monotonic()`, not wall-clock time, so clock jumps cannot cause early or late expiry. Lazy expiry checks the timestamp on every `get`, so a stale value never leaks out between sweeps, and a background daemon sweeper reclaims memory for keys nobody reads. The two mechanisms cover each other: lazy expiry bounds staleness and the sweeper bounds memory. Using `>=` consistently keeps the boundary agreed between the two paths. `get`/`put` are O(1) amortized and a sweep is O(n) off the critical path, and a min-heap by expiry can replace the linear scan for large caches.
+categories: [systems-impl]

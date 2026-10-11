@@ -1,0 +1,122 @@
+id: same-tree
+title: Same Tree
+bar_level: 1
+target_minutes: 10
+patterns:
+- tree-dfs
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Same Tree (LC 100)"
+statement: |
+  Given the roots of two binary trees `p` and `q`, return `True` if they have the same shape and every pair of corresponding nodes has equal values, otherwise `False`. `TreeNode` and `build_tree(level_order_list)` (None marks a missing child) are provided in the starter.
+
+  Example: `[1,2,3]` and `[1,2,3]` are the same; `[1,2]` and `[1,None,2]` are not.
+prelude: |
+  from collections import deque
+
+  class TreeNode:
+      def __init__(self, val=0, left=None, right=None):
+          self.val = val
+          self.left = left
+          self.right = right
+
+  def build_tree(vals):
+      """Build a tree from a level-order list where None marks a missing child."""
+      if not vals or vals[0] is None:
+          return None
+      root = TreeNode(vals[0])
+      q, i = deque([root]), 1
+      while q and i < len(vals):
+          node = q.popleft()
+          if i < len(vals) and vals[i] is not None:
+              node.left = TreeNode(vals[i])
+              q.append(node.left)
+          i += 1
+          if i < len(vals) and vals[i] is not None:
+              node.right = TreeNode(vals[i])
+              q.append(node.right)
+          i += 1
+      return root
+starter: |
+  def is_same_tree(p, q):
+      pass
+hints:
+- Compare the two roots, then the two left subtrees, then the two right subtrees.
+- Two empty trees are equal; exactly one empty is a mismatch.
+- 'Check structure and value together: a value match is not enough if one side has no child.'
+follow_ups:
+- Do it iteratively.
+- Is a tree equal to its mirror image? (Symmetric Tree)
+tests:
+- name: identical
+  tags:
+  - ordering
+  code: |
+    assert is_same_tree(build_tree([1,2,3]), build_tree([1,2,3])) is True
+- name: different shape
+  tags:
+  - boundary
+  code: |
+    assert is_same_tree(build_tree([1,2]), build_tree([1,None,2])) is False
+- name: different values
+  tags:
+  - ordering
+  code: |
+    assert is_same_tree(build_tree([1,2,1]), build_tree([1,1,2])) is False
+- name: both empty
+  tags:
+  - empty
+  code: |
+    assert is_same_tree(None, None) is True
+    assert is_same_tree(build_tree([1]), build_tree([2])) is False
+- name: one empty
+  tags:
+  - empty
+  code: |
+    assert is_same_tree(None, build_tree([1])) is False
+    assert is_same_tree(build_tree([1]), None) is False
+- name: single equal nodes
+  tags:
+  - single
+  code: |
+    assert is_same_tree(build_tree([4]), build_tree([4])) is True
+- name: repeated values different layout
+  hidden: true
+  tags:
+  - duplicate
+  code: |
+    assert is_same_tree(build_tree([2,2,None,2]), build_tree([2,2,2])) is False
+    assert is_same_tree(build_tree([2,2,2]), build_tree([2,2,2])) is True
+complexity:
+- op: overall
+  time: O(min(n, m))
+  space: O(min(h1, h2))
+extensions:
+- q: Iterative approach?
+  kind: code
+  key_points:
+  - Stack of node pairs, push child pairs after comparing
+  - Return False on the first mismatch
+  - Space is the stack, bounded by the smaller tree height
+- q: Complexity?
+  kind: complexity
+  key_points:
+  - Stops at the first mismatch so at most min(n, m) comparisons
+  - Space is recursion depth
+  - Worst case both are identical so full traversal
+- q: 'Design: compare trees stored on different machines?'
+  kind: design
+  key_points:
+  - Hash each subtree bottom-up and compare root hashes
+  - Merkle-style hashing localizes differing subtrees
+  - Hash collisions need a verification fallback
+narration: []
+state_aloud:
+- Both None means equal.
+- One None and one not means different.
+- Same values but different shape are different trees.
+- Short-circuit on first mismatch.
+walkthrough: |
+  Compare the pair of nodes: if both are `None` return `True`, if only one is `None` or their values differ return `False`. Otherwise the trees are the same exactly when the left subtrees match and the right subtrees match. Short-circuiting stops at the first difference.

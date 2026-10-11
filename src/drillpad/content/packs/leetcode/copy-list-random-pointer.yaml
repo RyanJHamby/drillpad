@@ -1,0 +1,155 @@
+id: copy-list-random-pointer
+title: Copy List With Random Pointer
+bar_level: 2
+target_minutes: 25
+patterns:
+- linked-list
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Each node of a linked list has a `next` pointer and a `random` pointer that may point at any node in the list or be `None`. Build a deep copy: brand new nodes with the same values, where every `next` and `random` pointer refers to the corresponding node in the copy, never to the original. Return the copy's head. The starter provides `Node`, `build_random_list(vals, randoms)` (randoms are target indices), `random_pairs(head)` and `is_deep_copy(orig, copy)`.
+
+  Example: values `[7,13,11]` with random indices `[None,0,2]` copies to a list whose `random_pairs` is `[[7,None],[13,0],[11,2]]`.
+prelude: |
+  class Node:
+      def __init__(self, val=0, next=None, random=None):
+          self.val = val
+          self.next = next
+          self.random = random
+
+  def build_random_list(vals, randoms):
+      """randoms[i] is the index of node i's random target, or None."""
+      nodes = [Node(v) for v in vals]
+      for i, node in enumerate(nodes):
+          node.next = nodes[i + 1] if i + 1 < len(nodes) else None
+          node.random = nodes[randoms[i]] if randoms[i] is not None else None
+      return nodes[0] if nodes else None
+
+  def random_pairs(head):
+      """[[val, index-of-random-or-None], ...] describing the list."""
+      index, cur, i = {}, head, 0
+      while cur:
+          index[id(cur)] = i
+          cur, i = cur.next, i + 1
+      out, cur = [], head
+      while cur:
+          out.append([cur.val, index[id(cur.random)] if cur.random else None])
+          cur = cur.next
+      return out
+
+  def is_deep_copy(orig, copy):
+      """True if no node reachable from copy (next or random) is a node of orig."""
+      orig_ids, n = set(), orig
+      while n:
+          orig_ids.add(id(n))
+          n = n.next
+      n = copy
+      while n:
+          if id(n) in orig_ids or (n.random is not None and id(n.random) in orig_ids):
+              return False
+          n = n.next
+      return True
+starter: |
+  def copy_random_list(head):
+      pass
+hints:
+- The hard part is that `random` can point forward to a node you have not copied yet.
+- Map each original node to its copy; create all copies first, then wire the pointers.
+- For O(1) extra space, interleave each copy right after its original, wire randoms via `orig.random.next`,
+  then split.
+follow_ups:
+- Do it with O(1) extra space (no hash map).
+- What if the structure were a general graph with cycles?
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    h = build_random_list([7,13,11,10,1], [None,0,4,2,0])
+    c = copy_random_list(h)
+    assert random_pairs(c) == [[7,None],[13,0],[11,4],[10,2],[1,0]]
+    assert is_deep_copy(h, c)
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert copy_random_list(None) is None
+    h = build_random_list([1], [None])
+    c = copy_random_list(h)
+    assert random_pairs(c) == [[1, None]]
+- name: single node random to itself
+  tags:
+  - single
+  code: |
+    h = build_random_list([5], [0])
+    c = copy_random_list(h)
+    assert random_pairs(c) == [[5, 0]]
+    assert c is not h and c.random is c
+- name: duplicate values distinct identity
+  tags:
+  - duplicate
+  code: |
+    h = build_random_list([2,2,2], [2,2,None])
+    c = copy_random_list(h)
+    assert random_pairs(c) == [[2,2],[2,2],[2,None]]
+    assert is_deep_copy(h, c)
+- name: original is not modified
+  tags:
+  - state-reuse
+  code: |
+    h = build_random_list([1,2,3], [2,None,0])
+    c = copy_random_list(h)
+    assert random_pairs(c) == [[1,2],[2,None],[3,0]]
+    assert random_pairs(h) == [[1,2],[2,None],[3,0]]
+    assert h.next.next.next is None
+- name: forward and backward randoms
+  tags:
+  - boundary
+  code: |
+    h = build_random_list([1,2,3,4], [3,0,None,1])
+    c = copy_random_list(h)
+    assert random_pairs(c) == [[1,3],[2,0],[3,None],[4,1]]
+- name: long list
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 100000
+    h = build_random_list(list(range(n)), [(i*7919) % n for i in range(n)])
+    c = copy_random_list(h)
+    assert random_pairs(c) == random_pairs(h)
+    assert is_deep_copy(h, c)
+complexity:
+- op: overall
+  time: O(n)
+  space: O(n)
+extensions:
+- q: Achieve O(1) extra space?
+  kind: design
+  key_points:
+  - Weave each copy directly after its original
+  - Set copy.random = orig.random.next in a second pass
+  - Unweave in a third pass and restore the original list
+- q: Why is a naive per-node search for the random target slow?
+  kind: complexity
+  key_points:
+  - Scanning for the target index costs O(n) per node
+  - That gives O(n^2) total
+  - A hash map from original to copy makes each lookup O(1)
+- q: How does this generalize to graphs?
+  kind: reasoning
+  key_points:
+  - Same old-to-new map, built lazily during traversal
+  - Must handle cycles by checking the map before recursing
+  - This is the clone-graph problem
+narration: []
+state_aloud:
+- Empty list returns None.
+- A node whose random pointer is itself or None.
+- Random pointers that point forward in the list.
+- Do not mutate the original, and never share nodes with it.
+walkthrough: |
+  First pass: walk the original and create a copy of every node, recording `original -> copy` in a dict (with `None -> None` so missing pointers map cleanly). Second pass: for each original node set the copy's `next` and `random` by looking both targets up in the dict. Because all copies exist before any wiring, forward random pointers are no problem. Time and extra space are both linear.

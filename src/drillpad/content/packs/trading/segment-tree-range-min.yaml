@@ -1,0 +1,180 @@
+id: segment-tree-range-min
+title: Segment Tree Range Min/Max
+bar_level: 3
+target_minutes: 30
+patterns:
+- segment-tree
+- range-query
+- bottom-up-iterative
+- point-update
+firm_tags:
+- quant-hft
+anki_queries: []
+statement: |
+  Implement `SegmentTree(values)` over a list of ints (0-indexed) supporting range minimum and range maximum with point
+  assignment.
+
+  - `update(i, v)`: set `values[i] = v` (assignment, not addition).
+  - `range_min(l, r) -> int` and `range_max(l, r) -> int`: min / max of `values[l..r]` INCLUSIVE.
+  - `IndexError` if an index is outside `0..n-1`; `ValueError` if `l > r`.
+
+  Build in O(n); `update`, `range_min`, `range_max` in O(log n). Recomputing each range with `min(values[l:r+1])` is O(n) per query and
+  times out on the scale test.
+starter: |
+  class SegmentTree:
+      def __init__(self, values):
+          pass
+hints:
+- 'Use the iterative bottom-up layout: leaves at indices n..2n-1, node i has children 2i and 2i+1, and
+  internal nodes are min/max of their children. This works for any n, not only powers of two.'
+- 'Query [l, r] half-open as l += n, r += n + 1: while l < r, take node l if l is odd (then l += 1), take
+  node r-1 if r is odd, then halve both.'
+- Keep two arrays (min and max) or one tree of pairs; update walks from the leaf to the root recomputing
+  both.
+follow_ups:
+- How would you add lazy range assignment/add?
+- When would a sparse table be better?
+- How do you get the argmin (index) instead of the value?
+tests:
+- name: range min and max
+  code: |
+    t = SegmentTree([5, 2, 8, 1, 9, 3])
+    assert t.range_min(0, 5) == 1 and t.range_max(0, 5) == 9
+    assert t.range_min(0, 2) == 2 and t.range_max(0, 2) == 8
+    assert t.range_min(4, 5) == 3 and t.range_max(4, 5) == 9
+    assert t.range_min(2, 2) == 8 and t.range_max(2, 2) == 8
+  hidden: false
+  tags:
+  - ordering
+  - single
+- name: point assignment
+  code: |
+    t = SegmentTree([5, 2, 8, 1, 9, 3])
+    t.update(3, 100)
+    assert t.range_min(0, 5) == 2 and t.range_max(0, 5) == 100
+    t.update(1, -4)
+    assert t.range_min(0, 2) == -4 and t.range_min(2, 5) == 3
+    t.update(3, 1)
+    assert t.range_max(0, 5) == 9
+  hidden: false
+  tags:
+  - state-reuse
+  - duplicate
+- name: non power of two sizes
+  code: |
+    for n in (1, 2, 3, 5, 7, 9, 13):
+        vals = [(i * 7) % 11 for i in range(n)]
+        t = SegmentTree(vals)
+        for l in range(n):
+            for r in range(l, n):
+                assert t.range_min(l, r) == min(vals[l:r + 1]), (n, l, r)
+                assert t.range_max(l, r) == max(vals[l:r + 1]), (n, l, r)
+  hidden: false
+  tags:
+  - boundary
+  - single
+- name: negative values and ties
+  code: |
+    t = SegmentTree([-3, -3, 4, 4, -1])
+    assert t.range_min(0, 4) == -3 and t.range_max(0, 4) == 4 and t.range_max(4, 4) == -1
+  hidden: false
+  tags:
+  - duplicate
+  - boundary
+- name: invalid input
+  code: |
+    t = SegmentTree([1, 2, 3])
+    for fn, args, exc in [(t.range_min, (0, 3), IndexError), (t.range_max, (-1, 2), IndexError), (t.update, (3, 1), IndexError),
+                          (t.update, (-1, 1), IndexError), (t.range_min, (2, 1), ValueError)]:
+        try:
+            fn(*args)
+        except exc:
+            pass
+        else:
+            raise AssertionError((fn.__name__, args))
+    e = SegmentTree([])
+    try:
+        e.range_min(0, 0)
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("empty tree")
+  hidden: true
+  tags:
+  - invalid
+  - empty
+- name: matches brute force with updates
+  code: |
+    import random
+    rng = random.Random(11)
+    vals = [rng.randrange(-100, 100) for _ in range(257)]
+    t = SegmentTree(vals)
+    for _ in range(3000):
+        if rng.random() < 0.4:
+            i = rng.randrange(257); v = rng.randrange(-100, 100)
+            vals[i] = v; t.update(i, v)
+        else:
+            l = rng.randrange(257); r = rng.randrange(l, 257)
+            assert t.range_min(l, r) == min(vals[l:r + 1]) and t.range_max(l, r) == max(vals[l:r + 1])
+  hidden: true
+  tags:
+  - ordering
+  - state-reuse
+- name: 'scale: 200k elements, 200k operations'
+  code: |
+    n = 200000
+    t = SegmentTree([(i * 7919) % 100003 for i in range(n)])
+    acc = 0
+    for k in range(100000):
+        t.update((k * 31) % n, k)
+        l = (k * 17) % n
+        acc += t.range_max(l, min(n - 1, l + 5000)) - t.range_min(l, min(n - 1, l + 5000))
+    assert acc > 0
+  hidden: true
+  tags:
+  - scale
+complexity:
+- op: build
+  time: O(n)
+  space: O(n)
+- op: update
+  time: O(log n)
+  space: O(1)
+- op: range_min/range_max
+  time: O(log n)
+  space: O(1)
+extensions:
+- q: 'Level 2: add `range_argmin(l, r)` returning the leftmost index of the minimum.'
+  key_points:
+  - Store (value, index) pairs so ties resolve to the smaller index
+  - Merge picks the smaller value, then the smaller index
+  - Complexity stays O(log n)
+  kind: code
+- q: 'Level 3: add range add with lazy propagation while keeping min/max queries O(log n).'
+  key_points:
+  - Store a pending add per node and apply it to children lazily
+  - A node min/max shifts by the pending add when fully covered
+  - Push-down before partial descent, recompute after returning
+  kind: code
+- q: Compare segment tree, sparse table and sqrt decomposition.
+  key_points:
+  - 'Segment tree: O(log n) query and update, O(n) memory'
+  - 'Sparse table: O(1) query but O(n log n) memory and static data only'
+  - 'Sqrt decomposition: O(sqrt n) both, simpler but slower'
+  kind: complexity
+- q: 'Design: range-extrema over price ticks in a trading system.'
+  key_points:
+  - Rolling high/low over arbitrary windows (breakout signals) with out-of-order corrections
+  - Per-symbol trees with updates from a single writer and immutable snapshots for readers
+  - For fixed-size sliding windows a monotonic deque is O(1) amortized and simpler (see the sliding-window
+    maximum problem)
+  kind: design
+narration: []
+state_aloud:
+- Ranges are inclusive; update assigns rather than adds.
+- Out-of-range index is IndexError; l > r is ValueError; empty tree rejects all queries.
+- Iterative layout works for non power-of-two sizes.
+walkthrough: |
+  Standard iterative (bottom-up) segment tree with min and max arrays. Source: standard formulation.
+categories:
+- trading

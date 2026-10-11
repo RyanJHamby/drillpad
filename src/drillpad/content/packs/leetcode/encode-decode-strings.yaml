@@ -1,0 +1,105 @@
+id: encode-decode-strings
+title: Encode and Decode Strings
+bar_level: 2
+target_minutes: 22
+patterns:
+- hash-map
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Encode and Decode Strings (LC 271)"
+statement: |
+  Design a pair of functions: `encode(strs)` turns a list of strings into one single string, and `decode(s)` turns that string back into the exact original list. The strings may contain any characters, including digits, `#`, and the empty string, so you cannot rely on a delimiter that might appear in the data.
+
+  Example: `decode(encode(["lint", "code", "love", "you"]))` returns `["lint", "code", "love", "you"]`.
+starter: |
+  def encode(strs):
+      pass
+
+  def decode(s):
+      pass
+hints:
+- A plain separator character breaks as soon as a string contains it.
+- Prefix every string with its length so the decoder knows how many characters to take.
+- Use a delimiter between the length and the content (e.g. `5#hello`) and read the length up to that delimiter,
+  since lengths have multiple digits.
+follow_ups:
+- How would you make this safe against a corrupted input?
+- Could you do it with escaping instead of length prefixes?
+tests:
+- name: typical words
+  tags:
+  - ordering
+  code: |
+    x=['lint','code','love','you']
+    assert decode(encode(x))==x
+- name: empty list
+  tags:
+  - empty
+  code: |
+    assert decode(encode([]))==[]
+- name: list with one empty string
+  tags:
+  - single
+  code: |
+    assert decode(encode(['']))==['']
+    assert decode(encode(['','']))==['','']
+- name: strings containing delimiters and digits
+  tags:
+  - invalid
+  code: |
+    x=['4#abc','#','12#','3','##']
+    assert decode(encode(x))==x
+- name: unicode and whitespace
+  tags:
+  - boundary
+  code: |
+    x=['héllo',' ','\n','日本語']
+    assert decode(encode(x))==x
+- name: repeated strings
+  tags:
+  - duplicate
+  code: |
+    x=['a','a','a','']
+    assert decode(encode(x))==x
+- name: many large strings
+  tags:
+  - scale
+  hidden: true
+  code: |
+    x=['ab#'*100+str(i) for i in range(20000)]
+    assert decode(encode(x))==x
+complexity:
+- op: encode
+  time: O(n)
+  space: O(n)
+- op: decode
+  time: O(n)
+  space: O(n)
+extensions:
+- q: What are the costs of encode and decode?
+  kind: complexity
+  key_points:
+  - Both linear in total characters
+  - Decode must not use repeated string slicing that copies the tail (O(n^2))
+  - Output size is total length plus per-string header overhead
+- q: Length prefix versus escaping a delimiter.
+  kind: design
+  key_points:
+  - Length prefix needs no scanning of content and handles any bytes
+  - Escaping needs a second pass and careful handling of the escape character
+  - Fixed-width binary length headers make decode trivially seekable
+- q: How would you detect corrupt input in decode?
+  kind: reasoning
+  key_points:
+  - Check that the length parse succeeds and the slice stays in bounds
+  - Add a checksum or total-length header
+  - Decide between raising and returning partial data
+narration: []
+state_aloud:
+- Empty list versus a list containing the empty string.
+- Strings that contain the delimiter or digits.
+- Multi-digit lengths.
+walkthrough: |
+  Encode each string as `<length>#<content>` and concatenate. To decode, keep an index `i`: find the next `#` from `i`, parse the digits before it as `n`, take exactly `n` characters after the `#` as the next string, and move `i` past them. Because we always read the length first, content containing `#` or digits is never reinterpreted.

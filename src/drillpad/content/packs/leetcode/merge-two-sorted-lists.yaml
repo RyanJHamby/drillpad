@@ -1,0 +1,119 @@
+id: merge-two-sorted-lists
+title: Merge Two Sorted Lists
+bar_level: 1
+target_minutes: 12
+patterns:
+- linked-list
+- two-pointers
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Merge Two Sorted Lists (LC 21)"
+statement: |
+  Two singly linked lists are each sorted in non-decreasing order. Splice their nodes together into one sorted list and return its head. Either list may be empty (`None`). `ListNode`, `build_list` and `to_list` are provided.
+
+  Example: merging `[1, 2, 4]` and `[1, 3, 4]` gives `[1, 1, 2, 3, 4, 4]`.
+prelude: |
+  class ListNode:
+      def __init__(self, val=0, next=None):
+          self.val = val
+          self.next = next
+
+  def build_list(vals):
+      head = None
+      for v in reversed(vals):
+          head = ListNode(v, head)
+      return head
+
+  def to_list(head):
+      out = []
+      while head:
+          out.append(head.val)
+          head = head.next
+      return out
+starter: |
+  def merge_two(l1, l2):
+      pass
+hints:
+- Walk both lists with one pointer each and always take the smaller current node.
+- A dummy head node removes the special case for the first output node.
+- When one list runs out, attach the rest of the other in one step instead of looping.
+follow_ups:
+- Do it recursively, then explain why that is risky for long lists.
+- Extend it to k lists.
+tests:
+- name: classic
+  tags:
+  - ordering
+  code: |
+    r = merge_two(build_list([1,2,4]), build_list([1,3,4]))
+    assert to_list(r) == [1,1,2,3,4,4]
+- name: one side empty
+  tags:
+  - empty
+  code: |
+    assert to_list(merge_two(None, build_list([1,5]))) == [1,5]
+    assert to_list(merge_two(build_list([0]), None)) == [0]
+- name: both empty
+  tags:
+  - empty
+  code: |
+    assert merge_two(None, None) is None
+    assert to_list(merge_two(build_list([3]), build_list([]))) == [3]
+- name: single nodes
+  tags:
+  - single
+  code: |
+    assert to_list(merge_two(build_list([2]), build_list([1]))) == [1,2]
+- name: all equal values
+  tags:
+  - duplicate
+  code: |
+    assert to_list(merge_two(build_list([2,2]), build_list([2,2,2]))) == [2,2,2,2,2]
+- name: negatives and disjoint ranges
+  tags:
+  - boundary
+  code: |
+    assert to_list(merge_two(build_list([-9,-3]), build_list([4,8,9]))) == [-9,-3,4,8,9]
+    assert to_list(merge_two(build_list([4,8,9]), build_list([-9,-3]))) == [-9,-3,4,8,9]
+- name: long lists
+  hidden: true
+  tags:
+  - scale
+  code: |
+    n = 200000
+    a = build_list(list(range(0, 2*n, 2)))
+    b = build_list(list(range(1, 2*n, 2)))
+    assert to_list(merge_two(a, b)) == list(range(2*n))
+complexity:
+- op: overall
+  time: O(n + m)
+  space: O(1)
+extensions:
+- q: Why does the recursive version fail on long inputs?
+  kind: reasoning
+  key_points:
+  - Recursion depth is O(n + m), one frame per node
+  - Python default recursion limit is about 1000
+  - Iterative splicing uses O(1) extra space
+- q: Time and space of the iterative merge?
+  kind: complexity
+  key_points:
+  - Each node is visited once so O(n + m) time
+  - Nodes are relinked, not copied, so O(1) extra space
+  - Output reuses the input nodes
+- q: Merge k lists efficiently?
+  kind: design
+  key_points:
+  - Min-heap of the k heads gives O(N log k)
+  - Or pairwise divide and conquer reusing this routine
+  - Repeated left-fold merging is O(N k), too slow
+narration: []
+state_aloud:
+- Either or both lists empty.
+- Equal values across lists (which goes first is irrelevant to output).
+- Reuse the existing nodes instead of allocating.
+- Very long lists, so prefer iteration.
+walkthrough: |
+  Keep a dummy head and a tail pointer. While both lists have nodes, link the smaller one after the tail and advance that list. When one list is exhausted, point the tail at the remainder of the other. Return the dummy's next. Everything is relinked in place so extra space is constant.

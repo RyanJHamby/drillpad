@@ -1,0 +1,352 @@
+id: cpp-vector-from-scratch
+title: Vector from Scratch (RAII, Rule of Five)
+language: cpp
+bar_level: 2
+target_minutes: 30
+patterns:
+- raii
+- rule-of-five
+- placement-new
+- move-semantics
+- amortized-growth
+firm_tags:
+- quant-hft
+- ai-infra
+statement: |
+  Implement `template <class T> class Vec`, a minimal `std::vector` replacement (C++20). You may not use
+  `std::vector`, `std::unique_ptr` or `new T[]` for the storage: allocate raw bytes with `::operator new`,
+  construct elements with placement new and destroy them explicitly. `T` need not be default constructible
+  or copy assignable.
+
+  API:
+  - `push_back(const T&)`, `push_back(T&&)`, `emplace_back(Args&&...)` (returns `T&`), `pop_back()`, `clear()`
+  - `reserve(n)`: grow capacity to at least `n`, never shrink; no effect on size
+  - `operator[]` (unchecked), `at(i)` (throws `std::out_of_range`), `back()`, `data()`, `begin()/end()` (raw pointers)
+  - `size()`, `capacity()`, `empty()`
+  - Rule of five: copy and move constructor/assignment and destructor. A moved-from `Vec` is empty and reusable.
+
+  Growth: capacity is 0 for an empty vector; the first `push_back` makes it 1, then it doubles (1, 2, 4, 8, ...).
+  When growing, relocate existing elements by move (if the move constructor is `noexcept`; otherwise by copy),
+  never leak, and destroy every element exactly once. `v.push_back(v[0])` must work even when it reallocates.
+
+  Tests use an instrumented element type that counts constructions, copies, moves and destructions.
+
+  Example:
+  ```cpp
+  Vec<std::string> v;
+  v.push_back("a"); v.emplace_back(3, 'b');  // "a", "bbb"
+  Vec<std::string> w = std::move(v);          // v is now empty, no element was copied
+  ```
+starter: |
+  // Implement a growable array with raw storage. No std::vector, no new T[] (T may lack a default ctor).
+  template <class T>
+  class Vec {
+  public:
+      Vec() = default;
+      Vec(const Vec& other) { (void)other; }
+      Vec(Vec&& other) noexcept { (void)other; }
+      Vec& operator=(const Vec& other) { (void)other; return *this; }
+      Vec& operator=(Vec&& other) noexcept { (void)other; return *this; }
+      ~Vec() = default;
+
+      void push_back(const T& v) { (void)v; }
+      void push_back(T&& v) { (void)v; }
+      template <class... Args>
+      T& emplace_back(Args&&... args) { throw std::logic_error("TODO"); }
+      void pop_back() {}
+      void clear() {}
+      void reserve(std::size_t n) { (void)n; }
+
+      T& operator[](std::size_t i) { throw std::logic_error("TODO"); }
+      const T& operator[](std::size_t i) const { throw std::logic_error("TODO"); }
+      T& at(std::size_t i) { throw std::logic_error("TODO"); }
+      const T& at(std::size_t i) const { throw std::logic_error("TODO"); }
+      T& back() { throw std::logic_error("TODO"); }
+
+      std::size_t size() const { return 0; }
+      std::size_t capacity() const { return 0; }
+      bool empty() const { return true; }
+      T* data() { return nullptr; }
+      T* begin() { return nullptr; }
+      T* end() { return nullptr; }
+  };
+prelude: |
+  struct Tracked {
+      static inline int ctors = 0, copy_ctors = 0, move_ctors = 0, copy_assigns = 0, move_assigns = 0, dtors = 0;
+      static void reset() { ctors = copy_ctors = move_ctors = copy_assigns = move_assigns = dtors = 0; }
+      static int copies() { return copy_ctors + copy_assigns; }
+      static int moves() { return move_ctors + move_assigns; }
+      static int live() { return ctors + copy_ctors + move_ctors - dtors; }
+      int v;
+      explicit Tracked(int x) : v(x) { ++ctors; }
+      Tracked(const Tracked& o) : v(o.v) { ++copy_ctors; }
+      Tracked(Tracked&& o) noexcept : v(o.v) { o.v = -1; ++move_ctors; }
+      Tracked& operator=(const Tracked& o) { v = o.v; ++copy_assigns; return *this; }
+      Tracked& operator=(Tracked&& o) noexcept { v = o.v; o.v = -1; ++move_assigns; return *this; }
+      ~Tracked() { ++dtors; }
+      bool operator==(const Tracked& o) const { return v == o.v; }
+  };
+hints:
+- 'Keep three numbers: pointer, size, capacity. Allocate with ::operator new(n * sizeof(T)) and free with
+  ::operator delete.'
+- 'Growing: allocate the new block, construct the new element in it FIRST (the argument may alias an old
+  element), then move_if_noexcept the old ones across, destroy the old ones, free the old block.'
+- Write a private swap(Vec&) noexcept; then the move constructor is swap, copy assignment is copy-and-swap,
+  and move assignment is move-construct a temporary and swap.
+follow_ups:
+- What does std::move_if_noexcept buy you, and what guarantee is it protecting?
+- Why can't you use `new T[n]` for this class?
+- How would you support allocators, and what changes in the destruction path?
+- What is the strong exception guarantee for push_back, and how does your reallocation achieve it?
+tests:
+- name: push_back and index
+  tags:
+  - single
+  - boundary
+  code: |
+    Vec<int> v;
+    CHECK(v.empty());
+    for (int i = 0; i < 5; i++) v.push_back(i * 10);
+    CHECK_EQ(v.size(), 5u);
+    CHECK(!v.empty());
+    for (int i = 0; i < 5; i++) CHECK_EQ(v[i], i * 10);
+    CHECK_EQ(v.back(), 40);
+- name: capacity doubles
+  tags:
+  - boundary
+  - scale
+  code: |
+    Vec<int> v;
+    CHECK_EQ(v.capacity(), 0u);
+    std::vector<std::size_t> caps;
+    for (int i = 0; i < 9; i++) { v.push_back(i); caps.push_back(v.capacity()); }
+    std::vector<std::size_t> want = {1, 2, 4, 4, 8, 8, 8, 8, 16};
+    CHECK(caps == want);
+- name: reallocation moves, never copies
+  tags:
+  - ordering
+  - scale
+  code: |
+    Tracked::reset();
+    {
+        Vec<Tracked> v;
+        for (int i = 0; i < 8; i++) v.push_back(Tracked(i));
+        CHECK_EQ(Tracked::copies(), 0);
+        CHECK_EQ(v.size(), 8u);
+        for (int i = 0; i < 8; i++) CHECK_EQ(v[i].v, i);
+        CHECK_EQ(Tracked::live(), 8);
+    }
+    CHECK_EQ(Tracked::live(), 0);
+- name: emplace_back constructs in place
+  tags:
+  - single
+  - boundary
+  code: |
+    Tracked::reset();
+    {
+        Vec<Tracked> v;
+        v.reserve(4);
+        Tracked& r = v.emplace_back(7);
+        CHECK_EQ(r.v, 7);
+        CHECK_EQ(Tracked::copies() + Tracked::moves(), 0);
+        CHECK_EQ(Tracked::ctors, 1);
+    }
+    CHECK_EQ(Tracked::live(), 0);
+- name: at throws out_of_range
+  tags:
+  - invalid
+  - empty
+  code: |
+    Vec<int> v;
+    CHECK_THROWS(v.at(0));
+    v.push_back(1);
+    CHECK_EQ(v.at(0), 1);
+    CHECK_THROWS(v.at(1));
+    bool right_type = false;
+    try { v.at(5); } catch (const std::out_of_range&) { right_type = true; } catch (...) {}
+    CHECK(right_type);
+- name: copy constructor is deep
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    Tracked::reset();
+    {
+        Vec<Tracked> a;
+        for (int i = 0; i < 3; i++) a.emplace_back(i);
+        Vec<Tracked> b(a);
+        CHECK_EQ(Tracked::copy_ctors, 3);
+        b[0].v = 99;
+        CHECK_EQ(a[0].v, 0);
+        CHECK_EQ(b.size(), 3u);
+        CHECK(a.data() != b.data());
+    }
+    CHECK_EQ(Tracked::live(), 0);
+- name: move constructor steals the buffer
+  tags:
+  - state-reuse
+  - single
+  code: |
+    Tracked::reset();
+    {
+        Vec<Tracked> a;
+        for (int i = 0; i < 4; i++) a.emplace_back(i);
+        Tracked* before = a.data();
+        int moves_before = Tracked::moves();
+        Vec<Tracked> b(std::move(a));
+        CHECK(b.data() == before);
+        CHECK_EQ(Tracked::moves(), moves_before);
+        CHECK_EQ(Tracked::copies(), 0);
+        CHECK_EQ(b.size(), 4u);
+        CHECK_EQ(a.size(), 0u);
+        CHECK(a.empty());
+        a.emplace_back(5);
+        CHECK_EQ(a[0].v, 5);
+    }
+    CHECK_EQ(Tracked::live(), 0);
+- name: copy and move assignment
+  tags:
+  - duplicate
+  - state-reuse
+  code: |
+    Tracked::reset();
+    {
+        Vec<Tracked> a, b;
+        for (int i = 0; i < 3; i++) a.emplace_back(i);
+        for (int i = 0; i < 5; i++) b.emplace_back(100 + i);
+        a = b;
+        CHECK_EQ(a.size(), 5u);
+        CHECK_EQ(a[4].v, 104);
+        CHECK_EQ(Tracked::live(), 10);
+        Vec<Tracked> c;
+        c.emplace_back(1);
+        c = std::move(b);
+        CHECK_EQ(c.size(), 5u);
+        CHECK(b.empty());
+        CHECK_EQ(Tracked::live(), 10);
+        Vec<Tracked>& alias = a;
+        a = alias;
+        CHECK_EQ(a.size(), 5u);
+        CHECK_EQ(a[0].v, 100);
+    }
+    CHECK_EQ(Tracked::live(), 0);
+- name: reserve keeps storage stable
+  tags:
+  - boundary
+  - scale
+  code: |
+    Vec<std::string> v;
+    v.push_back("x");
+    v.reserve(100);
+    CHECK(v.capacity() >= 100);
+    std::string* p = v.data();
+    for (int i = 0; i < 99; i++) v.push_back(std::string(40, 'a' + (i % 26)));
+    CHECK(v.data() == p);
+    CHECK_EQ(v.capacity(), 100u);
+    v.reserve(10);
+    CHECK_EQ(v.capacity(), 100u);
+    CHECK_EQ(v[0], "x");
+    CHECK_EQ(v[99], std::string(40, 'a' + (98 % 26)));
+- name: pop_back and clear keep capacity
+  hidden: true
+  tags:
+  - state-reuse
+  - empty
+  code: |
+    Tracked::reset();
+    Vec<Tracked> v;
+    for (int i = 0; i < 5; i++) v.emplace_back(i);
+    std::size_t cap = v.capacity();
+    v.pop_back();
+    CHECK_EQ(v.size(), 4u);
+    CHECK_EQ(Tracked::live(), 4);
+    v.clear();
+    CHECK(v.empty());
+    CHECK_EQ(Tracked::live(), 0);
+    CHECK_EQ(v.capacity(), cap);
+    v.emplace_back(9);
+    CHECK_EQ(v[0].v, 9);
+    CHECK_EQ(Tracked::live(), 1);
+- name: push_back of own element across reallocation
+  hidden: true
+  tags:
+  - duplicate
+  - boundary
+  code: |
+    Vec<std::string> v;
+    for (int i = 0; i < 4; i++) v.push_back(std::string(30, 'a' + i));
+    CHECK_EQ(v.size(), v.capacity());
+    v.push_back(v[0]);   // reallocates while the argument aliases old storage
+    CHECK_EQ(v.size(), 5u);
+    CHECK_EQ(v[4], std::string(30, 'a'));
+    CHECK_EQ(v[0], std::string(30, 'a'));
+    CHECK_EQ(v[3], std::string(30, 'd'));
+- name: many elements
+  hidden: true
+  tags:
+  - scale
+  code: |
+    Vec<long> v;
+    for (long i = 0; i < 200000; i++) v.push_back(i);
+    long sum = 0;
+    for (long x : v) sum += x;
+    CHECK_EQ(sum, 199999L * 200000L / 2);
+    Vec<Vec<int>> grid;
+    for (int i = 0; i < 100; i++) { Vec<int> row; for (int j = 0; j < i; j++) row.push_back(j); grid.push_back(std::move(row)); }
+    CHECK_EQ(grid[99].size(), 99u);
+    CHECK_EQ(grid[99][98], 98);
+complexity:
+- op: push_back
+  time: O(1) amortized
+  space: O(1)
+- op: reserve / reallocation
+  time: O(n)
+  space: O(n)
+- op: operator[] / at
+  time: O(1)
+  space: O(1)
+- op: copy construct
+  time: O(n)
+  space: O(n)
+- op: move construct
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Why does growing by a constant factor give amortized O(1) push_back?
+  kind: complexity
+  key_points:
+  - Doubling means total element moves over n pushes is at most 2n
+  - Growing by a fixed +k makes the total quadratic
+  - Growth factor trades wasted memory against realloc count; 1.5x lets freed blocks be reused
+- q: Why does move_if_noexcept matter during reallocation?
+  kind: reasoning
+  key_points:
+  - If a move throws midway, the old elements are already damaged and the strong guarantee is lost
+  - Copying leaves the originals intact so you can roll back
+  - 'This is why move constructors should be marked noexcept: vector then moves instead of copies'
+- q: What changes if Vec must be used from multiple threads, and what are the pitfalls of the layout?
+  kind: design
+  key_points:
+  - Reads are safe concurrently, any mutation needs external synchronization; reallocation invalidates
+    pointers and references in other threads
+  - size_/data_/cap_ in one object means writers false-share the cache line with readers
+  - Small-buffer optimization or an arena allocator reduces malloc cost on hot paths
+- q: How would you add allocator support?
+  kind: design
+  key_points:
+  - Hold an allocator member and go through std::allocator_traits for allocate/construct/destroy
+  - Use [[no_unique_address]] so a stateless allocator adds no size
+  - Propagation traits decide what copy/move assignment does with the allocator
+narration: []
+state_aloud:
+- 'Capacity starts at 0 and first push gives 1: say the growth policy before coding.'
+- 'Self-aliasing argument: push_back(v[0]) across a reallocation reads freed memory unless the new element
+  is built first.'
+- 'Self-assignment and moved-from state: copy-and-swap makes both safe; a moved-from Vec is empty and
+  reusable.'
+- Destroy elements in reverse order and exactly once; free raw storage with operator delete, not delete[].
+walkthrough: |
+  The vector owns raw bytes and a count of constructed elements; elements are created with placement new and destroyed by hand, so `T` needs no default constructor, which `new T[n]` would demand. Growth builds the new element first (it may alias an old one), then relocates with `move_if_noexcept`, and copy/move assignment fall out of a single `swap`. In Python a list is a managed array of references and none of lifetime, copy-vs-move or aliasing during growth is your problem; here each is.
+anki_queries: []
+categories:
+- systems-impl

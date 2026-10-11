@@ -1,0 +1,154 @@
+id: min-stack
+title: Min Stack
+bar_level: 2
+target_minutes: 20
+patterns:
+- stack
+firm_tags: []
+categories:
+- leetcode
+anki_queries:
+- deck:"HFT LeetCode 150" "Front:Min Stack (LC 155)"
+statement: |
+  Implement a stack class `MinStack` supporting `push(x)`, `pop()` (removes and returns the top), `top()` (peek) and `get_min()` (smallest value currently on the stack), where every operation runs in O(1) time. Operations are only called on a non-empty stack.
+
+  Example: push -2, push 0, push -3; `get_min()` is `-3`; `pop()`; `top()` is `0`; `get_min()` is `-2`.
+starter: |
+  class MinStack:
+      def __init__(self):
+          pass
+
+      def push(self, x):
+          pass
+
+      def pop(self):
+          pass
+
+      def top(self):
+          pass
+
+      def get_min(self):
+          pass
+hints:
+- Scanning for the minimum each time is O(n).
+- The minimum only changes when you push a new value or pop the current minimum.
+- Store with each element the minimum of the stack at that moment (a parallel stack or tuples).
+follow_ups:
+- Do it using O(1) extra space beyond the stack itself by encoding differences.
+- Add get_max too.
+tests:
+- name: basic sequence
+  tags:
+  - ordering
+  code: |
+    s=MinStack()
+    s.push(-2);s.push(0);s.push(-3)
+    assert s.get_min()==-3
+    assert s.pop()==-3
+    assert s.top()==0
+    assert s.get_min()==-2
+- name: single element
+  tags:
+  - single
+  code: |
+    s=MinStack()
+    s.push(5)
+    assert s.top()==5 and s.get_min()==5
+    assert s.pop()==5
+- name: duplicate minimums
+  tags:
+  - duplicate
+  code: |
+    s=MinStack()
+    s.push(2);s.push(1);s.push(1)
+    assert s.get_min()==1
+    s.pop()
+    assert s.get_min()==1
+    s.pop()
+    assert s.get_min()==2
+- name: min restored after pops
+  tags:
+  - state-reuse
+  code: |
+    s=MinStack()
+    for x in [5,3,7,3,1]:
+        s.push(x)
+    out=[]
+    for _ in range(5):
+        out.append(s.get_min())
+        s.pop()
+    assert out==[1,3,3,3,5]
+- name: negative and zero values
+  tags:
+  - invalid
+  code: |
+    s=MinStack()
+    s.push(0);s.push(-1);s.push(0)
+    assert s.get_min()==-1
+    assert s.top()==0
+- name: push after emptying
+  tags:
+  - empty
+  code: |
+    s=MinStack()
+    s.push(1)
+    assert s.pop()==1
+    s.push(9)
+    assert s.get_min()==9 and s.top()==9
+- name: many operations
+  tags:
+  - scale
+  hidden: true
+  code: |
+    s=MinStack()
+    n=100000
+    for i in range(n,0,-1):
+        s.push(i)
+    for i in range(n):
+        assert s.get_min()==1
+    for _ in range(n-1):
+        s.pop()
+    assert s.get_min()==n and s.top()==n
+    for i in range(n):
+        s.push(i)
+    for i in range(n):
+        assert s.get_min()==0
+complexity:
+- op: push
+  time: O(1)
+  space: O(1)
+- op: pop
+  time: O(1)
+  space: O(1)
+- op: top
+  time: O(1)
+  space: O(1)
+- op: get_min
+  time: O(1)
+  space: O(1)
+extensions:
+- q: Space overhead of the min-tracking approach.
+  kind: complexity
+  key_points:
+  - Extra O(n) in the worst case for a parallel min stack
+  - Only push to the min stack on new minima to save space
+  - Each op stays O(1)
+- q: Add get_max and a get_median variant.
+  kind: design
+  key_points:
+  - get_max mirrors the min stack
+  - Median is not O(1) with a plain stack; needs two heaps with lazy deletion or an order-statistic tree
+  - State the tradeoff
+- q: Why store the running min with each entry?
+  kind: reasoning
+  key_points:
+  - Popping reveals the previous min with no recomputation
+  - Min is a function of the stack prefix
+  - Duplicated minimums need care if you only push on new minima (use <=)
+narration: []
+state_aloud:
+- Duplicate minimums.
+- Min after pop returns to the previous min.
+- Operations only on non-empty stack (state the assumption).
+walkthrough: |
+  Keep a stack of `(value, min_so_far)` pairs. Pushing records the smaller of the new value and the previous top's min. Popping simply removes the pair, which automatically restores the prior minimum. `top` and `get_min` read the last pair, so every operation is O(1).

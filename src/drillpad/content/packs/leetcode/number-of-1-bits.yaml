@@ -1,0 +1,101 @@
+id: number-of-1-bits
+title: Number of 1 Bits
+bar_level: 1
+target_minutes: 12
+patterns:
+- bit-manipulation
+firm_tags: []
+categories:
+- leetcode
+anki_queries: []
+statement: |
+  Return the number of `1` bits in the 32-bit unsigned representation of integer `n` (the Hamming weight). Treat `n` as a 32-bit value: non-negative inputs are below `2**32`; a negative input is interpreted as its 32-bit two's-complement pattern (so `-1` has 32 one bits).
+
+  Example: `hamming_weight(11)` (binary `1011`) returns `3`.
+starter: |
+  def hamming_weight(n):
+      pass
+hints:
+- 'Check the lowest bit and shift right 32 times, but mask negatives first: n & 0xFFFFFFFF.'
+- n & (n - 1) clears the lowest set bit.
+- Count how many times you can clear a bit before reaching zero.
+follow_ups:
+- Count bits of many numbers with a lookup table.
+- Count set bits across a range quickly (Counting Bits).
+tests:
+- name: small
+  tags:
+  - boundary
+  code: |
+    assert hamming_weight(11) == 3
+    assert hamming_weight(128) == 1
+- name: zero
+  tags:
+  - zero-capacity
+  code: |
+    assert hamming_weight(0) == 0
+- name: all ones
+  tags:
+  - boundary
+  code: |
+    assert hamming_weight(2**32 - 1) == 32
+    assert hamming_weight(2**31) == 1
+- name: negative uses two's complement
+  tags:
+  - invalid
+  code: |
+    assert hamming_weight(-1) == 32
+    assert hamming_weight(-2) == 31
+    assert hamming_weight(-2**31) == 1
+- name: single bit patterns
+  tags:
+  - single
+  code: |
+    assert all(hamming_weight(1 << i) == 1 for i in range(32))
+  hidden: true
+- name: alternating bits
+  tags:
+  - duplicate
+  code: |
+    assert hamming_weight(0xAAAAAAAA) == 16
+    assert hamming_weight(0x55555555) == 16
+  hidden: true
+- name: many calls
+  tags:
+  - scale
+  code: |
+    s = 0
+    for i in range(300000):
+        s += hamming_weight(i * 7919)
+    assert s == sum(bin(i * 7919).count('1') for i in range(300000))
+  hidden: true
+complexity:
+- op: overall
+  time: O(k)
+  space: O(1)
+extensions:
+- q: Why does n & (n - 1) remove the lowest set bit?
+  kind: reasoning
+  key_points:
+  - Subtracting 1 flips the lowest set bit to 0 and all lower zeros to 1
+  - AND with n then clears that bit and leaves lower bits 0
+  - Higher bits are untouched
+- q: Compare the loops.
+  kind: complexity
+  key_points:
+  - 'Shift-and-test: always 32 iterations, O(w)'
+  - 'n & (n-1): iterations equal the popcount k, O(k)'
+  - 'Lookup table of bytes: 4 lookups, O(w/8)'
+- q: 'Design: popcount at scale, e.g. Hamming distance between huge bit-vectors.'
+  kind: design
+  key_points:
+  - XOR the two words and popcount the result
+  - Use hardware POPCNT or a 16-bit lookup table
+  - Process in 64-bit words and sum
+narration: []
+state_aloud:
+- Fixed 32-bit width; mask negative inputs.
+- Zero returns 0.
+- -1 has 32 ones.
+walkthrough: |
+  Mask the input to 32 bits so negatives become their two's-complement pattern. Then repeatedly clear the lowest set bit with n & (n - 1), counting iterations until zero. The loop count equals the number of one bits.

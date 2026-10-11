@@ -1,0 +1,293 @@
+id: paged-kv-cache-allocator
+title: Paged KV-cache Block Allocator
+bar_level: 4
+target_minutes: 45
+patterns:
+- paged-attention
+- block-allocator
+- refcount
+- copy-on-write
+- min-heap
+firm_tags:
+- ai-infra
+anki_queries: []
+statement: |
+  Implement the block manager of a paged KV cache. GPU memory for attention keys/values is split
+  into `num_blocks` physical blocks of `block_size` tokens each. A sequence's cache is a
+  *block table*: a list mapping logical block index -> physical block id. Blocks need not be
+  contiguous, can be shared between sequences (e.g. a common prompt prefix, or a forked beam)
+  and are reference counted.
+
+  `PagedKVCache(num_blocks, block_size)` (ValueError if `num_blocks < 0` or `block_size < 1`):
+
+  - `allocate(seq_id, num_tokens) -> list[int]`: register a new sequence holding `num_tokens`
+    tokens using `ceil(num_tokens / block_size)` blocks; return its block table. `ValueError` if
+    the id exists or `num_tokens < 0`; `MemoryError` if not enough free blocks.
+  - `append(seq_id, n=1) -> list[int]`: the sequence gains `n` tokens. Return the physical ids of
+    blocks newly taken for it, in the order taken. New blocks are needed when the token count
+    crosses a block boundary. **Copy-on-write:** if `n > 0`, the sequence's last block is only
+    partially full AND that block's refcount is > 1, the sequence must first replace it by a fresh
+    private block (the copy counts as a newly taken block and is returned first; the old
+    block's refcount drops by 1). `n == 0` is a no-op returning `[]`. `KeyError` for unknown ids.
+  - `fork(parent, child)`: child gets a copy of the parent's block table and token count; every
+    block's refcount increases by 1 (no memory is allocated). `ValueError` if `child` exists,
+    `KeyError` if `parent` does not.
+  - `free(seq_id) -> int`: drop the sequence; decrement each of its blocks; blocks reaching
+    refcount 0 return to the pool. Return how many blocks were actually released.
+  - `block_table(seq_id)` (copy of the list), `num_tokens(seq_id)`, `num_free()`, `refcount(block)`
+    (0 for free blocks).
+
+  Determinism: free blocks are always handed out lowest physical id first.
+  Failures (`MemoryError`) must be atomic: no block taken, no refcount changed, nothing registered.
+  For `append`, count the copy-on-write block together with the extra boundary blocks before
+  deciding whether it fits.
+starter: |
+  class PagedKVCache:
+      def __init__(self, num_blocks, block_size):
+          pass
+
+      def allocate(self, seq_id, num_tokens):
+          pass
+
+      def append(self, seq_id, n=1):
+          pass
+
+      def fork(self, parent, child):
+          pass
+
+      def free(self, seq_id):
+          pass
+
+      def block_table(self, seq_id):
+          pass
+
+      def num_tokens(self, seq_id):
+          pass
+
+      def num_free(self):
+          pass
+
+      def refcount(self, block):
+          pass
+hints:
+- Free list as a min-heap of ids gives 'lowest id first' in O(log n); refcounts in a dict or list.
+- Compute how many blocks an operation needs BEFORE touching any state; that makes failures atomic for
+  free.
+- Copy-on-write only matters when the last block is partial AND shared; a full shared block is never written
+  to, new tokens go to a new block.
+follow_ups:
+- Prefix sharing across requests with a hash of full blocks (see prefix-cache-radix).
+- Evict unreferenced cached blocks LRU instead of freeing them immediately.
+- Swap a preempted sequence's blocks to CPU and back.
+tests:
+- name: allocate takes lowest free block ids and builds a block table
+  code: |
+    c = PagedKVCache(8, 4)
+    assert c.allocate("a", 9) == [0, 1, 2]       # ceil(9/4) = 3 blocks
+    assert c.allocate("b", 4) == [3]
+    assert c.block_table("a") == [0, 1, 2] and c.num_tokens("a") == 9
+    assert c.num_free() == 4
+    assert c.refcount(0) == 1
+  hidden: false
+  tags:
+  - boundary
+  - ordering
+- name: append allocates only when crossing a block boundary
+  code: |
+    c = PagedKVCache(8, 4)
+    c.allocate("a", 3)
+    assert c.append("a") == []                   # token 4 fits in block 0
+    assert c.append("a") == [1]                  # token 5 needs a new block
+    assert c.append("a", 7) == [2]               # 5 -> 12 tokens = 3 blocks
+    assert c.block_table("a") == [0, 1, 2]
+  hidden: false
+  tags:
+  - boundary
+  - state-reuse
+- name: free returns blocks to the pool for reuse
+  code: |
+    c = PagedKVCache(4, 2)
+    c.allocate("a", 4); c.allocate("b", 4)
+    assert c.num_free() == 0
+    assert c.free("a") == 2
+    assert c.num_free() == 2
+    assert c.allocate("c", 2) == [0], "lowest free id first"
+    assert c.block_table("b") == [2, 3]
+  hidden: false
+  tags:
+  - state-reuse
+  - ordering
+- name: out of memory leaves state unchanged
+  code: |
+    c = PagedKVCache(3, 4)
+    c.allocate("a", 8)
+    try:
+        c.allocate("b", 9)
+    except MemoryError:
+        pass
+    else:
+        raise AssertionError("expected MemoryError")
+    assert c.num_free() == 1
+    try:
+        c.append("a", 9)
+    except MemoryError:
+        pass
+    else:
+        raise AssertionError("expected MemoryError")
+    assert c.num_tokens("a") == 8 and c.block_table("a") == [0, 1] and c.num_free() == 1
+    try:
+        c.block_table("b")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("failed allocate must not register the sequence")
+  hidden: false
+  tags:
+  - boundary
+  - invalid
+- name: fork shares blocks via refcounts
+  code: |
+    c = PagedKVCache(8, 4)
+    c.allocate("p", 8)                      # blocks 0, 1 (both full)
+    c.fork("p", "q")
+    assert c.block_table("q") == [0, 1] and c.refcount(0) == 2 and c.num_free() == 6
+    assert c.free("p") == 0, "shared blocks stay allocated"
+    assert c.refcount(0) == 1 and c.num_free() == 6
+    assert c.free("q") == 2 and c.num_free() == 8
+  hidden: false
+  tags:
+  - duplicate
+  - state-reuse
+- name: copy-on-write when appending into a shared partial block
+  code: |
+    c = PagedKVCache(8, 4)
+    c.allocate("p", 6)                      # blocks 0 (full), 1 (2 of 4 used)
+    c.fork("p", "q")
+    assert c.append("q") == [2], "q must copy the shared partial block before writing"
+    assert c.block_table("q") == [0, 2] and c.block_table("p") == [0, 1]
+    assert c.refcount(0) == 2 and c.refcount(1) == 1 and c.refcount(2) == 1
+    assert c.append("p") == [], "p now owns block 1 exclusively: no copy"
+  hidden: true
+  tags:
+  - state-reuse
+  - boundary
+- name: fork at a block boundary needs no copy
+  code: |
+    c = PagedKVCache(8, 4)
+    c.allocate("p", 8)
+    c.fork("p", "q")
+    assert c.append("q") == [2] and c.block_table("q") == [0, 1, 2]
+    assert c.append("p") == [3] and c.refcount(1) == 2
+  hidden: true
+  tags:
+  - boundary
+- name: 'COW needs a free block: failure is atomic'
+  code: |
+    c = PagedKVCache(2, 4)
+    c.allocate("p", 6)
+    c.fork("p", "q")
+    assert c.num_free() == 0
+    try:
+        c.append("q")
+    except MemoryError:
+        pass
+    else:
+        raise AssertionError("expected MemoryError")
+    assert c.block_table("q") == [0, 1] and c.refcount(1) == 2 and c.num_tokens("q") == 6
+  hidden: true
+  tags:
+  - invalid
+  - boundary
+- name: zero tokens, zero blocks, unknown and duplicate ids
+  code: |
+    c = PagedKVCache(0, 4)
+    assert c.allocate("a", 0) == [] and c.num_free() == 0
+    try:
+        c.allocate("b", 1)
+    except MemoryError:
+        pass
+    else:
+        raise AssertionError
+    for fn in [lambda: c.allocate("a", 1), lambda: c.fork("zz", "y"), lambda: c.free("zz"), lambda: c.append("zz")]:
+        try:
+            fn()
+        except (ValueError, KeyError):
+            pass
+        else:
+            raise AssertionError
+    assert c.append("a", 0) == []
+    assert c.free("a") == 0
+  hidden: true
+  tags:
+  - empty
+  - zero-capacity
+  - invalid
+- name: 300k appends over 100 sequences
+  code: |
+    c = PagedKVCache(20000, 16)
+    for s in range(100):
+        c.allocate(s, 0)
+    for _ in range(3000):
+        for s in range(100):
+            c.append(s)
+    used = 100 * (3000 // 16 + 1)
+    assert c.num_free() == 20000 - used
+    for s in range(100):
+        c.free(s)
+    assert c.num_free() == 20000
+  hidden: true
+  tags:
+  - scale
+  - ordering
+complexity:
+- op: allocate
+  time: O(B log N)
+  space: O(B)
+- op: append
+  time: O(B log N)
+  space: O(1)
+- op: free
+  time: O(B log N)
+  space: O(1)
+extensions:
+- q: 'Level 2: add `evictable` prefix caching: freed blocks that were full keep their contents addressable
+    by hash; allocation prefers truly free blocks and evicts the least-recently freed cached block last.'
+  kind: code
+  key_points:
+  - Separate 'free and clean' from 'free but cached' blocks; the cached ones are an LRU list that can
+    be revived on a hash hit
+  - A hit takes a block out of the free LRU and bumps refcount from 0 to 1
+  - Only full blocks are hashable/shareable; the partial tail block is private or copy-on-write
+- q: How does this fit with continuous batching when memory runs out mid-generation?
+  kind: design
+  key_points:
+  - A scheduler watermark keeps spare blocks for running sequences to grow into
+  - 'On MemoryError during append the scheduler preempts the lowest-priority sequence: swap its blocks
+    to host memory or free them and recompute later'
+  - Copy-on-write for beams makes fork cheap, but each divergence costs one block copy
+- q: How would you choose block_size?
+  kind: design
+  key_points:
+  - Small blocks cut internal fragmentation (at most block_size - 1 wasted tokens per sequence) but grow
+    block tables and bookkeeping
+  - 'Large blocks improve memory access efficiency and sharing granularity falls: prefix hits are only
+    whole blocks'
+  - No external fragmentation exists because any free block serves any request
+- q: State the cost of each operation and the space overhead.
+  kind: complexity
+  key_points:
+  - allocate/append/free are O(B log N) for B blocks touched with a heap (O(B) with a plain stack if lowest-id
+    determinism is dropped)
+  - fork is O(B) with no allocation
+  - Space is O(N) for refcounts plus O(total blocks mapped) for tables
+narration: []
+state_aloud:
+- 'Ask: do blocks come back lowest-id-first (determinism) or LIFO? I use a min-heap.'
+- MemoryError must be atomic; compute the need first, including the copy-on-write block.
+- Copy-on-write only for a partially filled, shared last block; full shared blocks are never written.
+- Free decrements; only refcount 0 returns a block, so freeing a fork does not free the parent's data.
+- Zero-token sequences hold zero blocks; zero-block cache fails any non-empty allocation.
+walkthrough: |
+  Each sequence has a block table (logical -> physical) and a token count; physical blocks have refcounts and sit in a min-heap when free. allocate/append compute the number of blocks required first (boundary blocks plus one copy-on-write block when the last block is partial and shared) and raise MemoryError before mutating anything. fork copies the table and bumps refcounts, free decrements and returns zero-count blocks to the heap. This is the page-table indirection from the user's own paged allocator note (interview-prep/14-memory-management.md, sections 3 and 4: block table, free pool, refcounted sharing for common prefixes) specialised to KV-cache blocks with explicit copy-on-write.
+categories:
+- ai-infra

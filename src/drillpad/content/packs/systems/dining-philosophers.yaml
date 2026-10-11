@@ -1,0 +1,210 @@
+id: dining-philosophers
+title: Dining Philosophers
+bar_level: 4
+target_minutes: 42
+patterns:
+- deadlock-avoidance
+- resource-ordering
+- locks
+firm_tags:
+- distsys
+- quant-hft
+statement: |
+  Implement `DiningTable(n)` for `n` philosophers `0..n-1` sitting in a circle with one fork
+  between each neighbouring pair: philosopher `i` uses forks `i` and `(i + 1) % n`.
+
+  - `dine(i, eat)`: acquire both of philosopher `i`'s forks, call `eat()` while holding them, then
+    release both (even if `eat` raises, in which case the exception propagates). Blocks until the
+    forks are available.
+  - No two neighbouring philosophers may be inside `eat` at the same time, and `dine` must be
+    deadlock-free when all `n` philosophers call it concurrently, repeatedly, from `n` threads.
+  - `n == 1` has a single fork (both forks are the same one): `dine(0, eat)` must still work.
+    `i` outside `[0, n)` raises `ValueError`.
+  - Each fork is a `threading.Lock`; use a deadlock-avoidance strategy (e.g. a global lock order).
+
+  Example
+  ```python
+  t = DiningTable(5)
+  t.dine(2, lambda: print("eating"))   # called by 5 threads at once without deadlock
+  ```
+starter: |
+  import threading
+
+  class DiningTable:
+      def __init__(self, n):
+          pass
+
+      def dine(self, i, eat):
+          pass
+hints:
+- 'Deadlock needs a cycle: everyone grabs the left fork then waits for the right.'
+- Break the cycle by always taking the lower-numbered fork first.
+- 'n == 1 means both forks are the same lock: take it once.'
+follow_ups:
+- Is your solution starvation-free?
+- How do you test for deadlock without hanging the test run?
+tests:
+- name: single philosopher eats
+  tags:
+  - single
+  - boundary
+  code: |
+    t = DiningTable(1)
+    out = []
+    t.dine(0, lambda: out.append("ate"))
+    assert out == ["ate"]
+    t2 = DiningTable(2)
+    t2.dine(1, lambda: out.append("b"))
+    assert out == ["ate", "b"]
+- name: invalid seat and exception releases forks
+  tags:
+  - invalid
+  - state-reuse
+  code: |
+    t = DiningTable(3)
+    for bad in (-1, 3):
+        try:
+            t.dine(bad, lambda: None)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError")
+    try:
+        t.dine(0, lambda: 1 / 0)
+    except ZeroDivisionError:
+        pass
+    else:
+        raise AssertionError("exception must propagate")
+    out = []
+    t.dine(0, lambda: out.append(1)); t.dine(2, lambda: out.append(2))
+    assert out == [1, 2]
+- name: neighbours never eat together
+  tags:
+  - concurrency
+  - scale
+  code: |
+    import threading, time
+    N, ROUNDS = 5, 20
+    t = DiningTable(N)
+    eating = [False] * N
+    guard = threading.Lock()
+    meals = [0] * N
+    bad = []
+    def make_eat(i):
+        def eat():
+            with guard:
+                if eating[(i - 1) % N] or eating[(i + 1) % N] or eating[i]:
+                    bad.append(i)
+                eating[i] = True
+            time.sleep(0.0005)
+            with guard:
+                eating[i] = False
+                meals[i] += 1
+        return eat
+    def phil(i):
+        for _ in range(ROUNDS):
+            t.dine(i, make_eat(i))
+    ts = [threading.Thread(target=phil, args=(i,), daemon=True) for i in range(N)]
+    for th in ts: th.start()
+    for th in ts: th.join(timeout=8)
+    assert not any(th.is_alive() for th in ts), "deadlock"
+    assert not bad, bad
+    assert meals == [ROUNDS] * N
+- name: two philosophers share both forks
+  hidden: true
+  tags:
+  - concurrency
+  - boundary
+  code: |
+    import threading, time
+    t = DiningTable(2)
+    cur = [0]; peak = [0]; guard = threading.Lock(); meals = [0, 0]
+    def eat_for(i):
+        def eat():
+            with guard:
+                cur[0] += 1; peak[0] = max(peak[0], cur[0])
+            time.sleep(0.001)
+            with guard:
+                cur[0] -= 1; meals[i] += 1
+        return eat
+    def phil(i):
+        for _ in range(30): t.dine(i, eat_for(i))
+    ts = [threading.Thread(target=phil, args=(i,), daemon=True) for i in range(2)]
+    for th in ts: th.start()
+    for th in ts: th.join(timeout=8)
+    assert not any(th.is_alive() for th in ts)
+    assert meals == [30, 30] and peak[0] == 1
+- name: non neighbours may eat in parallel
+  hidden: true
+  tags:
+  - concurrency
+  - ordering
+  code: |
+    import threading
+    t = DiningTable(5)
+    inside = threading.Event(); gate = threading.Event(); neighbour_in = threading.Event()
+    def hold():
+        t.dine(0, lambda: (inside.set(), gate.wait(3)))
+    def neighbour():
+        t.dine(1, neighbour_in.set)
+    h = threading.Thread(target=hold, daemon=True); h.start()
+    assert inside.wait(2), "eat was never called"
+    n = threading.Thread(target=neighbour, daemon=True); n.start()
+    assert not neighbour_in.wait(0.3), "neighbour ate while philosopher 0 held the shared fork"
+    gate.set()
+    assert neighbour_in.wait(5)
+    h.join(5); n.join(5)
+    b = threading.Barrier(2, timeout=5)
+    errors = []
+    def phil(i):
+        try:
+            t.dine(i, lambda: b.wait())     # 0 and 2 are not neighbours: both must be inside eat at once
+        except Exception as e:
+            errors.append(repr(e))
+    ts = [threading.Thread(target=phil, args=(i,), daemon=True) for i in (0, 2)]
+    for th in ts: th.start()
+    for th in ts: th.join(timeout=8)
+    assert not errors, errors
+complexity:
+- op: dine
+  time: O(1)
+  space: O(n)
+extensions:
+- q: What are the costs and the maximum parallelism?
+  kind: complexity
+  key_points:
+  - Acquiring two locks is O(1); space is O(n) locks
+  - At most floor(n/2) philosophers can eat concurrently
+  - Under contention latency is bounded by neighbours' eating time
+- q: Compare deadlock-avoidance strategies.
+  kind: design
+  key_points:
+  - 'Resource ordering (as here): simple, no extra state, but one philosopher picks forks in the opposite
+    order'
+  - 'Waiter/arbitrator semaphore allowing at most n-1 diners: also deadlock-free'
+  - Chandy-Misra (clean/dirty forks with request tokens) is fully distributed and starvation-free
+- q: How would you detect or recover from a deadlock in a general system instead of preventing it?
+  kind: design
+  key_points:
+  - Build a wait-for graph and look for cycles
+  - Use try-acquire with timeout and back off with randomised delay (risks livelock)
+  - Break a cycle by aborting one participant and releasing its resources
+- q: Name the four Coffman conditions and which one you break.
+  kind: reasoning
+  key_points:
+  - Mutual exclusion, hold and wait, no preemption, circular wait
+  - A global lock order breaks circular wait
+  - 'Starvation is a separate issue: ordering prevents deadlock but not unfairness'
+narration: []
+state_aloud:
+- Single philosopher has one fork; do not lock it twice.
+- Release forks even if eat() raises.
+- Why ordering prevents deadlock but not starvation.
+- Tests need join timeouts so a deadlock fails instead of hanging.
+walkthrough: Each fork is a lock. To avoid the circular wait, a philosopher always acquires the lower-numbered
+  of its two forks first, which makes the lock graph acyclic, takes the second (skipping it when n=1 and
+  both forks coincide), runs eat() and releases via the with-blocks even if eat raises. Neighbours exclude
+  each other because they share a fork; non-neighbours run in parallel.
+anki_queries: []
+categories:
+- systems-impl
