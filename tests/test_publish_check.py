@@ -173,3 +173,10 @@ def test_sync_refuses_a_destination_that_is_not_a_git_clone(tmp_path):
 
     with pytest.raises(SystemExit, match="not a git clone"):
         pc.cmd_sync(A)
+
+
+def test_binary_files_are_not_text_scanned(tmp_path):
+    files = tree(tmp_path, {"README.md": "Scope and sources\n", "LICENSE": "x"})
+    (tmp_path / "src").mkdir(exist_ok=True)
+    (tmp_path / "src" / "pic.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00" + b"/Us" + b"ers/someone\x00" * 5)
+    assert pc.scan(tmp_path, [*files, "src/pic.png"], MANIFEST) == []

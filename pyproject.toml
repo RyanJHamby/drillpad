@@ -1,7 +1,22 @@
 [project]
 name = "drillpad"
-version = "0.0.1"
-description = "Local-first coding-interview practice: editor, runner, Anki-driven quizzing, AI mock interviewer."
+version = "0.1.0"
+description = "Local-first learning and interview-practice environment for systems, infrastructure, and AI-infrastructure engineers: lessons, a code runner with hidden tests, spaced repetition, and learning tracks."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "LICENSE-CONTENT.md"]
+authors = [{ name = "Ryan Hamby" }]
+keywords = ["interview-preparation", "system-design", "distributed-systems", "concurrency", "spaced-repetition", "fsrs", "local-first", "study-tool", "llm-inference", "low-latency"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Education",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Education",
+]
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115",
@@ -15,6 +30,12 @@ dependencies = [
 llm = ["anthropic>=0.40", "keyring>=25"]
 voice = []
 sync = ["boto3>=1.34"]
+
+[project.urls]
+Homepage = "https://github.com/RyanJHamby/drillpad-oss"
+Repository = "https://github.com/RyanJHamby/drillpad-oss"
+Issues = "https://github.com/RyanJHamby/drillpad-oss/issues"
+Changelog = "https://github.com/RyanJHamby/drillpad-oss/blob/main/CHANGELOG.md"
 
 [project.scripts]
 drillpad = "drillpad.cli:main"

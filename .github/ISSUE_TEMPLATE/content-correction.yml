@@ -1,0 +1,26 @@
+name: Content correction
+description: A lesson or problem is wrong, unclear, or out of date
+labels: [content]
+body:
+  - type: input
+    id: where
+    attributes: {label: Lesson or problem, description: "Path or id, for example consensus-algorithms/01-raft-basics."}
+    validations: {required: true}
+  - type: textarea
+    id: wrong
+    attributes: {label: What is wrong or unclear, description: "Quote the sentence if you can."}
+    validations: {required: true}
+  - type: textarea
+    id: source
+    attributes: {label: Source, description: "A link to a paper, specification, or official documentation that supports the correction."}
+    validations: {required: true}
+  - type: textarea
+    id: fix
+    attributes: {label: Suggested fix (optional)}
+  - type: checkboxes
+    id: confidential
+    attributes:
+      label: Confidentiality
+      options:
+        - label: I am not including confidential or non-public information.
+          required: true

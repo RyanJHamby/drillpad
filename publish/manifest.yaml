@@ -17,6 +17,8 @@ include:
   - src/drillpad/**
   - LICENSE
   - LICENSE-CONTENT.md
+  - CHANGELOG.md
+  - docs/images/**
 
 # Public-facing files are authored under publish/ and shipped under their root names; the private README, AGENTS.md
 # and CLAUDE.md (which name the author and their workflow) are never exported.
@@ -25,12 +27,19 @@ rename:
   publish/CONTRIBUTING.md: CONTRIBUTING.md
   publish/CODE_OF_CONDUCT.md: CODE_OF_CONDUCT.md
   publish/SECURITY.md: SECURITY.md
+  publish/github/pull_request_template.md: .github/pull_request_template.md
+  publish/github/ISSUE_TEMPLATE/config.yml: .github/ISSUE_TEMPLATE/config.yml
+  publish/github/ISSUE_TEMPLATE/bug.yml: .github/ISSUE_TEMPLATE/bug.yml
+  publish/github/ISSUE_TEMPLATE/content-correction.yml: .github/ISSUE_TEMPLATE/content-correction.yml
+  publish/github/ISSUE_TEMPLATE/feature.yml: .github/ISSUE_TEMPLATE/feature.yml
 
 exclude:
   - publish/README.public.md
   - publish/CONTRIBUTING.md
   - publish/CODE_OF_CONDUCT.md
   - publish/SECURITY.md
+  - publish/github/**
+  - .github/ISSUE_TEMPLATE/**
   # Personal target lists and interview pipeline
   - docs/inputs/**
   - docs/journal.md          # personal log; promote after review if you want it public as proof of work

@@ -135,7 +135,10 @@ def scan(root: Path, files: list[str], manifest: dict, extra_patterns: list[dict
         p = root / f
         if matches(f, manifest.get("scan_exempt", [])) or not p.is_file() or p.stat().st_size > MAX_SCAN_BYTES:
             continue
-        lines = p.read_text(errors="ignore").splitlines()
+        raw = p.read_bytes()
+        if b"\0" in raw[:8000]:
+            continue  # binary (images, archives): there is no text to scan, and random bytes would only produce false matches
+        lines = raw.decode(errors="ignore").splitlines()
         for i, line in enumerate(lines, 1):
             suppressed = SUPPRESS.search(line) or (i > 1 and SUPPRESS.search(lines[i - 2]))
             for rule, rx, allow in rules:
