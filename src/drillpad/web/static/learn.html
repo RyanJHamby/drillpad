@@ -35,6 +35,12 @@ details{border:1px solid var(--bd);border-radius:8px;padding:8px 12px;margin:8px
 .wbsc{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.wbsc button{display:flex;flex-direction:column;align-items:center;padding:8px 4px;line-height:1.25}.wbsc b{font-size:16px}.wbsc small{color:var(--mut);font-size:11px;text-align:center}
 .wbh{list-style:none;margin:12px 0 0;padding:0}.wbh li{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-top:1px solid var(--bd);font-size:13px}.wbh .sc{font-weight:700;width:2.2em}.wbh .nt{flex:1;color:var(--mut)}.wbh button{border:0;background:none;color:var(--mut);cursor:pointer;font:inherit}.wbh button:hover{color:var(--bad)}
 .wbq-item{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;margin:6px 0;background:var(--surface);cursor:pointer}.wbq-item:hover{background:var(--code)}
+
+.cursel{padding:0 18px 8px}.cursel select{width:100%;font:inherit;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--surface);color:var(--fg)}
+.curinfo{padding:0 18px 10px;color:var(--mut);font-size:12px;line-height:1.45}.curinfo .row{margin-top:4px}
+.badge{display:inline-block;font-size:11px;padding:0 7px;border-radius:99px;background:var(--code);color:var(--mut);margin-right:4px}.badge.draft{background:var(--acc-bg);color:var(--acc)}
+.mod.planned{opacity:.6}.mod.planned h3::after{content:" · planned";font-weight:400;color:var(--mut);font-size:12px}.mod.missing h3{color:var(--bad)}
+.lvl{padding:12px 18px 4px;margin-top:8px;border-top:1px solid var(--bd);font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
 @media(max-width:900px){.layout{grid-template-columns:1fr}nav{position:static;max-height:none}main{padding:20px}}
 </style></head><body>
 <header><a href="/home" style="text-decoration: none; display: flex; align-items: center; gap: 10px; color: inherit;">
@@ -50,20 +56,42 @@ details{border:1px solid var(--bd);border-radius:8px;padding:8px 12px;margin:8px
 <script>
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const LANG={python:'Python',cpp:'C++',rust:'Rust','?':'?'};
-let MODS=[],cur=null,WB={lessons:{},due:[],summary:{whiteboarded:0,due_now:0,total_lessons:0}};
+let MODS=[],CURS=[],curSel='core',cur=null,WB={lessons:{},due:[],summary:{whiteboarded:0,due_now:0,total_lessons:0}};
 const flat=()=>MODS.flatMap(m=>m.lessons.map(l=>({m,l})));
 const WBL={1:'blank',2:'shaky',3:'got there, gaps',4:'solid',5:'flawless, cold'};
 const ago=iso=>{const d=Math.floor((Date.now()-new Date(iso))/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago'};
 const when=iso=>{const d=new Date(iso),n=(d-Date.now())/864e5;return n<=0?'now':n<1?'today':new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'})};
 async function loadWb(){try{WB=await fetch('/api/whiteboard').then(r=>r.json())}catch{}}
+try{curSel=localStorage.getItem('dp_cur')||'core'}catch{}
 async function load(sel){
-  [MODS]=await Promise.all([fetch('/api/modules').then(r=>r.json()),loadWb()]);renderNav();
-  const q=new URLSearchParams(location.search),want=sel||(q.get('m')&&q.get('l')?{m:q.get('m'),l:q.get('l')}:null)||(()=>{const f=flat().find(x=>!x.l.done&&x.l.written)||flat()[0];return f?{m:f.m.id,l:f.l.id}:null})();
-  if(want)open_(want.m,want.l);
+  [MODS,CURS]=await Promise.all([fetch('/api/modules').then(r=>r.json()),fetch('/api/curricula').then(r=>r.json()),loadWb()]);
+  const qc=new URLSearchParams(location.search).get('c');if(qc&&CURS.some(c=>c.id===qc))curSel=qc;
+  if(!CURS.some(c=>c.id===curSel))curSel=CURS[0]?CURS[0].id:'core';
+  renderNav();
+  const q=new URLSearchParams(location.search);
+  let want=sel||(q.get('m')&&q.get('l')?{m:q.get('m'),l:q.get('l')}:null);
+  if(!want&&q.get('c')){showCurriculum();return}
+  if(!want){const f=firstOpen(curSel);if(f)want={m:f.m,l:f.l};else{showCurriculum();return}}
+  open_(want.m,want.l);
+}
+function curModules(cid){const c=CURS.find(x=>x.id===cid),by={};MODS.forEach(m=>by[m.id]=m);return c?c.levels.flatMap(lv=>lv.units).filter(u=>u.status==='ready'&&by[u.module_id]).map(u=>by[u.module_id]):[]}
+function firstOpen(cid){for(const m of curModules(cid))for(const l of m.lessons)if(!l.done&&l.written)return{m:m.id,l:l.id};return null}
+function showCurriculum(){
+  cur=null;history.replaceState(null,'',`?c=${encodeURIComponent(curSel)}`);renderNav();
+  const c=CURS.find(x=>x.id===curSel);if(!c)return;
+  const go=firstOpen(c.id)||(()=>{const u=c.levels.flatMap(lv=>lv.units).find(u=>u.status==='ready'&&u.first_lesson);return u?{m:u.module_id,l:u.first_lesson}:null})();
+  const rq=[...(c.requires.curricula||[]).map(id=>(CURS.find(x=>x.id===id)||{title:id}).title),...(c.requires.modules||[]).map(id=>(MODS.find(m=>m.id===id)||{title:id}).title)];
+  const lv=c.levels.filter(l=>l.units.length).map(l=>`<h2>${esc(l.title)}</h2><ul>`+l.units.map(u=>`<li>${u.status==='ready'&&u.first_lesson?`<a href="#" data-m="${esc(u.module_id)}" data-l="${esc(u.first_lesson)}">${esc(u.title)}</a>`:esc(u.title)}${u.status!=='ready'?` <span class="badge">${esc(u.status)}</span>`:''}${u.owned||c.id==='core'?'':' <span class="badge">from core</span>'}${u.summary?`<br><small style="color:var(--mut)">${esc(u.summary)}</small>`:''}</li>`).join('')+'</ul>').join('');
+  const caps=(c.capstones||[]).map(k=>`<li><b>${esc(k.title||k.id)}</b><br><small style="color:var(--mut)">${esc(k.brief||'')}</small></li>`).join('');
+  $('lesson').className='md';
+  $('lesson').innerHTML=`<h1>${esc(c.title)}</h1><p>${esc(c.summary)}</p>${c.audience?`<p><b>For:</b> ${esc(c.audience)}</p>`:''}
+   <p><span class="badge ${c.status}">${esc(c.status)}</span>${c.level?`<span class="badge">${esc(c.level)}</span>`:''}${c.version?`<span class="badge">v${esc(c.version)}</span>`:''}<span class="badge">${esc(c.source)}</span><span class="badge">${c.progress.done}/${c.progress.lessons} lessons done</span><span class="badge">${c.progress.ready_units} ready · ${c.progress.planned_units} planned</span></p>
+   ${rq.length?`<p><b>Recommended first:</b> ${rq.map(esc).join(', ')}</p>`:''}${go?`<p><button class="btn pri" data-m="${esc(go.m)}" data-l="${esc(go.l)}">Continue</button></p>`:'<p style="color:var(--mut)">Nothing written yet: the units below are a roadmap.</p>'}
+   ${lv}${caps?`<h2>Capstones</h2><ul>${caps}</ul>`:''}`;
 }
 function wbMark(m,l){const s=WB.lessons[m+'/'+l];return `<span class="wbm ${s?(s.due_now?'due':'ok'):''}" title="${s?`Whiteboarded ${s.sessions}x · last ${s.last_score}/5 · next ${s.due_now?'due now':when(s.due)}`:'Never whiteboarded'}"></span>`}
 function showQueue(){
-  cur=null;history.replaceState(null,'','?');renderNav();
+  cur=null;history.replaceState(null,'',`?c=${encodeURIComponent(curSel)}`);renderNav();
   const rows=WB.due.map(d=>`<div class="wbq-item" data-m="${d.module}" data-l="${d.lesson}"><span>${esc(d.title)} <small style="color:var(--mut)">· ${esc(d.module_title)}</small></span><span class="tag">last ${d.last_score}/5 · ${ago(d.last_at)}</span><span class="tag lang">due</span></div>`).join('');
   $('lesson').className='md';
   $('lesson').innerHTML=`<h1>Whiteboard queue</h1><p>${WB.summary.due_now} due now · ${WB.summary.whiteboarded} of ${WB.summary.total_lessons} lessons practiced`+(WB.summary.mean_last_score!=null?` · mean latest score ${WB.summary.mean_last_score}/5`:'')+`</p>`+
@@ -86,32 +114,34 @@ async function renderWb(mid,lid){
   });
   el.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{await fetch(`/api/whiteboard/sessions/${b.dataset.del}`,{method:'DELETE'});await loadWb();renderNav();renderWb(mid,lid)});
 }
+function modBlock(m){
+  const n=m.lessons.length;
+  return `<div class="mod"><h3>${esc(m.title)}${m.private?' <span class="badge">private</span>':''}</h3><small>${m.done}/${n} lessons · ${m.practice_passing} practice passing</small><div class="pbar"><i style="width:${n?m.done/n*100:0}%"></i></div></div>`+
+   m.lessons.map((l,i)=>`<div class="les ${l.done?'done':''} ${l.written?'':'draft'} ${cur&&cur.m===m.id&&cur.l===l.id?'sel':''}" data-m="${m.id}" data-l="${l.id}"><span class="ck"></span><span>${i+1}. ${esc(l.title)}${l.written?'':' <small>(coming)</small>'}</span>${wbMark(m.id,l.id)}</div>`).join('');
+}
 function renderNav(){
-  // Group modules by stage
-  const byStage={};
-  const stageOrder=[];
-  MODS.forEach(m=>{
-    const stageId=m.stage_id||'_unsorted';
-    const stageTitle=m.stage_title||'Unsorted';
-    if(!byStage[stageId]){
-      byStage[stageId]={title:stageTitle,modules:[]};
-      stageOrder.push(stageId);
-    }
-    byStage[stageId].modules.push(m);
-  });
-
+  const c=CURS.find(x=>x.id===curSel)||CURS[0];
+  if(!c){$('nav').innerHTML='';return}
+  const byId={};MODS.forEach(m=>byId[m.id]=m);
   const wbs=WB.summary,bar=`<div class="wbbar"><button class="btn" id="wbq">Whiteboard queue · <b>${wbs.due_now}</b> due · ${wbs.whiteboarded}/${wbs.total_lessons} practiced</button></div>`;
-  // Render stages with modules
-  $('nav').innerHTML=bar+stageOrder.map(stageId=>{
-    const stage=byStage[stageId];
-    const stageHtml=stageId==='_unsorted'?``:`<div style="padding:12px 18px 4px;margin-top:8px;border-top:1px solid var(--bd);font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:0.5px">${esc(stage.title)}</div>`;
-    const modsHtml=stage.modules.map(m=>`<div class="mod"><h3>${esc(m.title)}</h3><small>${m.done}/${m.lessons.length} lessons · ${m.practice_passing} practice passing</small><div class="pbar"><i style="width:${m.done/m.lessons.length*100}%"></i></div></div>`+
-     m.lessons.map((l,i)=>`<div class="les ${l.done?'done':''} ${l.written?'':'draft'} ${cur&&cur.m===m.id&&cur.l===l.id?'sel':''}" data-m="${m.id}" data-l="${l.id}"><span class="ck"></span><span>${i+1}. ${esc(l.title)}${l.written?'':' <small>(coming)</small>'}</span>${wbMark(m.id,l.id)}</div>`).join('')).join('');
-    return stageHtml+modsHtml;
+  const sel=`<div class="cursel"><select id="cursel" title="Curriculum">${CURS.map(x=>`<option value="${esc(x.id)}" ${x.id===c.id?'selected':''}>${esc(x.title)}${x.source==='private'?' (private)':''}</option>`).join('')}</select></div>`;
+  const rq=[...(c.requires.curricula||[]).map(id=>(CURS.find(x=>x.id===id)||{title:id}).title),...(c.requires.modules||[]).map(id=>(MODS.find(m=>m.id===id)||{title:id}).title)];
+  const info=`<div class="curinfo">${esc(c.summary)}<div class="row">${c.status?`<span class="badge ${c.status}">${esc(c.status)}</span>`:''}${c.level?`<span class="badge">${esc(c.level)}</span>`:''}<span class="badge">${c.progress.done}/${c.progress.lessons} lessons done</span>${c.progress.planned_units?`<span class="badge">${c.progress.planned_units} planned</span>`:''}</div>${rq.length?`<div class="row">Recommended first: ${rq.map(esc).join(', ')}</div>`:''}</div>`;
+  const levels=c.levels.map(lv=>{
+    const units=lv.units.map(u=>{
+      const m=u.status==='ready'?byId[u.module_id]:null;
+      if(m)return modBlock(m);
+      return `<div class="mod ${u.status}"><h3>${esc(u.title||u.key)}</h3><small>${u.status==='missing'?'module not found':esc(u.summary||'')}</small></div>`;
+    }).join('');
+    return (lv.units.length?`<div class="lvl">${esc(lv.title)}</div>`+units:'');
   }).join('');
+  $('nav').innerHTML=bar+sel+info+levels;
 }
 async function open_(mid,lid){
-  cur={m:mid,l:lid};history.replaceState(null,'',`?m=${mid}&l=${lid}`);renderNav();
+  const mm=MODS.find(m=>m.id===mid);
+  const here=CURS.find(c=>c.id===curSel);
+  if(mm&&!(here&&here.levels.some(lv=>lv.units.some(u=>u.module_id===mid)))){curSel=(mm.curriculum_ids&&mm.curriculum_ids[0])||curSel}
+  cur={m:mid,l:lid};history.replaceState(null,'',`?c=${encodeURIComponent(curSel)}&m=${mid}&l=${lid}`);renderNav();
   const mod=MODS.find(m=>m.id===mid),idx=mod.lessons.findIndex(l=>l.id===lid),les=mod.lessons[idx];
   const r=await fetch(`/api/modules/${mid}/${lid}`).then(x=>x.json());
   let html=marked.parse(r.markdown,{gfm:true});
@@ -131,6 +161,7 @@ async function open_(mid,lid){
   $('done').onclick=async()=>{await fetch(`/api/modules/${mid}/${lid}/done?done=${!les.done}`,{method:'POST'});await load({m:mid,l:lid})};
   scrollTo(0,0);
 }
+document.addEventListener('change',e=>{if(e.target.id==='cursel'){curSel=e.target.value;try{localStorage.setItem('dp_cur',curSel)}catch{}showCurriculum()}});
 document.addEventListener('click',e=>{if(e.target.closest('#wbq')){showQueue();return}const t=e.target.closest('[data-m][data-l]');if(t){e.preventDefault();open_(t.dataset.m,t.dataset.l)}});
 load();
 </script></body></html>

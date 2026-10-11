@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 from fastapi import APIRouter, HTTPException
 
+from drillpad.core import curricula as cur
 from drillpad.core import paths
 from drillpad.evaluation.engine import apply_profile
 from drillpad.evaluation.firms import GENERIC
@@ -34,8 +35,9 @@ def _read_module(f: Path, private: bool) -> dict:
     return d
 
 
-def _load() -> dict[str, dict]:
-    """Bundled modules, plus any in the private overlay (<data dir>/private/modules). Bundled ids win on a clash."""
+def _load_all() -> tuple[dict[str, dict], dict[str, cur.Curriculum]]:
+    """Every module (bundled, private overlay, and curriculum-owned) and every curriculum, including the built-in `core`
+    track from paths.yaml and a `private` track for overlay modules that no curriculum claims. Bundled ids win on a clash."""
     out = {}
     for f in sorted(MODULES_DIR.glob("*/module.yaml")):
         d = _read_module(f, False)
@@ -50,7 +52,35 @@ def _load() -> dict[str, dict]:
             log.warning("private module %s shadows a bundled module id; ignored", d.get("id"))
             continue
         out[d["id"]] = d
-    return out
+    plain = dict(out)
+    found, problems = cur.load_curricula(set(plain))
+    for p in problems:
+        log.warning("curricula: %s", p)
+    for c in found.values():
+        for gid, mdir in cur.owned_modules(c).items():
+            if gid in out:
+                continue
+            try:
+                d = yaml.safe_load((mdir / "module.yaml").read_text())
+            except (OSError, yaml.YAMLError) as e:
+                log.warning("skipping module %s: %s", gid, e)
+                continue
+            d["id"], d["_dir"], d["_private"], d["_curriculum"] = gid, mdir, c.source == "private", c.id
+            out[gid] = d
+    all_c = {cur.CORE_ID: cur.core_from_paths(_load_paths(), {m for m, d in plain.items() if not d["_private"]})}
+    all_c.update(found)
+    lonely = sorted(m for m, d in plain.items() if d["_private"])
+    if lonely:
+        all_c["private"] = cur.Curriculum(
+            id="private", title="Private (local only)", source="private", status="active",
+            summary="Modules from your private overlay that no curriculum claims. They never leave this machine.",
+            levels=[cur.Level(id="local", title="Local only", units=[
+                cur.Unit(key=m, module_id=m, title="", summary="", owned=False, status="ready") for m in lonely])])
+    return out, all_c
+
+
+def _load() -> dict[str, dict]:
+    return _load_all()[0]
 
 
 def make_router(problems: dict, conn) -> APIRouter:
@@ -72,9 +102,14 @@ def make_router(problems: dict, conn) -> APIRouter:
 
     @router.get("/modules")
     def modules():
-        done, mods = done_set(), _load()
+        done = done_set()
+        mods, all_c = _load_all()
         ps = practice_status()
         paths = _load_paths()
+        in_curricula: dict[str, list[str]] = {}
+        for c in all_c.values():
+            for u in c.units():
+                in_curricula.setdefault(u.module_id, []).append(c.id)
 
         # Build stage lookup: module_id -> (stage_id, stage_title, position_in_stage)
         stage_lookup = {}
@@ -101,8 +136,13 @@ def make_router(problems: dict, conn) -> APIRouter:
                         "lessons": lessons, "done": sum(1 for x in lessons if x["done"]),
                         "practice_passing": sum(1 for x in lessons for p in x["practice"] if p["status"] == "passing")}
 
-            # Add stage info if available
+            module_entry["curriculum_ids"] = in_curricula.get(m["id"], [])
             if m.get("_private"):
+                module_entry["private"] = True
+            if m.get("_curriculum"):
+                module_entry["curriculum_id"] = m["_curriculum"]
+            # Add stage info if available
+            if m.get("_private") and not m.get("_curriculum"):
                 module_entry.update(PRIVATE_STAGE, stage_position=len(res) + 1, private=True)
             elif m["id"] in stage_lookup:
                 stage_info = stage_lookup[m["id"]]
@@ -114,6 +154,8 @@ def make_router(problems: dict, conn) -> APIRouter:
 
         # Sort by stage order, then by position within stage
         def sort_key(m):
+            if m.get("curriculum_id"):
+                return (500, 0, m["id"])  # curriculum-owned modules after the core stages
             if "stage_id" in m:
                 stage_id = m["stage_id"]
                 # Extract numeric prefix for sorting (e.g., "0-thinking-tools" -> 0)
@@ -124,6 +166,37 @@ def make_router(problems: dict, conn) -> APIRouter:
 
         res.sort(key=sort_key)
         return res
+
+    @router.get("/curricula")
+    def curricula():
+        """Every curriculum with its levels and units (ready or planned), plus progress counted from your lesson checkmarks."""
+        done = done_set()
+        mods, all_c = _load_all()
+        order = {"builtin": 0, "bundled": 1, "external": 2, "private": 3}
+        out = []
+        for c in sorted(all_c.values(), key=lambda c: (order.get(c.source, 9), c.id == "private", c.id)):
+            lessons = finished = ready = planned = 0
+            levels = []
+            for lv in c.levels:
+                units = []
+                for u in lv.units:
+                    m = mods.get(u.module_id) if u.status == "ready" else None
+                    n = len(m["lessons"]) if m else 0
+                    d = sum(1 for ls in (m["lessons"] if m else []) if (u.module_id, ls["id"]) in done)
+                    first = next((ls["id"] for ls in (m["lessons"] if m else [])
+                                  if (m["_dir"] / "lessons" / f"{ls['id']}.md").exists()), None)
+                    lessons, finished = lessons + n, finished + d
+                    ready, planned = ready + (u.status == "ready"), planned + (u.status == "planned")
+                    units.append({"module_id": u.module_id, "key": u.key, "owned": u.owned, "status": u.status,
+                                  "title": (m["title"] if m else u.title) or u.key, "summary": u.summary or (m["description"] if m else ""),
+                                  "lessons": n, "done": d, "first_lesson": first})
+                levels.append({"id": lv.id, "title": lv.title, "units": units})
+            out.append({"id": c.id, "title": c.title, "summary": c.summary, "audience": c.audience, "level": c.level,
+                        "status": c.status, "version": c.version, "source": c.source,
+                        "requires": {"curricula": c.requires_curricula, "modules": c.requires_modules},
+                        "capstones": c.capstones, "levels": levels,
+                        "progress": {"lessons": lessons, "done": finished, "ready_units": ready, "planned_units": planned}})
+        return out
 
     @router.get("/modules/{mid}/{lid}")
     def lesson(mid: str, lid: str):
