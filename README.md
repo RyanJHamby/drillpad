@@ -1,6 +1,6 @@
 # DrillPad: learn systems engineering and practice the interview, locally
 
-[![CI](https://github.com/RyanJHamby/drillpad-oss/actions/workflows/ci.yml/badge.svg)](https://github.com/RyanJHamby/drillpad-oss/actions/workflows/ci.yml)
+[![CI](https://github.com/RyanJHamby/drillpad/actions/workflows/ci.yml/badge.svg)](https://github.com/RyanJHamby/drillpad/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
 [![Content: CC BY 4.0](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey.svg)](LICENSE-CONTENT.md)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab.svg)
@@ -42,14 +42,14 @@ C++ and Rust problems also need `clang++` and `rustc` on your PATH; without them
 Install as a tool (nothing to clone):
 
 ```bash
-uv tool install git+https://github.com/RyanJHamby/drillpad-oss
+uv tool install git+https://github.com/RyanJHamby/drillpad
 drillpad serve                  # http://127.0.0.1:8765/learn  (localhost only)
 ```
 
 Or from a clone, which is also how you contribute:
 
 ```bash
-git clone https://github.com/RyanJHamby/drillpad-oss && cd drillpad-oss
+git clone https://github.com/RyanJHamby/drillpad && cd drillpad
 uv sync
 uv run drillpad serve
 ```

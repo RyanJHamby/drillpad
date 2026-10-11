@@ -47,14 +47,30 @@ details{border:1px solid var(--bd);border-radius:8px;padding:8px 12px;margin:8px
   <div class="logo">Drill<span>Pad</span></div>
 </a><span style="color: var(--mut); font-size: 12px;">Learn</span></header>
 <div class="layout"><nav id="nav"></nav><main><div id="lesson" class="empty">Pick a lesson to begin.</div></main></div>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" media="(prefers-color-scheme: dark)">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+<link rel="stylesheet" href="/static/vendor/atom-one-light.min.css">
+<link rel="stylesheet" href="/static/vendor/atom-one-dark.min.css" media="(prefers-color-scheme: dark)">
+<script src="/static/vendor/marked.min.js"></script>
+<script src="/static/vendor/purify.min.js"></script>
+<script src="/static/vendor/highlight.min.js"></script>
 <script>
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---- resilience: libraries are bundled under /static/vendor, but never fail silently if one is missing
+let _mm=null;
+function ensureMermaid(){return _mm||(_mm=new Promise((ok,no)=>{if(window.mermaid)return ok();const s=document.createElement('script');s.src='/static/vendor/mermaid.min.js';s.onload=()=>{try{mermaid.initialize({startOnLoad:false})}catch{}ok()};s.onerror=()=>no(new Error('mermaid failed to load'));document.head.appendChild(s)}))}
+function renderMd(text){
+  if(typeof marked==='undefined'||typeof DOMPurify==='undefined')return `<p style="color:var(--warn)">The markdown renderer did not load, so this lesson is shown as plain text.</p><pre style="white-space:pre-wrap">${esc(text)}</pre>`;
+  let html=marked.parse(text,{gfm:true});
+  html=html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,'<div class="mermaid">$1</div>');
+  return DOMPurify.sanitize(html,{ADD_TAGS:['div'],ADD_ATTR:['class']});
+}
+function showError(where,e){
+  console.error(where,e);
+  $('lesson').className='md';
+  $('lesson').innerHTML=`<h1>Something went wrong</h1><p>The Learn page hit an error while ${esc(where)}:</p><pre style="white-space:pre-wrap">${esc(e&&e.message?e.message:String(e))}</pre><p>Reload the page. If it persists, open your browser console and check <code>${esc(location.origin)}/api/modules</code> and <code>/api/curricula</code>; the server log is <code>~/Library/Logs/drillpad.log</code>.</p>`;
+}
+window.addEventListener('error',ev=>{if(!document.getElementById('nav').children.length)showError('starting up',ev.error||ev.message)});
+window.addEventListener('unhandledrejection',ev=>showError('loading data',ev.reason));
 const LANG={python:'Python',cpp:'C++',rust:'Rust','?':'?'};
 let MODS=[],CURS=[],curSel='core',cur=null,WB={lessons:{},due:[],summary:{whiteboarded:0,due_now:0,total_lessons:0}};
 const flat=()=>MODS.flatMap(m=>m.lessons.map(l=>({m,l})));
@@ -66,6 +82,10 @@ try{curSel=localStorage.getItem('dp_cur')||'core'}catch{}
 async function load(sel){
   [MODS,CURS]=await Promise.all([fetch('/api/modules').then(r=>r.json()),fetch('/api/curricula').then(r=>r.json()),loadWb()]);
   const qc=new URLSearchParams(location.search).get('c');if(qc&&CURS.some(c=>c.id===qc))curSel=qc;
+  if(!Array.isArray(CURS)){ // an older server without /api/curricula: fall back to one course grouped by stage
+    const g={};MODS.forEach(m=>{const k=m.stage_id||'_';(g[k]=g[k]||{id:k,title:m.stage_title||'Modules',units:[]}).units.push({module_id:m.id,key:m.id,owned:false,status:'ready',title:m.title,summary:'',lessons:m.lessons.length,done:m.done,first_lesson:null})});
+    CURS=[{id:'core',title:'Core Systems Engineering',summary:'(This server is older than the page: restart it to get curricula.)',audience:'',level:'',status:'',version:'',source:'builtin',requires:{curricula:[],modules:[]},capstones:[],levels:Object.values(g),progress:{lessons:MODS.reduce((n,m)=>n+m.lessons.length,0),done:MODS.reduce((n,m)=>n+m.done,0),ready_units:MODS.length,planned_units:0}}];}
+  if(typeof WB!=='object'||!WB||!WB.lessons)WB={lessons:{},due:[],summary:{whiteboarded:0,due_now:0,total_lessons:0,mean_last_score:null}};
   if(!CURS.some(c=>c.id===curSel))curSel=CURS[0]?CURS[0].id:'core';
   renderNav();
   const q=new URLSearchParams(location.search);
@@ -144,10 +164,7 @@ async function open_(mid,lid){
   cur={m:mid,l:lid};history.replaceState(null,'',`?c=${encodeURIComponent(curSel)}&m=${mid}&l=${lid}`);renderNav();
   const mod=MODS.find(m=>m.id===mid),idx=mod.lessons.findIndex(l=>l.id===lid),les=mod.lessons[idx];
   const r=await fetch(`/api/modules/${mid}/${lid}`).then(x=>x.json());
-  let html=marked.parse(r.markdown,{gfm:true});
-  // Convert mermaid code blocks to mermaid divs before sanitizing
-  html=html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,'<div class="mermaid">$1</div>');
-  html=DOMPurify.sanitize(html,{ADD_TAGS:['div'],ADD_ATTR:['class']});
+  const html=renderMd(r.markdown);
   const pr=les.practice.length?`<h2>Practice</h2>`+les.practice.map(p=>p.status==='missing'?`<div class="prac"><span class="dot missing"></span><span>${esc(p.id)} <small>not yet authored</small></span><span></span><span></span></div>`:`<a class="prac" href="/?p=${encodeURIComponent(p.id)}"><span class="dot ${p.status}"></span><span>${esc(p.title)}</span><span class="tag lang">${esc(LANG[p.language]||p.language)}</span><span class="tag">L${p.level}</span></a>`).join(''):'';
   const prev=idx>0?mod.lessons[idx-1]:null,next=idx<mod.lessons.length-1?mod.lessons[idx+1]:null;
   $('lesson').className='md';
@@ -156,7 +173,7 @@ async function open_(mid,lid){
    <div class="wbp" id="wbpanel"></div>
    <div class="nav2">${prev?`<a class="btn" href="#" data-m="${mod.id}" data-l="${prev.id}">← ${esc(prev.title)}</a>`:'<span></span>'}${next?`<a class="btn" href="#" data-m="${mod.id}" data-l="${next.id}">${esc(next.title)} →</a>`:''}</div>`;
   document.querySelectorAll('#lesson pre code').forEach(c=>{try{hljs.highlightElement(c)}catch{}});
-  mermaid.contentLoaded();
+  if(document.querySelector('#lesson .mermaid'))ensureMermaid().then(()=>mermaid.contentLoaded()).catch(()=>{});
   renderWb(mid,lid);
   $('done').onclick=async()=>{await fetch(`/api/modules/${mid}/${lid}/done?done=${!les.done}`,{method:'POST'});await load({m:mid,l:lid})};
   scrollTo(0,0);

@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Ask a question or share an idea
-    url: https://github.com/RyanJHamby/drillpad-oss/discussions
+    url: https://github.com/RyanJHamby/drillpad/discussions
     about: For usage questions, ideas for new tracks, and general discussion.
   - name: Report a security issue privately
-    url: https://github.com/RyanJHamby/drillpad-oss/security/advisories/new
+    url: https://github.com/RyanJHamby/drillpad/security/advisories/new
     about: Please do not open a public issue for vulnerabilities.

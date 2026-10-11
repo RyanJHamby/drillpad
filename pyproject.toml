@@ -32,10 +32,10 @@ voice = []
 sync = ["boto3>=1.34"]
 
 [project.urls]
-Homepage = "https://github.com/RyanJHamby/drillpad-oss"
-Repository = "https://github.com/RyanJHamby/drillpad-oss"
-Issues = "https://github.com/RyanJHamby/drillpad-oss/issues"
-Changelog = "https://github.com/RyanJHamby/drillpad-oss/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/RyanJHamby/drillpad"
+Repository = "https://github.com/RyanJHamby/drillpad"
+Issues = "https://github.com/RyanJHamby/drillpad/issues"
+Changelog = "https://github.com/RyanJHamby/drillpad/blob/main/CHANGELOG.md"
 
 [project.scripts]
 drillpad = "drillpad.cli:main"
