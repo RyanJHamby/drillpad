@@ -81,10 +81,10 @@ async function loadWb(){try{WB=await fetch('/api/whiteboard').then(r=>r.json())}
 try{curSel=localStorage.getItem('dp_cur')||'core'}catch{}
 async function load(sel){
   [MODS,CURS]=await Promise.all([fetch('/api/modules').then(r=>r.json()),fetch('/api/curricula').then(r=>r.json()),loadWb()]);
-  const qc=new URLSearchParams(location.search).get('c');if(qc&&CURS.some(c=>c.id===qc))curSel=qc;
   if(!Array.isArray(CURS)){ // an older server without /api/curricula: fall back to one course grouped by stage
     const g={};MODS.forEach(m=>{const k=m.stage_id||'_';(g[k]=g[k]||{id:k,title:m.stage_title||'Modules',units:[]}).units.push({module_id:m.id,key:m.id,owned:false,status:'ready',title:m.title,summary:'',lessons:m.lessons.length,done:m.done,first_lesson:null})});
     CURS=[{id:'core',title:'Core Systems Engineering',summary:'(This server is older than the page: restart it to get curricula.)',audience:'',level:'',status:'',version:'',source:'builtin',requires:{curricula:[],modules:[]},capstones:[],levels:Object.values(g),progress:{lessons:MODS.reduce((n,m)=>n+m.lessons.length,0),done:MODS.reduce((n,m)=>n+m.done,0),ready_units:MODS.length,planned_units:0}}];}
+  const qc=new URLSearchParams(location.search).get('c');if(qc&&CURS.some(c=>c.id===qc))curSel=qc;
   if(typeof WB!=='object'||!WB||!WB.lessons)WB={lessons:{},due:[],summary:{whiteboarded:0,due_now:0,total_lessons:0,mean_last_score:null}};
   if(!CURS.some(c=>c.id===curSel))curSel=CURS[0]?CURS[0].id:'core';
   renderNav();
@@ -155,7 +155,9 @@ function renderNav(){
     }).join('');
     return (lv.units.length?`<div class="lvl">${esc(lv.title)}</div>`+units:'');
   }).join('');
-  $('nav').innerHTML=bar+sel+info+levels;
+  const pv=c.id==='core'?MODS.filter(m=>m.private&&!(m.curriculum_ids||[]).length||m.private&&(m.curriculum_ids||[]).every(i=>i==='private')):[];
+  const priv=pv.length?`<div class="lvl">Private (local only)</div>`+pv.map(modBlock).join(''):'';
+  $('nav').innerHTML=bar+sel+info+levels+priv;
 }
 async function open_(mid,lid){
   const mm=MODS.find(m=>m.id===mid);
