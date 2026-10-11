@@ -4,7 +4,7 @@
     drillpad service status      is it loaded, and is the port answering
     drillpad service uninstall   stop it and remove the plist (your data is untouched)
 
-The agent runs `uv run --no-sync --project <repo> drillpad serve`. It binds 127.0.0.1 only, restarts if it
+The agent runs `uv run --no-sync --project <repo> drillpad serve` from a source checkout, or the installed `drillpad serve` for a tool install. It binds 127.0.0.1 only, restarts if it
 crashes, and writes its log to ~/Library/Logs/drillpad.log. Any DRILLPAD_* variables set when you run `install` are
 copied into the agent. After changing dependencies run `uv sync` yourself, and re-run `install` after changing those variables.
 """
@@ -24,13 +24,20 @@ PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 LOG = Path.home() / "Library" / "Logs" / "drillpad.log"
 
 
-def build_plist(uv: str, project: Path, port: int = PORT, log: Path = LOG, extra_env: dict[str, str] | None = None) -> dict:
-    env = {"PATH": f"{Path(uv).parent}:/usr/local/bin:/usr/bin:/bin", "HOME": str(Path.home())}
+def build_plist(uv: str | None, project: Path | None, port: int = PORT, log: Path = LOG, extra_env: dict[str, str] | None = None,
+                exe: str | None = None) -> dict:
+    """LaunchAgent for a source checkout (`uv run --project <repo> drillpad serve`) or, when `project` is None, for an installed
+    `drillpad` executable (for example from `uv tool install`)."""
+    if project is not None:
+        launcher, workdir, bindir = [uv, "run", "--no-sync", "--project", str(project), "drillpad", "serve", "--port", str(port)], str(project), Path(uv).parent
+    else:
+        launcher, workdir, bindir = [exe, "serve", "--port", str(port)], str(Path.home()), Path(exe).parent
+    env = {"PATH": f"{bindir}:/usr/local/bin:/usr/bin:/bin", "HOME": str(Path.home())}
     env.update({k: v for k, v in (extra_env or {}).items() if k.startswith("DRILLPAD_")})
     return {
         "Label": LABEL,
-        "ProgramArguments": [uv, "run", "--no-sync", "--project", str(project), "drillpad", "serve", "--port", str(port)],
-        "WorkingDirectory": str(project),
+        "ProgramArguments": launcher,
+        "WorkingDirectory": workdir,
         "EnvironmentVariables": env,
         "RunAtLoad": True,
         "KeepAlive": True,
@@ -56,20 +63,27 @@ def answering(port: int = PORT) -> bool:
         return False
 
 
-def install(project: Path, port: int = PORT) -> int:
+def install(project: Path | None, port: int = PORT) -> int:
     if sys.platform != "darwin":
         print("service install is macOS only (uses launchd).")
         return 1
-    uv = shutil.which("uv")
-    if not uv:
-        print("uv not found on PATH; install it first (https://docs.astral.sh/uv/).")
-        return 1
+    uv = exe = None
+    if project is not None:
+        uv = shutil.which("uv")
+        if not uv:
+            print("uv not found on PATH; install it first (https://docs.astral.sh/uv/).")
+            return 1
+    else:
+        exe = shutil.which("drillpad")
+        if not exe:
+            print("drillpad is not on your PATH. Install it with `uv tool install <repo>` (then `uv tool update-shell`) or run this from a source checkout.")
+            return 1
     if answering(port) and _launchctl("print", f"{_domain()}/{LABEL}").returncode != 0:
         print(f"Something else is already serving on 127.0.0.1:{port}; stop it first or pick another port.")
         return 1
     PLIST.parent.mkdir(parents=True, exist_ok=True)
     LOG.parent.mkdir(parents=True, exist_ok=True)
-    PLIST.write_bytes(plistlib.dumps(build_plist(uv, project, port, extra_env=dict(os.environ))))
+    PLIST.write_bytes(plistlib.dumps(build_plist(uv, project, port, extra_env=dict(os.environ), exe=exe)))
     _launchctl("bootout", f"{_domain()}/{LABEL}")  # replace a previous install cleanly; fine if absent
     out = _launchctl("bootstrap", _domain(), str(PLIST))
     if out.returncode != 0:

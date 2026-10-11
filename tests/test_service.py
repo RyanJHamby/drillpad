@@ -18,3 +18,9 @@ def test_only_drillpad_env_vars_are_passed_through(tmp_path):
     out = p["EnvironmentVariables"]
     assert out["DRILLPAD_BACKUP_DIR"] == "/x/icloud" and out["DRILLPAD_DB"] == "/x/db"
     assert "AWS_SECRET_ACCESS_KEY" not in out and out["HOME"] != "/evil"
+
+
+def test_installed_tool_runs_the_drillpad_executable_not_uv(tmp_path):
+    p = service.build_plist(None, None, 8765, tmp_path / "log", exe="/home/u/.local/bin/drillpad")
+    assert p["ProgramArguments"] == ["/home/u/.local/bin/drillpad", "serve", "--port", "8765"]
+    assert p["EnvironmentVariables"]["PATH"].startswith("/home/u/.local/bin:") and p["RunAtLoad"] and p["KeepAlive"]

@@ -53,8 +53,13 @@ def main() -> None:
     elif args.cmd == "service":
         from drillpad import service
 
-        project = Path(__file__).resolve().parent.parent.parent
+        root = Path(__file__).resolve().parent.parent.parent
+        project = root if (root / "pyproject.toml").exists() else None  # None: an installed tool, not a source checkout
         raise SystemExit({"install": lambda: service.install(project), "status": service.status,
                           "uninstall": service.uninstall}[args.action]())
     else:
         parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
