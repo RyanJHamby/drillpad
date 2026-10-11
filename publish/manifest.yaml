@@ -28,6 +28,7 @@ rename:
   publish/CODE_OF_CONDUCT.md: CODE_OF_CONDUCT.md
   publish/SECURITY.md: SECURITY.md
   publish/github/pull_request_template.md: .github/pull_request_template.md
+  publish/github/dependabot.yml: .github/dependabot.yml
   publish/github/ISSUE_TEMPLATE/config.yml: .github/ISSUE_TEMPLATE/config.yml
   publish/github/ISSUE_TEMPLATE/bug.yml: .github/ISSUE_TEMPLATE/bug.yml
   publish/github/ISSUE_TEMPLATE/content-correction.yml: .github/ISSUE_TEMPLATE/content-correction.yml
