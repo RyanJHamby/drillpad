@@ -12,6 +12,7 @@ include:
   - tests/**
   - publish/**
   - docs/MAINTAINING_THE_COURSE.md
+  - docs/CURRICULA.md
   - docs/security.md
   - src/drillpad/**
   - LICENSE

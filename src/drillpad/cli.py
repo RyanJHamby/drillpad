@@ -10,6 +10,7 @@ def main() -> None:
     serve.add_argument("--port", type=int, default=8765)
     sub.add_parser("paths", help="print where your data, backups, and private overlay live")
     sub.add_parser("backup", help="take a consistent snapshot of the database now")
+    sub.add_parser("curricula", help="list curricula, where they load from, and how much of each is written")
     svc = sub.add_parser("service", help="macOS login item so the UI runs without a terminal")
     svc.add_argument("action", choices=["install", "status", "uninstall"])
     args = parser.parse_args()
@@ -38,6 +39,17 @@ def main() -> None:
 
         dest = backup_database(paths.db_path())
         print(f"backup written: {dest}" if dest else "nothing new to back up")
+    elif args.cmd == "curricula":
+        from drillpad.core import curricula as cur
+        from drillpad.web.modules import _load_all
+
+        _mods, found = _load_all()
+        for c in found.values():
+            ready = sum(1 for u in c.units() if u.status == "ready")
+            planned = sum(1 for u in c.units() if u.status == "planned")
+            where = f" [{c.root}]" if c.root else ""
+            print(f"{c.id:<22} {c.title}  ({c.source}; {ready} ready, {planned} planned){where}")
+        print("\nroots searched:", ", ".join(f"{s}={p}" for s, p in cur.roots()))
     elif args.cmd == "service":
         from drillpad import service
 

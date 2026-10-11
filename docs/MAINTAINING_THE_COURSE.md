@@ -35,6 +35,11 @@ python scripts/course.py new-module ID STAGE "Title"
 4. Set `status: complete` in the module entry only after the checklist below passes.
 5. Commit (signed) and add a journal line: `pow log "added <lesson>: why it was missing, what was checked"`.
 
+## Add a curriculum (a focused track)
+
+See `docs/CURRICULA.md`. In short: `new-curriculum` creates the track, list its planned modules in `curriculum.yaml`, then write them with
+`new-module KEY --curriculum ID` and `new-lesson ID.KEY ...`. Reuse core modules with `uses:` instead of copying them.
+
 ## Add a module
 
 1. Search first: `grep -ril "<topic>" src/drillpad/content/modules`. Prefer extending an existing module.

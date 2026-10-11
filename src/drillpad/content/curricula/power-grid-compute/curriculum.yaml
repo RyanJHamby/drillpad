@@ -1,0 +1,60 @@
+id: power-grid-compute
+title: "Power Grids & Compute"
+summary: >
+  How electricity systems work and how large-scale compute, especially AI infrastructure, interacts with them: power and
+  cooling, load shapes, markets and interconnection, and software that makes compute flexible or grid-aware. Starts from first
+  principles and reuses the core modules on GPUs, cost, and scheduling.
+audience: "Engineers moving into energy-aware infrastructure, or building products at the grid and datacenter boundary."
+level: intermediate
+status: draft
+version: 0.1.0
+requires:
+  curricula: [core]
+  modules: [reasoning-under-constraints]
+levels:
+  - id: foundations
+    title: "How electricity systems work"
+    units:
+      - module: grid-fundamentals
+        title: "Grid Fundamentals"
+        summary: "Generation, transmission, distribution, frequency, balancing, reserves, and why supply and demand must match at every instant."
+      - module: power-math-for-engineers
+        title: "Power Math for Engineers"
+        summary: "Watts versus watt-hours, load and capacity factors, efficiency, PUE, cost per unit of energy, and back-of-envelope sizing."
+  - id: markets
+    title: "Markets, siting, and economics"
+    units:
+      - module: wholesale-markets-and-pricing
+        title: "Wholesale Markets and Pricing"
+        summary: "Day-ahead versus real-time, locational prices and congestion, capacity and ancillary services, and what price signals tell a flexible load."
+      - module: interconnection-and-siting
+        title: "Interconnection, Siting, and Contracts"
+        summary: "Why getting power to a site takes years, how interconnection queues and power purchase agreements work, and behind-the-meter options."
+  - id: compute
+    title: "Compute meets the grid"
+    units:
+      - uses: gpu-fundamentals
+      - uses: cost-modeling-ai-inference
+      - uses: ai-platform-orchestration
+      - module: datacenter-power-and-cooling
+        title: "Datacenter Power and Cooling"
+        summary: "Power delivery chain, backup, rack density, air versus liquid cooling, and how they bound what a site can host."
+      - module: ai-load-profiles
+        title: "AI Load Profiles"
+        summary: "Training versus inference load shapes, ramping and synchronization, and how much of a workload is actually flexible."
+  - id: software
+    title: "Software for energy systems"
+    units:
+      - module: load-forecasting
+        title: "Load and Price Forecasting"
+        summary: "Time-series methods for demand, generation, and price; evaluation that respects time; and the cost of being wrong."
+      - module: flexible-compute-scheduling
+        title: "Flexible and Grid-Aware Compute"
+        summary: "Shifting work in time and place using price and carbon signals, deadlines, and the reliability limits of doing so."
+      - uses: data-pipeline-architecture
+      - uses: data-quality-validation
+      - uses: stream-processing-fundamentals
+capstones:
+  - id: price-aware-batch-scheduler
+    title: "Build a price-aware batch scheduler"
+    brief: "Given a price or carbon time series and a queue of deferrable jobs with deadlines and power draw, schedule them to minimize cost or emissions. Evaluate against a naive baseline on held-out days and report where the savings vanish."

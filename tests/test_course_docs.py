@@ -41,7 +41,7 @@ def test_private_module_scaffold_stays_in_the_overlay_and_never_touches_the_repo
     paths_before = course.PATHS.read_text()
 
     class NewModule:
-        id, stage, title, language, private = "my-private-notes", "My Private Notes", None, "systems", True
+        id, stage, title, language, private, curriculum, level = "my-private-notes", "My Private Notes", None, "systems", True, None, None
 
     assert course.cmd_new_module(NewModule) == 0
     d = tmp_path / "priv" / "modules" / "my-private-notes"

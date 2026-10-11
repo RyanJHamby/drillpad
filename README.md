@@ -38,6 +38,11 @@ binds to `127.0.0.1` only and runs the code you type, so do not expose it to a n
 
 ## The course
 
+The course is a set of **curricula**: the foundational `core` track plus focused tracks (currently power grids and compute, and
+trading systems) that reuse core modules and add depth. You can add your own as a folder, a private track, or a separate git
+repository. See [`docs/CURRICULA.md`](docs/CURRICULA.md).
+
+
 `python scripts/course.py check` verifies the course (every module placed, lessons listed, generated docs fresh);
 `report` lists thin lessons, open `[VERIFY]` tags, and stale or unverified lessons; `new-lesson` and `new-module` scaffold
 additions. See [`docs/MAINTAINING_THE_COURSE.md`](docs/MAINTAINING_THE_COURSE.md).

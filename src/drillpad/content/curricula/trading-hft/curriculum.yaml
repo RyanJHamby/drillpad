@@ -1,0 +1,67 @@
+id: trading-hft
+title: "Trading Systems & HFT Principles"
+summary: >
+  How electronic markets work and how trading systems are built and run: market microstructure, low-latency engineering,
+  strategy families, execution, risk, and the infrastructure around research and backtesting. Reuses the core systems modules
+  that matter most here and adds trading-specific depth over time.
+audience: "Engineers who want to build or interview for trading systems, from market data to risk."
+level: advanced
+status: draft
+version: 0.1.0
+requires:
+  curricula: [core]
+  modules: [concurrency-fundamentals, os-fundamentals]
+levels:
+  - id: markets
+    title: "Markets and microstructure"
+    units:
+      - uses: trading-and-market-data
+      - module: market-microstructure
+        title: "Market Microstructure"
+        summary: "Spreads, depth, queue position, tick size, auctions, adverse selection, and how the order book's shape shows up in strategy results."
+      - module: order-types-and-venues
+        title: "Order Types, Venues, and Fees"
+        summary: "How orders are expressed and routed, how fees and rebates change behavior, and what market-structure rules mean for a system."
+  - id: engineering
+    title: "Low-latency engineering"
+    units:
+      - uses: latency-systems
+      - uses: lock-free-systems
+      - uses: cpp-essentials
+      - uses: network-fundamentals-advanced
+      - module: timestamping-and-clocks
+        title: "Time, Clocks, and Timestamping"
+        summary: "Clock synchronization, hardware timestamps, measuring tick-to-trade honestly, and where nanoseconds are lost."
+      - module: kernel-bypass-and-nic-offload
+        title: "Kernel Bypass and NIC Offload"
+        summary: "Why the kernel network path costs time, what bypass changes, and the trade-offs in operations and debugging."
+  - id: strategies
+    title: "Strategy families"
+    units:
+      - module: market-making
+        title: "Market Making"
+        summary: "Quoting, inventory risk, skew, adverse selection, and how latency and fees decide whether quoting pays."
+      - module: statistical-arbitrage
+        title: "Statistical Arbitrage"
+        summary: "Relative-value ideas, signal decay, costs and capacity, and the ways backtests fool you."
+      - module: execution-algorithms
+        title: "Execution Algorithms"
+        summary: "Slicing a large order: TWAP, VWAP, participation, implementation shortfall, and market impact."
+      - module: alpha-research-process
+        title: "The Research Process"
+        summary: "From idea to production signal: data hygiene, walk-forward testing, overfitting, and the review discipline around them."
+  - id: risk-and-operations
+    title: "Risk, controls, and operations"
+    units:
+      - module: risk-and-position-management
+        title: "Risk and Position Management"
+        summary: "Limits, exposures, PnL attribution, and how risk is computed in the hot path versus on the side."
+      - module: pretrade-controls
+        title: "Pre-Trade Controls and Kill Switches"
+        summary: "Fat-finger checks, rate and notional limits, circuit breakers for your own system, and how controls fail."
+      - uses: failure-modes-resilience
+      - uses: deployment-and-incidents
+capstones:
+  - id: matching-engine-and-market-maker
+    title: "Build a toy exchange and a market maker"
+    brief: "Implement a limit order book matching engine, replay a recorded or generated message stream, and run a simple quoting strategy against it. Report latency percentiles and PnL attribution, and explain what you would change for production."

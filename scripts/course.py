@@ -7,6 +7,8 @@
   python scripts/course.py new-lesson MODULE SLUG "Title"       append a lesson skeleton to an existing module
   python scripts/course.py new-module ID STAGE "Title" [--language systems]   create a module and place it in a stage
   python scripts/course.py new-module ID --private "Title"                    create a LOCAL-ONLY module in the private overlay (never exported)
+  python scripts/course.py new-curriculum ID "Title" [--private | --dest DIR]  create a curriculum (bundled, private, or a standalone pack in DIR)
+  python scripts/course.py new-module KEY --curriculum CID [--level LID] "Title"   write a module a curriculum owns (or has planned)
 
 Everything here is additive: scaffolds refuse to overwrite, and docs only rewrite marked generated regions.
 """
@@ -73,18 +75,44 @@ def load_paths() -> dict:
     return yaml.safe_load(PATHS.read_text()) or {}
 
 
+def curricula_api():
+    sys.path.insert(0, str(ROOT / "src"))
+    from drillpad.core import curricula as cur
+
+    return cur
+
+
+def module_entry(d: Path, y: dict) -> dict:
+    lessons = []
+    for ls in y.get("lessons", []):
+        path = d / "lessons" / f"{ls['id']}.md"
+        text = path.read_text() if path.exists() else ""
+        lessons.append({"id": ls["id"], "title": ls["title"], "path": path, "exists": path.exists(),
+                        "bytes": len(text.encode()), "words": len(text.split()), "text": text})
+    return {"dir": d, "yaml": y, "lessons": lessons}
+
+
 def load_modules() -> dict[str, dict]:
+    """Core modules plus modules owned by the repo's bundled curricula (global id `<curriculum>.<key>`)."""
     out = {}
     for f in sorted(MODULES.glob("*/module.yaml")):
         d = yaml.safe_load(f.read_text())
-        lessons = []
-        for ls in d.get("lessons", []):
-            path = f.parent / "lessons" / f"{ls['id']}.md"
-            text = path.read_text() if path.exists() else ""
-            lessons.append({"id": ls["id"], "title": ls["title"], "path": path, "exists": path.exists(),
-                            "bytes": len(text.encode()), "words": len(text.split()), "text": text})
-        out[d["id"]] = {"dir": f.parent, "yaml": d, "lessons": lessons}
+        out[d["id"]] = module_entry(f.parent, d)
+    cur = curricula_api()
+    found, _ = cur.load_curricula(set(out), sources={"bundled"})
+    for cc in found.values():
+        for gid, mdir in cur.owned_modules(cc).items():
+            y = yaml.safe_load((mdir / "module.yaml").read_text()) or {}
+            y["id"] = gid
+            out[gid] = {**module_entry(mdir, y), "curriculum": cc.id}
     return out
+
+
+def bundled_curricula():
+    """(curricula, problems) for the repo's own curricula, with reused modules resolved against what is on disk."""
+    cur = curricula_api()
+    core = {m for m in (p.parent.name for p in MODULES.glob("*/module.yaml"))}
+    return cur.load_curricula(core, sources={"bundled"})
 
 
 def minutes(mod: dict) -> int:
@@ -139,6 +167,23 @@ def generated_block(mods: dict, paths: dict) -> str:
               "", f"{len(ids)} modules, {n} lessons, about {hours(mins)} hours of reading.", ""]
         L += [f"{i}. [{mods[m]['yaml']['title']}](/learn?m={m}) ({len(mods[m]['lessons'])})" for i, m in enumerate(ids, 1)]
         L.append("")
+    found, _ = bundled_curricula()
+    if found:
+        L += ["## Curricula", "", "Focused tracks that reuse core modules and add depth on one subject. Planned units are a roadmap, not yet written.", ""]
+        for cc in found.values():
+            ready = sum(1 for u in cc.units() if u.status == "ready")
+            planned = sum(1 for u in cc.units() if u.status == "planned")
+            L += [f"### {cc.title} (`{cc.id}`)", "", cc.summary, "",
+                  f"Status: {cc.status} · level: {cc.level or 'n/a'} · {ready} units ready, {planned} planned", ""]
+            for lv in cc.levels:
+                L.append(f"**{lv.title}**")
+                L.append("")
+                for u in lv.units:
+                    mark = "" if u.status == "ready" else f" _({u.status})_"
+                    owned = "" if u.owned else " (core)"
+                    label = mods[u.module_id]["yaml"]["title"] if u.module_id in mods else (u.title or u.key)
+                    L.append(f"- {label}{owned}{mark}")
+                L.append("")
     L += ["## Prerequisites", ""]
     L += [f"- `{m}` needs {', '.join(f'`{r}`' for r in reqs)}" for m, reqs in sorted((paths.get("requires") or {}).items())]
     L += ["", END]
@@ -183,7 +228,7 @@ def problems(mods: dict, paths: dict) -> tuple[list[str], list[str]]:
             placed[m] = st["id"]
             if m not in mods:
                 warns.append(f"paths.yaml lists {m} but it is not on disk yet")
-    for m in sorted(set(mods) - set(placed)):
+    for m in sorted(m for m in set(mods) - set(placed) if not mods[m].get("curriculum")):
         errors.append(f"module {m} is on disk but not in any stage of paths.yaml (use `new-module` or add it)")
     for m, reqs in (paths.get("requires") or {}).items():
         for r in [m, *reqs]:
@@ -196,6 +241,7 @@ def problems(mods: dict, paths: dict) -> tuple[list[str], list[str]]:
                   for ls in mod["lessons"] if not ls["exists"]]
         files = {p.stem for p in (mod["dir"] / "lessons").glob("*.md")} if (mod["dir"] / "lessons").exists() else set()
         errors += [f"{mid}: lessons/{f}.md exists but is not listed in module.yaml (invisible in the app)" for f in sorted(files - set(ids))]
+    errors += [f"curricula: {p}" for p in bundled_curricula()[1]]
     try:
         for path, text in expected_docs(mods, paths).items():
             if path.read_text() != text:
@@ -271,14 +317,29 @@ def private_modules_dir() -> Path:
     return paths.private_dir() / "modules"
 
 
+def curriculum_root(cid: str) -> Path | None:
+    cur = curricula_api()
+    for source, root in cur.roots():
+        for d in cur.curriculum_dirs(root):
+            cc, _ = cur.read_curriculum(d, source)
+            if cc and cc.id == cid:
+                return d
+    return None
+
+
 def find_module(module_id: str) -> dict:
     mods = load_modules()
     if module_id in mods:
         return mods[module_id]
+    if "." in module_id:  # `<curriculum>.<key>`: a module owned by a bundled, private, or external curriculum
+        cid, key = module_id.split(".", 1)
+        root = curriculum_root(cid)
+        if root and (root / "modules" / key / "module.yaml").exists():
+            y = yaml.safe_load((root / "modules" / key / "module.yaml").read_text()) or {}
+            return {**module_entry(root / "modules" / key, y), "private": root != ROOT and ROOT not in root.parents}
     d = private_modules_dir() / module_id
     if (d / "module.yaml").exists():
-        return {"dir": d, "yaml": yaml.safe_load((d / "module.yaml").read_text()), "lessons": [
-            {"id": ls["id"]} for ls in yaml.safe_load((d / "module.yaml").read_text()).get("lessons", [])], "private": True}
+        return {**module_entry(d, yaml.safe_load((d / "module.yaml").read_text())), "private": True}
     raise SystemExit(f"unknown module {module_id}")
 
 
@@ -303,7 +364,110 @@ def cmd_new_lesson(a) -> int:
     return 0
 
 
+CURRICULUM_TEMPLATE = """id: {id}
+title: {title}
+summary: >
+  TODO: what this track teaches and who it is for.
+audience: "TODO"
+level: intermediate        # beginner | intermediate | advanced
+status: draft              # draft | active | complete
+version: 0.1.0
+requires:
+  curricula: []            # recommended earlier tracks, e.g. [core]
+  modules: []              # recommended earlier modules (global ids)
+levels:
+  - id: foundations
+    title: "Foundations"
+    units: []              # add: `- module: some-key` (owned; planned until written) or `- uses: existing-module-id` (reused)
+capstones: []
+"""
+
+
+def cmd_new_curriculum(a) -> int:
+    cur = curricula_api()
+    if not cur.ID_RE.match(a.id) or a.id == cur.CORE_ID:
+        raise SystemExit(f"invalid curriculum id {a.id!r} (lowercase letters, digits, hyphens; 'core' is reserved)")
+    if curriculum_root(a.id):
+        raise SystemExit(f"curriculum {a.id} already exists at {curriculum_root(a.id)}; nothing written")
+    if a.dest:
+        d = Path(a.dest).expanduser()
+        if d.exists() and any(d.iterdir()):
+            raise SystemExit(f"{d} is not empty; nothing written")
+        d.mkdir(parents=True, exist_ok=True)
+        (d / ".gitignore").write_text(".DS_Store\n")
+        (d / "README.md").write_text(f"# {a.title}\n\nA drillpad curriculum pack. Plug it in with `export DRILLPAD_CURRICULA_PATH={d}` "
+                                     "(or add the folder to that colon-separated list).\n")
+    elif a.private:
+        d = private_modules_dir().parent / "curricula" / a.id
+        d.mkdir(parents=True)
+    else:
+        d = cur.BUNDLED_DIR / a.id
+        d.mkdir(parents=True)
+    (d / "modules").mkdir(exist_ok=True)
+    (d / "curriculum.yaml").write_text(CURRICULUM_TEMPLATE.format(id=a.id, title=json.dumps(a.title)))
+    where = "local only" if a.private else "standalone pack" if a.dest else "bundled with the repo"
+    print(f"created {d} ({where})")
+    print(f"next: edit curriculum.yaml, then `python scripts/course.py new-module KEY --curriculum {a.id} \"Title\"` for each module")
+    return 0
+
+
+def insert_unit(text: str, level_id: str, unit_lines: list[str]) -> str:
+    lines = text.split("\n")
+    start = next((i for i, ln in enumerate(lines) if re.fullmatch(rf"\s*- id: \"?{re.escape(level_id)}\"?\s*", ln)), None)
+    if start is None:
+        raise SystemExit(f"level {level_id!r} not found in curriculum.yaml")
+    end = len(lines)
+    for i in range(start + 1, len(lines)):
+        if re.match(r"^  - id:", lines[i]) or (lines[i] and not lines[i].startswith(" ")):
+            end = i
+            break
+    while end > start and (not lines[end - 1].strip() or lines[end - 1].lstrip().startswith("#")):
+        end -= 1
+    ui = next((i for i in range(start, end) if re.match(r"^\s+units:", lines[i])), None)
+    if ui is None:
+        raise SystemExit(f"level {level_id!r} has no `units:` key")
+    if re.match(r"^\s+units:\s*\[\]", lines[ui]):
+        lines[ui] = re.sub(r"units:\s*\[\]", "units:", lines[ui])
+        end = ui + 1
+    lines[end:end] = unit_lines
+    return "\n".join(lines)
+
+
+def cmd_new_curriculum_module(a) -> int:
+    cur = curricula_api()
+    root = curriculum_root(a.curriculum)
+    if not root:
+        raise SystemExit(f"unknown curriculum {a.curriculum}")
+    key = a.id
+    if not cur.KEY_RE.match(key):
+        raise SystemExit(f"invalid module key {key!r} (lowercase letters, digits, hyphens)")
+    mdir = root / "modules" / key
+    if mdir.exists():
+        raise SystemExit(f"{mdir} already exists; nothing written")
+    ypath = root / "curriculum.yaml"
+    raw = yaml.safe_load(ypath.read_text()) or {}
+    unit = next((u for lv in raw.get("levels") or [] for u in lv.get("units") or [] if u.get("module") == key), None)
+    title = a.title or a.stage or (unit or {}).get("title")
+    if not title:
+        raise SystemExit('usage: new-module KEY --curriculum CID [--level LID] "Title"')
+    summary = (unit or {}).get("summary") or "TODO"
+    if unit is None:
+        levels = raw.get("levels") or []
+        if not levels:
+            raise SystemExit("the curriculum has no levels; add one to curriculum.yaml first")
+        level_id = a.level or str(levels[-1]["id"])
+        ypath.write_text(insert_unit(ypath.read_text(), level_id,
+                                     [f"      - module: {key}", f"        title: {json.dumps(title)}", f"        summary: {json.dumps(summary)}"]))
+    (mdir / "lessons").mkdir(parents=True)
+    (mdir / "module.yaml").write_text(f"title: {json.dumps(title)}\nlanguage: systems\ndescription: {json.dumps(summary)}\nlessons: []\n")
+    print(f"created {mdir} (global id {a.curriculum}.{key}); {'listed in' if unit is None else 'was already planned in'} curriculum.yaml")
+    print(f'next: python scripts/course.py new-lesson {a.curriculum}.{key} <slug> "<title>"')
+    return 0
+
+
 def cmd_new_module(a) -> int:
+    if a.curriculum:
+        return cmd_new_curriculum_module(a)
     if a.private:
         a.title = a.title or a.stage  # with --private there is no stage, so the first free positional is the title
         if not a.title:
@@ -356,6 +520,12 @@ def main() -> int:
     nm.add_argument("id"), nm.add_argument("stage", nargs="?"), nm.add_argument("title", nargs="?")
     nm.add_argument("--language", default="systems")
     nm.add_argument("--private", action="store_true", help="create in the private overlay instead of the repo")
+    nm.add_argument("--curriculum", help="create the module inside this curriculum instead of the core course")
+    nm.add_argument("--level", help="with --curriculum: the level to add a new unit to (default: the last level)")
+    nc = sub.add_parser("new-curriculum")
+    nc.add_argument("id"), nc.add_argument("title")
+    nc.add_argument("--private", action="store_true"), nc.add_argument("--dest")
+    nc.set_defaults(fn=cmd_new_curriculum)
     nm.set_defaults(fn=cmd_new_module)
     a = p.parse_args()
     return a.fn(a)
