@@ -158,8 +158,7 @@ def test_key_from_env_or_keychain(monkeypatch):
 
 
 def test_http_flow_and_no_secrets_in_db(tmp_path, monkeypatch):
-    # publish-ok: fake value used to prove secrets are never stored
-    secret = "sk-ant-SECRET-should-never-be-stored"
+    secret = "not-a-real-key-must-never-be-stored"
     monkeypatch.setenv("ANTHROPIC_API_KEY", secret)
     stub = StubLLM()
     monkeypatch.setattr(web_interview, "default_llm_factory", lambda: stub)

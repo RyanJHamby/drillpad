@@ -82,7 +82,7 @@ banned_patterns:
     pattern: '/Users/[A-Za-z0-9._-]+'
     reason: local home directory path
   - id: local-docs-path
-    pattern: 'Desktop/(Claude docs|interview-prep)|notes/career'
+    pattern: '(Desktop|Documents|Downloads)/[A-Za-z]'
     reason: reference to private local documents
   - id: email
     pattern: '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}'
