@@ -1,0 +1,107 @@
+# Default-deny manifest for publishing a public copy. Nothing ships unless it matches `include`, is not matched by
+# `exclude`, or is re-allowed by `keep`. Patterns are fnmatch-style on repo-relative POSIX paths ("*" also crosses "/").
+# Review before every release: `python scripts/publish_check.py check`, then `... export --dest <new empty dir>`.
+# Never rewrite this repo's history to publish it (that would invalidate signed commits); publish via export.
+
+include:
+  - pyproject.toml
+  - uv.lock
+  - .gitignore
+  - .github/**
+  - scripts/**
+  - tests/**
+  - publish/**
+  - docs/MAINTAINING_THE_COURSE.md
+  - docs/security.md
+  - src/drillpad/**
+  - LICENSE
+  - LICENSE-CONTENT.md
+
+# Public-facing files are authored under publish/ and shipped under their root names; the private README, AGENTS.md
+# and CLAUDE.md (which name the author and their workflow) are never exported.
+rename:
+  publish/README.public.md: README.md
+  publish/CONTRIBUTING.md: CONTRIBUTING.md
+  publish/CODE_OF_CONDUCT.md: CODE_OF_CONDUCT.md
+  publish/SECURITY.md: SECURITY.md
+
+exclude:
+  - publish/README.public.md
+  - publish/CONTRIBUTING.md
+  - publish/CODE_OF_CONDUCT.md
+  - publish/SECURITY.md
+  # Personal target lists and interview pipeline
+  - docs/inputs/**
+  - docs/journal.md          # personal log; promote after review if you want it public as proof of work
+  - docs/HANDOFF.md
+  - docs/problem-bank-plan.md
+  - docs/COURSE_BACKLOG.md
+  - docs/PUBLISHING.md
+  # Firm profiles: they cite local paths and screening history; only the generic family defaults ship
+  - src/drillpad/content/firms/*.yaml
+  - src/drillpad/content/firms/INDEX.md
+  # Personal career, positioning, and firm-specific documents
+  - src/drillpad/RESUME_CLAIM_WALKTHROUGHS.md
+  - src/drillpad/CANDIDATE_POSITIONING_STRATEGY.md
+  - src/drillpad/WEALTH_CREATION_PATHS.md
+  - src/drillpad/SIDE_PROJECT_PMF_SHAPES.md
+  - src/drillpad/DURABLE_SKILLS_NEXT_5_YEARS.md
+  - src/drillpad/ROLES.md
+  - src/drillpad/ROLE_CUSTOMIZATION_GUIDE.md
+  - src/drillpad/TRACKS.md   # generated from all modules, including private ones; regenerate for a public copy if wanted
+  - src/drillpad/FIRM_SPECIFIC_INTERVIEW_RUBRICS.md
+  - src/drillpad/BEHAVIORAL_AND_STORYTELLING.md
+  - src/drillpad/INTERVIEW_SUCCESS_CRITERIA.md
+  - src/drillpad/TECHNICAL_INTERVIEW_TACTICS.md
+  - src/drillpad/CURRICULUM_GUIDE.md
+
+keep:
+  - src/drillpad/content/firms/generic-*.yaml
+
+# Files that define or test the rules themselves are not scanned for the rule patterns.
+scan_exempt:
+  - publish/manifest.yaml
+
+# Content rules: a match in an exported file is a finding. Suppress one with `publish-ok: <reason>` on the same or the
+# previous line (the reason must say where the claim is sourced). Private patterns (names, employers) belong in
+# <data dir>/private/publish-banned.txt, one regex per line, never in this public file. Private path patterns to
+# withhold (for example a module about one named firm) go in <data dir>/private/publish-exclude.txt, one per line.
+banned_patterns:
+  - id: home-path
+    pattern: '/Users/[A-Za-z0-9._-]+'
+    reason: local home directory path
+  - id: local-docs-path
+    pattern: 'Desktop/(Claude docs|interview-prep)|notes/career'
+    reason: reference to private local documents
+  - id: email
+    pattern: '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}'
+    reason: email address
+    allow: ['noreply@anthropic\.com', '[A-Za-z0-9._%+-]+@example\.(com|org|net)', '[A-Za-z0-9._%+-]+@localhost']
+  - id: secret
+    pattern: '\bsk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+    reason: looks like a credential
+  - id: overclaim
+    pattern: 'actually tests|real interview patterns|what (that )?firm actually'
+    reason: presents an inference as inside knowledge of a firm's process
+  - id: leetcode-boilerplate
+    pattern: 'Example 1:|You may assume that each input would have exactly one solution|Return the answer in any order|\bConstraints:\s*$|Follow[- ]up: Can you'
+    reason: looks like copied third-party problem text; reword in your own words
+    paths: ['src/drillpad/content/packs/**']
+
+forbidden_files:
+  - '*.db'
+  - '*.sqlite'
+  - '*.sqlite3'
+  - '*.apkg'
+  - '*.pem'
+  - '*.p12'
+  - '.env'
+  - '.env.*'
+  - 'backups/*'
+
+required:
+  - file: LICENSE
+    reason: no license chosen yet (owner decision)
+  - file: README.md
+    contains: 'Scope and sources'
+    reason: README must carry the scope and sources statement
