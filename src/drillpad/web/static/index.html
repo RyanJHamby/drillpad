@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>DrillPad</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f7f7f5;--surface:#fff;--fg:#1c1c1a;--mut:#6b6b66;--bd:#e4e3de;--acc:#3b5bdb;--acc-bg:#edf0fd;--ok:#198754;--ok-bg:#e7f5ee;--bad:#c92a2a;--bad-bg:#fdecec;--warn:#b7791f;--code:#f1f0ec;--r:10px}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0e0f11;--surface:#16181b;--fg:#e8e8e6;--mut:#93938d;--bd:#26292d;--acc:#7c95ff;--acc-bg:#1b2140;--ok:#4cc38a;--ok-bg:#12281e;--bad:#ff7b7b;--bad-bg:#2d1618;--warn:#e0b252;--code:#1d2024}}
+:root[data-theme=dark]{--bg:#0e0f11;--surface:#16181b;--fg:#e8e8e6;--mut:#93938d;--bd:#26292d;--acc:#7c95ff;--acc-bg:#1b2140;--ok:#4cc38a;--ok-bg:#12281e;--bad:#ff7b7b;--bad-bg:#2d1618;--warn:#e0b252;--code:#1d2024}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",system-ui,sans-serif;display:grid;grid-template-rows:56px 1fr;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+header{display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--bd)}
+.logo{font-weight:700;letter-spacing:-.02em;font-size:16px}.logo span{color:var(--acc)}
+#ready{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+#ready .lab{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);white-space:nowrap}
+.pbar{height:8px;border-radius:99px;background:var(--code);overflow:hidden;flex:1;min-width:80px;max-width:280px}
+.pbar>i{display:block;height:100%;background:var(--acc);border-radius:99px;transition:width .4s}
+#overall{font-weight:600;min-width:38px}
+#lvls{display:flex;gap:6px}
+.chip{display:flex;flex-direction:column;gap:3px;padding:3px 8px;border:1px solid var(--bd);border-radius:8px;font-size:11px;color:var(--mut);width:64px}
+.chip b{color:var(--fg);font-weight:600;display:flex;justify-content:space-between}
+.chip .pbar{flex:none;width:100%;height:4px;min-width:0;max-width:none}.chip.ready .pbar>i{background:var(--ok)}
+.btn{border:1px solid var(--bd);background:var(--surface);border-radius:8px;padding:6px 12px}
+.btn:hover{background:var(--code)}.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}.btn.pri:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:default}
+#timer{font:600 14px ui-monospace,SFMono-Regular,Menlo,monospace;min-width:48px;text-align:right}
+#timer.over{color:var(--bad)}
+main{display:grid;grid-template-columns:var(--cs,272px) 8px var(--cm,460px) 8px minmax(300px,1fr);grid-template-rows:minmax(0,1fr);min-height:0;min-width:0;overflow:hidden}
+aside,section{min-height:0;min-width:0;display:flex;flex-direction:column;background:var(--surface)}
+aside,#mid{overflow:hidden}.collapsed{visibility:hidden}
+.side-top{padding:10px;border-bottom:1px solid var(--bd);display:flex;flex-direction:column;gap:8px}
+input[type=search],input[type=text],select{width:100%;padding:7px 10px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);border-radius:8px;font:inherit}
+.filters{display:flex;gap:4px;flex-wrap:wrap}.filters button{padding:2px 9px;border:1px solid var(--bd);background:none;border-radius:99px;font-size:12px;color:var(--mut)}
+.filters button.on{background:var(--acc-bg);color:var(--acc);border-color:var(--acc)}
+#list{overflow:auto;flex:1}
+.grp{padding:10px 12px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.item{display:flex;gap:8px;align-items:flex-start;padding:7px 12px;cursor:pointer;border-left:3px solid transparent}
+.item:hover{background:var(--bg)}.item.sel{background:var(--acc-bg);border-left-color:var(--acc)}
+.item .tick{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--bd);flex:none;margin-top:2px;display:grid;place-items:center;font-size:10px;color:#fff}
+.item.done .tick{background:var(--ok);border-color:var(--ok)}
+.item .t{font-weight:500;line-height:1.3}.item small{color:var(--mut);font-size:12px}
+.tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--bd)}
+.tabs{overflow-x:auto;white-space:nowrap;scrollbar-width:none}.tabs button{border:0;background:none;padding:10px 10px;white-space:nowrap;flex:none;color:var(--mut);border-bottom:2px solid transparent;font-weight:500}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--acc)}
+.pane{overflow:auto;padding:18px 22px;flex:1;display:none}.pane.on{display:block}
+.meta{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px}
+.tag{font-size:12px;padding:1px 8px;border-radius:99px;background:var(--code);color:var(--mut)}.tag.lv{background:var(--acc-bg);color:var(--acc);font-weight:600}
+.md h1,.md h2,.md h3{margin:1.1em 0 .4em;line-height:1.25}.md h1{font-size:20px;margin-top:0}.md h2{font-size:16px}.md h3{font-size:14px}
+.md p{margin:.5em 0}.md ul,.md ol{padding-left:1.3em}.md code{background:var(--code);padding:1px 5px;border-radius:5px;font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+.md pre{background:var(--code);padding:12px 14px;border-radius:var(--r);overflow:auto;border:1px solid var(--bd)}.md pre code{background:none;padding:0;font-size:12.5px}
+.md blockquote{margin:.6em 0;padding:.1em 1em;border-left:3px solid var(--bd);color:var(--mut)}
+.md table{border-collapse:collapse}.md td,.md th{border:1px solid var(--bd);padding:4px 8px}
+details{border:1px solid var(--bd);border-radius:8px;padding:8px 12px;margin:8px 0}summary{cursor:pointer;font-weight:500}
+.empty{color:var(--mut);padding:40px 0;text-align:center}
+#editor{flex:1 1 0;min-height:0;position:relative;overflow:hidden}#right{overflow:hidden}
+#outwrap.mini{height:41px!important;min-height:41px}#outwrap.mini #out{display:none}
+#outwrap{height:var(--ch,36%);min-height:120px;display:flex;flex-direction:column;flex:none}
+#outhead{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--bd);min-height:40px}
+#out{overflow:auto;padding:8px 14px;font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;flex:1}
+.pill{padding:2px 10px;border-radius:99px;font-weight:600;font-size:12px}.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.tr{padding:2px 0}.tr.ok{color:var(--ok)}.tr.bad{color:var(--bad)}.tr em{color:var(--mut);font-style:normal}
+#outhead select{width:auto}#outhead .sp{flex:1}
+.lvrow{display:grid;grid-template-columns:150px 1fr 64px;gap:12px;align-items:center;margin:12px 0}.lvrow .pbar{max-width:none;height:10px}.lvrow small{color:var(--mut)}
+.note{font-size:12px;color:var(--mut);margin-top:16px}
+#ivlog{display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto;margin:10px 0}
+.bub{padding:8px 12px;border-radius:12px;max-width:88%;white-space:pre-wrap}.bub.iv{background:var(--code);align-self:flex-start}.bub.me{background:var(--acc);color:#fff;align-self:flex-end}
+.tl{position:relative;height:12px;border-radius:99px;background:var(--code);overflow:hidden;margin:10px 0}.tl i{position:absolute;top:0;bottom:0;background:var(--acc);opacity:.25}.tl i:nth-child(even){opacity:.5}.tl b{position:absolute;top:0;bottom:0;width:3px;background:var(--bad)}
+.row{display:flex;gap:8px;align-items:center}.row select{width:auto}
+textarea{width:100%;min-height:64px;padding:8px 10px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);border-radius:8px;font:inherit}
+.fgrp{margin:14px 0}.fgrp label{display:block;font-weight:600;margin-bottom:4px}.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dimrow{display:grid;grid-template-columns:110px 1fr 70px;gap:10px;align-items:center;margin:6px 0}.dimrow .pbar{max-width:none}
+.verdict{font-size:22px;font-weight:700;padding:10px 14px;border-radius:var(--r);display:flex;justify-content:space-between;align-items:center}.verdict.ok{background:var(--ok-bg);color:var(--ok)}.verdict.bad{background:var(--bad-bg);color:var(--bad)}
+.fix{padding:8px 12px;border-left:3px solid var(--warn);background:var(--code);border-radius:6px;margin:6px 0}
+.chk{display:flex;gap:8px;align-items:flex-start;margin:3px 0}
+
+.gutter{position:relative;background:var(--bd);cursor:col-resize;touch-action:none;transition:background .15s}
+.gutter:hover,.gutter.drag{background:var(--acc)}
+.gutter.h{cursor:row-resize;height:10px;width:auto;flex:none}.gbtn.h{width:44px;height:16px}
+.gbtn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:18px;height:44px;border:1px solid var(--bd);background:var(--surface);color:var(--mut);border-radius:6px;font-size:11px;line-height:1;padding:0;cursor:pointer;z-index:3;display:grid;place-items:center}
+.gutter#g2 .gbtn{top:calc(50% + 52px)}a.btn{color:var(--fg)}
+.gbtn:hover{color:var(--acc);border-color:var(--acc)}
+body.dragging{user-select:none;cursor:col-resize}body.dragging.rowdrag{cursor:row-resize}
+#diffwrap{height:62vh;min-height:260px;resize:vertical;overflow:auto;border:1px solid var(--bd);border-radius:8px;margin:8px 0}
+#diffwrap #diff{height:100%;min-height:240px}
+#diffwrap.full{position:fixed;inset:12px;z-index:50;height:auto;resize:none;background:var(--surface);box-shadow:0 12px 48px rgba(0,0,0,.35);border-radius:12px}
+body.diff-full::after{content:"";position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40}
+body.screen .hintbox,body.screen [data-t=tests]{display:none}body.screen #run{background:var(--surface);color:var(--fg);border-color:var(--bd)}
+#stdinbox{display:none;padding:6px 14px;border-bottom:1px solid var(--bd)}body.screen #stdinbox{display:block}#stdin{width:100%;min-height:34px;max-height:90px;padding:6px 8px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);border-radius:8px;font:12.5px ui-monospace,Menlo,monospace}
+#timer.warn{color:var(--warn)}#timer.paused{opacity:.5}#saved{font-size:11px;color:var(--mut);min-width:110px;text-align:right}@media(max-width:1500px){#saved{display:none}}
+#banner{display:none;padding:8px 14px;background:var(--acc-bg);border-bottom:1px solid var(--bd)}
+header>*{flex:none}header select#canvas{padding:5px 6px}header #ready{flex:1 1 0;min-width:0;overflow:hidden}header .btn,header select{width:auto;white-space:nowrap;padding:5px 10px}header select.btn{padding:5px 6px}
+@media(max-width:1300px){#ready .lab,#lvls{display:none}}
+@media(max-width:1000px){main{grid-template-columns:1fr}aside,.gutter{display:none}}
+</style></head><body>
+<header>
+  <div class="logo">Drill<span>Pad</span></div>
+  <div id="ready" title="Readiness = share of problems at each bar level solved cleanly and at pace (initial heuristic thresholds)">
+    <span class="lab">Readiness</span><div class="pbar"><i id="ovbar" style="width:0%"></i></div><span id="overall">0%</span>
+    <div id="lvls"></div>
+  </div>
+  <button class="btn" id="resetlayout" title="Reset pane sizes (⌘⇧\\)">Reset layout</button>
+  <button class="btn" id="focus" title="Editor only (⌘\\)">Focus</button>
+  <a class="btn" href="/learn" style="text-decoration:none">Learn</a>
+  <a class="btn" href="/questions" style="text-decoration:none">Questions</a>
+  <a class="btn" href="/plan" style="text-decoration:none">Plan</a>
+  <a class="btn" href="/progress" style="text-decoration:none">Progress</a>
+  <label class="btn" title="CoderPad-style: no autocomplete, no hints/tests, countdown clock; Run = your code, Submit = graded tests" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="screen"> Screen mode</label>
+  <select id="screenmin" class="btn" style="display:none"><option>30</option><option selected>45</option><option>60</option><option>90</option></select>
+  <span id="saved" title="Autosave status">Autosave on</span><span id="timer" title="Active time: pauses when you leave this page, switch tabs, or switch apps">00:00</span>
+  <select id="canvas" class="btn" title="What New attempt gives you"><option value="blank">Blank canvas</option><option value="starter">Starter code</option></select>
+  <button class="btn" id="newattempt" title="Start a fresh attempt (resets timer and revisions)">New attempt</button>
+  <button class="btn pri" id="submit" style="display:none" title="Run the graded tests (counts as a submission)">Submit</button>
+  <button class="btn pri" id="run">Run <small style="opacity:.8">⌘↵</small></button>
+</header>
+<main>
+  <aside>
+    <div class="side-top"><input type="search" id="q" placeholder="Search problems, patterns, firms…">
+      <div class="filters" id="filters"></div></div>
+    <div id="list"></div>
+  </aside>
+  <div class="gutter" id="g1" title="Drag to resize · double-click to collapse"><button class="gbtn" id="b1" title="Collapse/expand problem list">‹</button></div>
+  <section id="mid">
+    <div class="tabs" id="tabs"><button data-t="problem" class="on">Problem</button><button data-t="tests">Tests</button><button data-t="history">History</button><button data-t="score">Score</button><button data-t="north">North star</button><button data-t="interview">Interview</button><button data-t="progress">Progress</button></div>
+    <div class="pane on" id="p-problem"><div class="empty">Pick a problem from the list to begin.</div></div>
+    <div class="pane" id="p-tests"><div class="empty">No problem selected.</div></div>
+    <div class="pane" id="p-history"><div class="empty">Pick a problem to see past attempts.</div></div>
+    <div class="pane" id="p-score"><div class="empty">Pick a problem, solve it, then score it here.</div></div>
+    <div class="pane" id="p-north"><div class="empty">Pick a problem first.</div></div>
+    <div class="pane" id="p-interview">
+      <div class="row"><select id="ivfmt"><option>timed-45</option><option>progressive-60</option><option>oa</option></select>
+        <button class="btn pri" id="ivstart">Start interview</button><button class="btn" id="ivfinish" disabled>Finish</button></div>
+      <p class="note" id="ivphase">Live formats need ANTHROPIC_API_KEY on the server. OA mode needs none.</p>
+      <div class="tl" id="bar"></div><div id="ivlog"></div>
+      <form id="ivform" class="row"><input type="text" id="ivin" placeholder="Talk to the interviewer…" autocomplete="off"><button class="btn">Send</button></form>
+      <div id="ivsum" class="md"></div>
+    </div>
+    <div class="pane" id="p-progress"></div>
+  </section>
+  <div class="gutter" id="g2" title="Drag to resize · double-click to collapse"><button class="gbtn" id="b2" title="Collapse/expand problem pane">‹</button></div>
+  <section id="right">
+    <div id="banner"></div>
+    <div id="editor"></div>
+    <div class="gutter h" id="g3" title="Drag to resize · double-click to reset"><button class="gbtn h" id="b3" title="Collapse/expand output">⌄</button></div>
+    <div id="outwrap"><div id="outhead"><span class="note" style="margin:0">Output</span><span class="sp"></span><select id="rev" title="Restore an earlier revision"><option value="">Revisions</option></select></div>
+      <div id="stdinbox"><textarea id="stdin" placeholder="stdin (optional) — Run executes your file as-is, like CoderPad. Write your own driver under if __name__ == '__main__'."></textarea></div>
+      <div id="out"><span class="note">Run your code to see results. Hidden tests run too.</span></div></div>
+  </section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const jget=u=>fetch(u).then(r=>r.json());
+const post=(u,b)=>fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.detail||r.status);return j});
+const store={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
+const md=t=>DOMPurify.sanitize(marked.parse(t||'',{gfm:true,breaks:false}));
+let picking=false,editor,problem,attempt,revs=[],problems=[],level='all',draftTimer;
+
+/* ---------- Monaco + autocomplete ---------- */
+const KW='False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' ');
+const BUILTINS='abs all any bool bytes callable chr dict divmod enumerate filter float format frozenset getattr hasattr hash id input int isinstance issubclass iter len list map max min next object ord pow print range repr reversed round set setattr slice sorted str sum super tuple type zip'.split(' ');
+const METHODS={list:'append extend insert remove pop clear index count sort reverse copy',dict:'get keys values items pop popitem setdefault update clear copy',set:'add remove discard pop clear union intersection difference update copy issubset',str:'join split strip lstrip rstrip startswith endswith replace find lower upper format isdigit isalpha',deque:'append appendleft pop popleft extend rotate clear',threading:'Thread Lock RLock Condition Event Semaphore current_thread',heapq:'heappush heappop heapify heappushpop nlargest nsmallest',collections:'deque defaultdict OrderedDict Counter namedtuple',time:'monotonic time sleep perf_counter',itertools:'chain combinations permutations product accumulate groupby islice count cycle'};
+const SNIPS=[
+ ['class','class ${1:Name}:\n\tdef __init__(self${2}):\n\t\t${0:pass}','class skeleton'],
+ ['def','def ${1:name}(${2:self}):\n\t${0:pass}','function'],
+ ['defm','def ${1:name}(self${2}):\n\t${0:pass}','method'],
+ ['for','for ${1:i} in ${2:range(n)}:\n\t${0:pass}','for loop'],
+ ['while','while ${1:cond}:\n\t${0:pass}','while loop'],
+ ['ifn','if ${1:x} is None:\n\t${0:pass}','if None'],
+ ['try','try:\n\t${1:pass}\nexcept ${2:Exception} as e:\n\t${0:raise}','try/except'],
+ ['with lock','with self._lock:\n\t${0:pass}','with lock'],
+ ['raise IndexError','raise IndexError(${1:i})','raise IndexError'],
+ ['import heapq','import heapq','import heapq'],['from collections import deque','from collections import deque','deque import'],
+ ['import threading','import threading','import threading'],['import time','import time','import time'],
+];
+const CPP_KW='alignas alignof auto bool break case catch char class concept const consteval constexpr const_cast continue decltype default delete do double else enum explicit extern false float for friend goto if inline int long mutable namespace new noexcept nullptr operator private protected public register reinterpret_cast requires return short signed sizeof static static_assert static_cast struct switch template this thread_local throw true try typedef typeid typename union unsigned using virtual void volatile while override final'.split(' ');
+const CPP_STD='std::vector std::string std::string_view std::unordered_map std::unordered_set std::map std::set std::list std::deque std::array std::optional std::variant std::pair std::tuple std::unique_ptr std::shared_ptr std::weak_ptr std::make_unique std::make_shared std::move std::forward std::swap std::sort std::find std::lower_bound std::upper_bound std::accumulate std::min std::max std::atomic std::thread std::mutex std::lock_guard std::unique_lock std::condition_variable std::future std::promise std::function std::memory_order_acquire std::memory_order_release std::memory_order_relaxed std::memory_order_seq_cst std::chrono::steady_clock std::cout std::cin std::size_t std::uint64_t std::runtime_error'.split(' ');
+const CPP_SNIPS=[['for loop','for (std::size_t ${1:i} = 0; ${1:i} < ${2:n}; ++${1:i}) {\n\t${0}\n}'],['range for','for (auto&& ${1:x} : ${2:xs}) {\n\t${0}\n}'],['class','class ${1:Name} {\npublic:\n\t${1:Name}() = default;\n\t~${1:Name}() = default;\nprivate:\n\t${0}\n};'],['template','template <typename ${1:T}>\n${0}'],['lock','std::lock_guard<std::mutex> lock(${1:mu});'],['rule of five','${1:Name}(const ${1:Name}&) = default;\n${1:Name}& operator=(const ${1:Name}&) = default;\n${1:Name}(${1:Name}&&) noexcept = default;\n${1:Name}& operator=(${1:Name}&&) noexcept = default;']];
+const RS_KW='as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while'.split(' ');
+const RS_STD='Vec String &str Option Result Some None Ok Err Box Rc Arc RefCell Cell Mutex RwLock HashMap HashSet BTreeMap BTreeSet VecDeque BinaryHeap std::mem::swap std::mem::take std::thread::spawn std::sync::mpsc::channel Iterator IntoIterator Default Clone Copy Debug Display PartialEq Eq PartialOrd Ord Hash From Into AsRef Drop assert! assert_eq! assert_ne! panic! println! format! vec! matches! todo! unimplemented! unreachable!'.split(' ');
+const RS_SNIPS=[['fn','fn ${1:name}(${2}) -> ${3:()} {\n\t${0}\n}'],['impl','impl ${1:Type} {\n\tpub fn new() -> Self {\n\t\t${0}\n\t}\n}'],['struct','#[derive(Debug, Clone)]\nstruct ${1:Name} {\n\t${0}\n}'],['match','match ${1:expr} {\n\t${2:pat} => ${0},\n\t_ => {}\n}'],['for','for ${1:x} in ${2:iter} {\n\t${0}\n}'],['if let','if let Some(${1:x}) = ${2:opt} {\n\t${0}\n}'],['enum','#[derive(Debug, PartialEq)]\nenum ${1:Name} {\n\t${0}\n}']];
+function registerNativeCompletions(){
+  const K=monaco.languages.CompletionItemKind,SN=monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet;
+  const mk=(lang,kws,std,snips)=>monaco.languages.registerCompletionItemProvider(lang,{
+    triggerCharacters:lang==='cpp'?[':']:[':'],
+    provideCompletionItems(model,pos){
+      const w=model.getWordUntilPosition(pos);
+      const range={startLineNumber:pos.lineNumber,endLineNumber:pos.lineNumber,startColumn:w.startColumn,endColumn:w.endColumn};
+      const seen=new Set(),out=[];const add=(l,k,x={})=>{if(!seen.has(l)){seen.add(l);out.push({label:l,kind:k,range,insertText:l,...x})}};
+      snips.forEach(([l,b])=>add(l,K.Snippet,{insertText:b,insertTextRules:SN,sortText:'0'+l}));
+      kws.forEach(k=>add(k,K.Keyword,{sortText:'1'+k}));std.forEach(k=>add(k,K.Class,{sortText:'2'+k}));
+      [...model.getValue().matchAll(/\b([A-Za-z_]\w{2,})\b/g)].forEach(m=>add(m[1],K.Variable,{sortText:'3'+m[1]}));
+      return{suggestions:out};
+    }});
+  mk('cpp',CPP_KW,CPP_STD,CPP_SNIPS);mk('rust',RS_KW,RS_STD,RS_SNIPS);
+}
+const MONACO_LANG={python:'python',cpp:'cpp',rust:'rust'};
+function registerCompletions(){registerNativeCompletions();
+  const K=monaco.languages.CompletionItemKind;
+  monaco.languages.registerCompletionItemProvider('python',{
+    triggerCharacters:['.'],
+    provideCompletionItems(model,pos){
+      const w=model.getWordUntilPosition(pos);
+      const range={startLineNumber:pos.lineNumber,endLineNumber:pos.lineNumber,startColumn:w.startColumn,endColumn:w.endColumn};
+      const line=model.getLineContent(pos.lineNumber).slice(0,pos.column-1);
+      const seen=new Set(),out=[];
+      const add=(label,kind,extra={})=>{if(seen.has(label))return;seen.add(label);out.push({label,kind,range,insertText:label,...extra})};
+      const text=model.getValue();
+      const dot=line.match(/([A-Za-z_][\w]*)\.\w*$/);
+      if(dot){
+        const base=dot[1];
+        if(base==='self'){[...text.matchAll(/self\.(\w+)/g)].forEach(m=>add(m[1],K.Field));[...text.matchAll(/def (\w+)\(self/g)].forEach(m=>add(m[1],K.Method))}
+        else if(METHODS[base])METHODS[base].split(' ').forEach(m=>add(m,K.Method));
+        else Object.values(METHODS).forEach(v=>v.split(' ').forEach(m=>add(m,K.Method,{sortText:'z'+m})));
+        return{suggestions:out};
+      }
+      SNIPS.forEach(([l,body,doc])=>add(l,K.Snippet,{insertText:body,insertTextRules:monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,detail:doc,sortText:'0'+l}));
+      KW.forEach(k=>add(k,K.Keyword,{sortText:'1'+k}));
+      BUILTINS.forEach(b=>add(b,K.Function,{sortText:'2'+b}));
+      [...text.matchAll(/\b(?:def|class)\s+(\w+)/g)].forEach(m=>add(m[1],K.Function,{sortText:'0'+m[1],detail:'defined here'}));
+      [...text.matchAll(/\b([A-Za-z_]\w{2,})\b/g)].forEach(m=>add(m[1],K.Variable,{sortText:'3'+m[1]}));
+      ['heapq','threading','collections','time','itertools'].forEach(m=>add(m,K.Module,{sortText:'4'+m}));
+      return{suggestions:out};
+    }});
+}
+const dark=()=>document.documentElement.dataset.theme==='dark'||(document.documentElement.dataset.theme!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches);
+require.config({paths:{vs:'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs'}});
+require(['vs/editor/editor.main'],()=>{
+  registerCompletions();
+  editor=monaco.editor.create($('editor'),{language:'python',automaticLayout:true,minimap:{enabled:false},fontSize:14,
+    fontFamily:'ui-monospace,SFMono-Regular,Menlo,monospace',lineHeight:22,padding:{top:12},scrollBeyondLastLine:false,
+    theme:dark()?'vs-dark':'vs',tabSize:4,insertSpaces:true,detectIndentation:false,
+    quickSuggestions:{other:true,comments:false,strings:false},suggestOnTriggerCharacters:true,acceptSuggestionOnEnter:'on',tabCompletion:'on',
+    wordBasedSuggestions:'currentDocument',snippetSuggestions:'top',suggest:{showWords:true,preview:true,insertMode:'replace'},
+    autoClosingBrackets:'always',autoClosingQuotes:'always',autoIndent:'full',formatOnType:true,bracketPairColorization:{enabled:true},
+    renderLineHighlight:'line',smoothScrolling:true,cursorSmoothCaretAnimation:'on'});
+  editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.Enter,run);
+  editor.onDidChangeModelContent(onEditorChange);
+  matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>monaco.editor.setTheme(dark()?'vs-dark':'vs'));
+  if(store.get('screen')==='1')setScreen(true);
+  tryLast();
+});
+function tryLast(){if(problem||!editor||!problems.length||picking)return;const want=new URLSearchParams(location.search).get('p')||store.get('last');const id=problems.some(p=>p.id===want)?want:(problems.find(p=>!p.solved)||problems[0]).id;picking=true;pick(id).then(()=>{const m=new URLSearchParams(location.search).get('mock');if(m){$('ivfmt').value=m;tab('interview')}})}
+
+/* ---------- list, filters, readiness ---------- */
+function renderFilters(){
+  const lv=[...new Set(problems.map(p=>p.bar_level))].sort();
+  $('filters').innerHTML=['all',...lv].map(l=>`<button data-l="${l}" class="${String(l)===level?'on':''}">${l==='all'?'All':'L'+l}</button>`).join('');
+}
+function renderList(){
+  const q=$('q').value.trim().toLowerCase();
+  const rows=problems.filter(p=>(level==='all'||String(p.bar_level)===level)&&(!q||[p.title,...p.patterns,...p.firm_tags].join(' ').toLowerCase().includes(q)));
+  let html='',cur=null;
+  for(const p of rows){
+    if(p.bar_level!==cur){cur=p.bar_level;html+=`<div class="grp">Level ${cur}</div>`}
+    html+=`<div class="item ${p.solved?'done':''} ${problem&&problem.id===p.id?'sel':''}" data-id="${p.id}"><span class="tick">${p.solved?'✓':''}</span><div><div class="t">${esc(p.title)}${p.language&&p.language!=='python'?` <span class="tag" style="background:var(--ok-bg);color:var(--ok)">${p.language==='cpp'?'C++':'Rust'}</span>`:''}</div><small>${p.target_minutes} min${p.best_minutes?` · best ${p.best_minutes}m`:''}</small></div></div>`;
+  }
+  $('list').innerHTML=html||'<div class="empty">No matches</div>';
+}
+async function refreshProgress(){
+  const [ps,r]=await Promise.all([jget('/api/problems'),jget('/api/readiness')]);
+  problems=ps;renderList();
+  const pct=x=>Math.round(x*100);
+  $('overall').textContent=pct(r.overall)+'%';$('ovbar').style.width=pct(r.overall)+'%';
+  $('lvls').innerHTML=r.levels.map(l=>`<div class="chip ${l.ready?'ready':''}" title="${esc(l.name)}: ${l.solved}/${l.problems} problems solved${l.ready?' · ready':''}"><b><span>${l.key}</span><span>${l.problems?pct(l.readiness)+'%':'–'}</span></b><div class="pbar"><i style="width:${pct(l.readiness)}%"></i></div></div>`).join('');
+  $('p-progress').innerHTML='<h2 style="margin-top:0">Readiness by bar level</h2>'+r.levels.map(l=>`<div class="lvrow"><div><b>${l.key}</b><br><small>${esc(l.name)}</small></div><div class="pbar"><i style="width:${pct(l.readiness)}%;${l.ready?'background:var(--ok)':''}"></i></div><div><b>${l.problems?pct(l.readiness)+'%':'–'}</b><br><small>${l.solved}/${l.problems} solved</small></div></div>`).join('')+
+   `<p class="note">${esc(r.note)} A level counts as ready only when its problems are solved cleanly, within target time, repeatedly (last 3 solves). Levels with few problems fill quickly; add packs to make them meaningful.</p>`;
+}
+$('filters').onclick=e=>{const b=e.target.closest('[data-l]');if(b){level=b.dataset.l;renderFilters();renderList()}};
+$('q').oninput=renderList;
+$('list').onclick=e=>{const d=e.target.closest('[data-id]');if(d)pick(d.dataset.id)};
+$('tabs').onclick=e=>{const b=e.target.closest('[data-t]');if(b)tab(b.dataset.t)};
+function tab(t){document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+t))}
+
+/* ---------- problem view ---------- */
+async function colorize(root){
+  if(!window.monaco)return;
+  for(const c of root.querySelectorAll('pre code')){
+    const lang=(c.className.match(/language-(\w+)/)||[])[1]||'python';
+    try{c.innerHTML=await monaco.editor.colorize(c.textContent,lang,{tabSize:4});c.style.background='none'}catch{}
+  }
+}
+async function pick(id){
+  problem=await jget('/api/problems/'+id);store.set('last',id);renderList();
+  const hints=problem.hints.map((h,i)=>`<details><summary>Hint ${i+1}</summary><div class="md">${md(h)}</div></details>`).join('');
+  const fu=problem.follow_ups.length?`<h3>Likely follow-ups</h3><details><summary>Show (try answering aloud first)</summary><div class="md">${md(problem.follow_ups.map(f=>'- '+f).join('\n'))}</div></details>`:'';
+  $('p-problem').innerHTML=`<div class="md"><h1>${esc(problem.title)}</h1>
+   <div class="meta"><span class="tag lv">Level ${problem.bar_level}</span>${problem.language&&problem.language!=='python'?`<span class="tag lv" style="background:var(--ok-bg);color:var(--ok)">${problem.language==='cpp'?'C++':'Rust'}</span>`:''}<span class="tag">target ${problem.target_minutes} min</span>${problem.patterns.map(p=>`<span class="tag">${esc(p)}</span>`).join('')}${problem.firm_tags.map(f=>`<span class="tag">${esc(f)}</span>`).join('')}</div>
+   ${md(problem.statement)}${problem.prelude?`<details><summary>Provided helpers (available in every Run/Submit, no need to write them)</summary>${md('```python\n'+problem.prelude+'\n```')}</details>`:''}<div class="hintbox">${hints?'<h3>Hints</h3>'+hints:''}${fu}</div></div>`;
+  $('p-tests').innerHTML='<div class="md"><h2 style="margin-top:0">Visible tests</h2>'+problem.tests.map(t=>`<h3>${esc(t.name)}</h3>${md('```python\n'+t.code+'\n```')}`).join('')+'<p class="note">Hidden tests also run when you press Run.</p></div>';
+  colorize($('p-problem'));colorize($('p-tests'));
+  try{monaco.editor.setModelLanguage(editor.getModel(),MONACO_LANG[problem.language||'python']||'python')}catch{}
+  await restoreDraft(id);
+  lastIv=null;tab('problem');await newAttempt(screenOn?'screen':'practice',true);renderScore();renderNorth();renderHistory();
+}
+async function newAttempt(mode='practice',resume=false){
+  if(!problem)return;
+  const r=await post(resume?'/api/attempts/resume':'/api/attempts',{problem_id:problem.id,mode});
+  attempt=r.attempt_id;activeMs=r.active_ms||0;lastTick=Date.now();revs=[];
+  $('rev').innerHTML='<option value="">Revisions</option>';
+  if(r.resumed){
+    revs=await jget(`/api/attempts/${attempt}/revisions`);
+    $('rev').innerHTML='<option value="">Revisions</option>'+revs.map(v=>`<option value="${v.seq}">#${v.seq} ${v.passed?'✓ passed':'✗ failed'}</option>`).join('');
+    $('out').innerHTML='<span class="pill ok">RESUMED</span> <span class="note">Continuing your open attempt. The clock was paused while you were away.</span>';
+  }else $('out').innerHTML='<span class="note">Run your code to see results. Hidden tests run too.</span>';
+}
+
+/* ---------- run ---------- */
+async function runTests(){
+  if(!attempt||!editor)return;
+  $('run').disabled=true;$('out').innerHTML='<span class="note">running…</span>';
+  try{
+    const r=await post(`/api/attempts/${attempt}/run`,{code:editor.getValue(),active_ms:Math.round(activeMs)});
+    const label=r.passed?'PASSED':r.timed_out?'TIMED OUT':'FAILED';
+    const n=r.results.filter(x=>x.passed).length;
+    $('out').innerHTML=`<div style="margin-bottom:8px"><span class="pill ${r.passed?'ok':'bad'}">${label}</span> <em style="color:var(--mut)">${n}/${r.results.length} tests · ${r.elapsed_ms} ms · revision ${r.seq}</em></div>`+
+      r.results.map(x=>`<div class="tr ${x.passed?'ok':'bad'}">${x.passed?'✓':'✗'} ${esc(x.name)}${x.message?` <em>— ${esc(x.message)}</em>`:''}</div>`).join('')+
+      (r.stdout?`<pre>${esc(r.stdout)}</pre>`:'')+(r.stderr?`<pre style="color:var(--bad);white-space:pre-wrap">${esc(r.stderr)}</pre>`:'');
+    revs=await jget(`/api/attempts/${attempt}/revisions`);
+    $('rev').innerHTML='<option value="">Revisions</option>'+revs.map(v=>`<option value="${v.seq}">#${v.seq} ${v.passed?'✓ passed':'✗ failed'}</option>`).join('');
+    refreshProgress();renderHistory();
+  }catch(e){$('out').innerHTML=`<span class="pill bad">error</span> ${esc(e.message)}`}
+  $('run').disabled=false;
+}
+$('rev').onchange=e=>{const v=revs.find(x=>x.seq==e.target.value);if(v)editor.setValue(v.code)};
+$('run').onclick=run;$('submit').onclick=runTests;$('newattempt').title='Fresh attempt: clears the editor (blank or starter, per the selector), restarts the clock. Previous attempts stay saved in History. Alt-click flips the selector for one press.';
+const helperNames=src=>[...src.matchAll(/^(?:class|def) (\w+)/gm)].map(m=>m[1]).slice(0,5).join(', ')||'see Problem tab';
+$('canvas').value=store.get('canvas')||'blank';$('canvas').onchange=e=>store.set('canvas',e.target.value);
+$('newattempt').onclick=async e=>{
+  if(!problem)return;
+  store.set('draft2:'+problem.id,'');try{await fetch(`/api/problems/${problem.id}/draft`,{method:'DELETE'})}catch{}
+  let wantBlank=($('canvas').value==='blank')!==e.altKey;   // Alt/Option-click flips the choice
+  let note=wantBlank?'Blank canvas, clock restarted.':'Starter code, clock restarted.';
+  if(problem.prelude)note+=' Provided helpers ('+helperNames(problem.prelude)+') are available automatically.';
+  editor.setValue(wantBlank?'':problem.starter);$('stdin').value='';
+  await newAttempt(screenOn?'screen':'practice');
+  renderHistory();renderScore();renderNorth();tab('problem');editor.focus();
+  $('out').innerHTML=`<span class="pill ok">NEW</span> <span class="note">${note} Your last attempt is saved under History.</span>`;
+};
+/* ---------- active clock (pauses off-screen) + autosave ---------- */
+let activeMs=0,lastTick=Date.now(),focused=true,pageHidden=document.hidden,restoring=false,serverTimer=null,lastServerSave=0;
+addEventListener('blur',()=>{focused=false});addEventListener('focus',()=>{focused=true});
+document.addEventListener('visibilitychange',()=>{pageHidden=document.hidden;if(pageHidden)flush()});
+const clockPaused=()=>pageHidden||!focused||!attempt;
+const putj=(u,b)=>fetch(u,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()});
+const localKey=id=>'draft2:'+id;
+function readLocal(id){
+  const v=store.get(localKey(id));if(!v)return null;
+  try{const o=JSON.parse(v);if(o&&typeof o==='object'&&'code' in o)return o}catch{}
+  return {code:v,t:0};                                   // drafts saved by older versions were plain strings
+}
+function saveLocal(){if(problem&&editor)store.set(localKey(problem.id),JSON.stringify({code:editor.getValue(),t:Date.now()}))}
+async function saveServer(){
+  if(!problem||!editor)return;$('saved').textContent='Saving…';
+  try{await putj(`/api/problems/${problem.id}/draft`,{code:editor.getValue(),attempt_id:attempt||null,active_ms:Math.round(activeMs)});
+    lastServerSave=Date.now();$('saved').textContent='Saved '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+  catch{$('saved').textContent='Saved in browser (server unreachable)'}
+}
+function onEditorChange(){
+  if(!problem||restoring)return;
+  saveLocal();$('saved').textContent='Unsaved changes…';
+  clearTimeout(serverTimer);serverTimer=setTimeout(saveServer,1500);
+}
+function flush(){   // page is going away: write synchronously to the browser and beacon the server
+  if(!problem||!editor)return;saveLocal();
+  try{navigator.sendBeacon(`/api/problems/${problem.id}/draft`,new Blob([JSON.stringify({code:editor.getValue(),attempt_id:attempt||null,active_ms:Math.round(activeMs)})],{type:'application/json'}))}catch{}
+}
+addEventListener('pagehide',flush);addEventListener('beforeunload',flush);
+setInterval(()=>{if(attempt&&problem&&!clockPaused()&&Date.now()-lastServerSave>10000)saveServer()},5000);   // heartbeat keeps the clock durable
+async function restoreDraft(id){
+  const local=readLocal(id);let srv={exists:false};
+  try{srv=await jget(`/api/problems/${id}/draft`)}catch{}
+  const srvT=srv.exists?Date.parse(srv.updated_at):0,locT=local?local.t:0;
+  let code=null;
+  if(srv.exists&&srvT>=locT)code=srv.code;else if(local)code=local.code;else if(srv.exists)code=srv.code;
+  restoring=true;
+  try{
+    if(code!==null)editor.setValue(code);
+    else{
+      editor.setValue(problem.starter);
+      const legacy=store.get('draft:'+id);   // work saved before drafts were versioned
+      if(legacy&&legacy.trim()&&legacy.trim()!==problem.starter.trim()){
+        $('banner').style.display='block';
+        $('banner').innerHTML='Found work saved before an update. <button class="btn" id="legacyRestore">Restore it</button> <button class="btn" id="legacyDismiss">Dismiss</button>';
+        $('legacyRestore').onclick=()=>{editor.setValue(legacy);saveLocal();$('banner').style.display='none'};
+        $('legacyDismiss').onclick=()=>{store.set('draft:'+id,'');$('banner').style.display='none'};
+      }else $('banner').style.display='none';
+    }
+  }finally{restoring=false}
+  if(code!==null)$('banner').style.display='none';
+}
+function fmtClock(ms,signed){const a=Math.floor(Math.abs(ms)/1000),m=Math.floor(a/60);return (signed&&ms<0?'+':'')+String(m).padStart(2,'0')+':'+String(a%60).padStart(2,'0')}
+setInterval(()=>{
+  const now=Date.now();if(!clockPaused())activeMs+=now-lastTick;lastTick=now;
+  if(!attempt)return;
+  const tm=$('timer'),paused=clockPaused();tm.classList.toggle('paused',paused);
+  if(screenOn){const left=+$('screenmin').value*60000-activeMs;tm.textContent=(paused?'⏸ ':'')+fmtClock(left,true);tm.classList.toggle('warn',left<=300000&&left>0);tm.classList.toggle('over',left<=0);return}
+  tm.textContent=(paused?'⏸ ':'')+fmtClock(activeMs);tm.classList.remove('warn');tm.classList.toggle('over',!!problem&&activeMs/60000>=problem.target_minutes);
+},250);
+
+
+/* ---------- score tab (rubric evaluation) ---------- */
+let firms=[],lastIv=null;
+const DIMNAME={correctness:'Correctness',edge_cases:'Edge cases',complexity:'Big-O',pace:'Pace',communication:'Communication',extensions:'Extensions',quality:'First-try quality'};
+async function renderScore(){
+  if(!problem)return;
+  if(!firms.length)firms=await jget('/api/firms');
+  const ops=problem.complexity_ops||[];
+  const opts=firms.map(f=>`<option value="${esc(f.id)}" ${f.id===(store.get('firm')||'generic')?'selected':''}>${esc(f.name)} (bar ${f.pass_score})</option>`).join('');
+  $('p-score').innerHTML=`<h2 style="margin-top:0">Score this attempt</h2>
+   <p class="note" style="margin-top:0">Passing tests earns only part of the points. The rest: edge cases, correct big-O, pace, follow-ups, and communication. Unanswered = zero.</p>
+   <div class="fgrp"><label>Rubric profile</label><select id="sfirm">${opts}</select></div>
+   ${ops.length?`<div class="fgrp"><label>Complexity (before looking at the answer)</label>${ops.map((o,i)=>`<div class="two" style="margin:6px 0"><input type="text" data-cx="${esc(o)}" data-k="time" placeholder="${esc(o)} — time, e.g. O(1) amortized"><input type="text" data-cx="${esc(o)}" data-k="space" placeholder="${esc(o)} — space"></div>`).join('')}</div>`:''}
+   ${(problem.extensions||[]).length?`<div class="fgrp"><label>Extensions (answer in your own words, then check yourself against the rubric)</label>${problem.extensions.map((e,i)=>`<div class="fgrp" data-ext="${i}" style="border:1px solid var(--bd);border-radius:8px;padding:10px"><div><span class="tag">${esc(e.kind)}</span> ${esc(e.q)}</div><textarea placeholder="Your answer…"></textarea><button class="btn" data-reveal="${i}" style="margin-top:6px">Reveal rubric</button><div class="rub"></div></div>`).join('')}</div>`:''}
+   ${lastIv?'<p class="note">Communication will be scored from your last interview session.</p>':'<p class="note">Communication is unassessed outside Interview mode and counts as 0 toward the bar.</p>'}
+   <button class="btn pri" id="doscore">Score attempt</button><div id="scoreout"></div>`;
+  $('sfirm').onchange=e=>store.set('firm',e.target.value);
+}
+document.addEventListener('click',async e=>{
+  const rv=e.target.closest('[data-reveal]');
+  if(rv){
+    const box=rv.closest('[data-ext]');
+    if(box.querySelector('textarea').value.trim().length<15){alert('Write your answer first (commit before you peek).');return}
+    const r=await jget(`/api/attempts/${attempt}/extensions/${rv.dataset.reveal}/key_points`);
+    box.querySelector('.rub').innerHTML='<p class="note">Tick every point your answer actually covered:</p>'+r.key_points.map(k=>`<label class="chk"><input type="checkbox"> <span>${esc(k)}</span></label>`).join('');
+    rv.disabled=true;
+  }
+  if(e.target.id==='doscore'){
+    const complexity={};
+    document.querySelectorAll('[data-cx]').forEach(i=>{(complexity[i.dataset.cx]??={})[i.dataset.k]=i.value});
+    const extensions=[...document.querySelectorAll('[data-ext]')].map(b=>({idx:+b.dataset.ext,answer:b.querySelector('textarea').value,covered:[...b.querySelectorAll('.rub input')].map(c=>c.checked)}));
+    const comm=lastIv?{assessed:true,...lastIv}:null;
+    try{
+      const r=await post(`/api/attempts/${attempt}/evaluate`,{firm_id:$('sfirm').value,complexity,extensions,communication:comm});
+      const s=r.score,ok=s.verdict==='PASS';
+      $('scoreout').innerHTML=`<div class="verdict ${ok?'ok':'bad'}" style="margin-top:16px"><span>${s.verdict}</span><span>${s.total} / 100 <small style="font-size:13px;font-weight:400">bar ${s.pass_score}</small></span></div>`+
+       (s.failed_floors.length?`<p class="bad" style="color:var(--bad)"><b>Floors missed:</b> ${s.failed_floors.map(esc).join('; ')}</p>`:'')+
+       Object.entries(s.per_dim).map(([d,v])=>`<div class="dimrow"><span>${DIMNAME[d]||d}</span><div class="pbar"><i style="width:${(v.fraction||0)*100}%"></i></div><span>${v.earned}/${v.weight}${v.fraction==null?' <small>n/a</small>':''}</span></div>`).join('')+
+       (s.fixes.length?'<h3>Fastest points to win back</h3>'+s.fixes.map(f=>`<div class="fix"><b>+${f.points_left} ${DIMNAME[f.dimension]||f.dimension}</b> — ${esc(f.why)}</div>`).join(''):'')+
+       (s.unassessed.length?`<p class="note">Unassessed (scored 0): ${s.unassessed.map(d=>DIMNAME[d]||d).join(', ')}</p>`:'')+
+       `<div id="ankibox"></div><p><a href="/progress?firm=${encodeURIComponent($('sfirm').value)}">See overall progress →</a></p>`;
+      ankiSuggest();
+    }catch(err){$('scoreout').innerHTML='<p class="bad">'+esc(err.message)+'</p>'}
+  }
+});
+
+
+
+/* ---------- screen mode (CoderPad-style) ---------- */
+let screenOn=false;
+async function runScratch(){
+  if(!editor)return;$('run').disabled=true;$('out').innerHTML='<span class="note">running…</span>';
+  try{const r=await post('/api/scratch',{code:editor.getValue(),stdin:$('stdin').value,problem_id:problem?problem.id:null});
+    $('out').innerHTML=`<div style="margin-bottom:6px"><span class="pill ${r.exit_code===0?'ok':'bad'}">${r.timed_out?'TIMED OUT':'exit '+r.exit_code}</span> <em style="color:var(--mut)">${r.elapsed_ms} ms</em></div>`+(r.stdout?`<pre style="margin:0;white-space:pre-wrap">${esc(r.stdout)}</pre>`:'')+(r.stderr?`<pre style="color:var(--bad);white-space:pre-wrap">${esc(r.stderr)}</pre>`:'')}
+  catch(e){$('out').innerHTML=`<span class="pill bad">error</span> ${esc(e.message)}`}
+  $('run').disabled=false;
+}
+function run(){return screenOn?runScratch():runTests()}
+function setScreen(on){
+  screenOn=on;document.body.classList.toggle('screen',on);store.set('screen',on?'1':'0');
+  $('screen').checked=on;$('submit').style.display=on?'':'none';$('screenmin').style.display=on?'':'none';
+  if(editor)editor.updateOptions(on?{quickSuggestions:false,suggestOnTriggerCharacters:false,wordBasedSuggestions:'off',tabCompletion:'off',parameterHints:{enabled:false},hover:{enabled:false},snippetSuggestions:'none',acceptSuggestionOnEnter:'off',suggest:{preview:false}}
+    :{quickSuggestions:{other:true,comments:false,strings:false},suggestOnTriggerCharacters:true,wordBasedSuggestions:'currentDocument',tabCompletion:'on',parameterHints:{enabled:true},hover:{enabled:true},snippetSuggestions:'top',acceptSuggestionOnEnter:'on',suggest:{showWords:true,preview:true,insertMode:'replace'}});
+  if(on)tab('problem');
+}
+$('screen').onchange=e=>{setScreen(e.target.checked);if(e.target.checked&&problem){newAttempt('screen');$('out').innerHTML='<span class="pill ok">SCREEN</span> <span class="note">Fresh attempt, clock running. Run = your code. Submit = graded tests.</span>'}};
+
+
+/* ---------- history of past attempts ---------- */
+const fmtDate=s=>{try{return new Date(s).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}catch{return s}};
+async function renderHistory(){
+  if(!problem)return;
+  const rows=await jget(`/api/problems/${problem.id}/attempts`);
+  $('p-history').innerHTML=`<h2 style="margin-top:0">Past attempts</h2><p class="note" style="margin-top:0">Every Run/Submit is saved. Load code into the editor to review it; press <b>New attempt</b> to start clean again.</p>`+
+   (rows.length?rows.map(r=>{const cur=r.id===attempt;const mins=r.minutes_to_pass;
+     return `<div class="fix" style="border-color:${r.passed?'var(--ok)':'var(--bad)'}"><div class="row" style="justify-content:space-between"><span><b>${fmtDate(r.started_at)}</b> · <span class="tag">${esc(r.mode)}</span> ${cur?'<span class="tag lv">current</span>':''}</span><span class="pill ${r.passed?'ok':'bad'}">${r.passed?'PASSED':'not passed'}</span></div>
+       <div class="note" style="margin:4px 0">${r.runs} run${r.runs===1?'':'s'}${mins!=null?` · first pass at ${mins} min (target ${problem.target_minutes})`:''}</div>
+       <button class="btn" data-hload="${r.id}" data-which="last">Load last code</button> ${r.passed?`<button class="btn" data-hload="${r.id}" data-which="pass">Load passing code</button>`:''}</div>`}).join(''):'<div class="empty">No runs yet for this problem.</div>');
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-hload]');if(!b)return;
+  const revs2=await jget(`/api/attempts/${b.dataset.hload}/revisions`);
+  const rev=b.dataset.which==='pass'?revs2.find(v=>v.passed):revs2[revs2.length-1];
+  if(rev){editor.setValue(rev.code);tab('problem')}
+});
+
+/* ---------- north star (gated reference solution) ---------- */
+function toggleDiff(){
+  const w=$('diffwrap'),on=w.classList.toggle('full');
+  $('diffexpand').textContent=on?'⤡ Close (Esc)':'⤢ Expand';
+  document.body.classList.toggle('diff-full',on);
+  setTimeout(()=>diffEd&&diffEd.layout(),50);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('diffwrap')?.classList.contains('full'))toggleDiff()});
+
+let diffEd=null;
+function renderNorth(){
+  if(!problem)return;
+  $('p-north').innerHTML=`<h2 style="margin-top:0">North star</h2>
+   <p class="note" style="margin-top:0">Reading an answer builds recognition; retrieving it builds recall. So the solution is gated:</p>
+   <ul class="note"><li><b>Passed?</b> Open it to compare your approach, then do a closed-book re-implementation.</li><li><b>Stuck?</b> Open it, but this attempt stops earning credit and the Anki card is rated Again. Then retry from memory.</li></ul>
+   <div class="row"><button class="btn pri" id="nsPassed">I passed — show solution</button><button class="btn" id="nsStuck">I'm stuck — show solution (costs this attempt)</button></div><div id="nsbody"></div>`;
+}
+async function openNorth(reason){
+  try{
+    const r=await post(`/api/attempts/${attempt}/solution`,{reason});
+    const mine=editor.getValue();
+    $('nsbody').innerHTML=`${r.gave_up?'<p class="note" style="color:var(--bad)"><b>Credit forfeited for this attempt.</b> Use “Retry from memory” below.</p>':''}
+     <h3>Walkthrough</h3><div class="md">${md(r.walkthrough||'_No walkthrough written yet._')}</div>
+     <div class="row" style="justify-content:space-between;margin-top:16px"><h3 style="margin:0">Your code vs the reference <small class="note">(left: yours · right: reference)</small></h3><button class="btn" id="diffexpand" title="Expand (Esc to close)">⤢ Expand</button></div><div id="diffwrap"><div id="diff"></div></div>
+     ${r.state_aloud.length?`<h3>State these aloud, unprompted</h3><ul>${r.state_aloud.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+     ${r.narration.length?`<h3>Narration script</h3><div class="md"><blockquote>${r.narration.map(x=>esc(x)).join('<br>')}</blockquote></div>`:''}
+     ${r.complexity.length?`<h3>Complexity</h3><div class="md"><table><tr><th>op</th><th>time</th><th>space</th></tr>${r.complexity.map(c=>`<tr><td>${esc(c.op)}</td><td>${esc(c.time)}</td><td>${esc(c.space)}</td></tr>`).join('')}</table></div>`:''}
+     <div class="fgrp"><button class="btn pri" id="retry">Retry from memory (closed book)</button></div>`;
+    if(diffEd){diffEd.dispose();diffEd=null}
+    diffEd=monaco.editor.createDiffEditor($('diff'),{automaticLayout:true,readOnly:true,renderSideBySide:true,minimap:{enabled:false},theme:dark()?'vs-dark':'vs',scrollBeyondLastLine:false});
+    diffEd.setModel({original:monaco.editor.createModel(mine,'python'),modified:monaco.editor.createModel(r.solution,'python')});
+    $('diffexpand').onclick=toggleDiff;
+    $('retry').onclick=async()=>{editor.setValue(problem.starter);await newAttempt('recall');tab('problem');
+      $('out').innerHTML='<span class="pill ok">RECALL</span> <span class="note">Closed book: re-implement from memory. This attempt counts.</span>'};
+  }catch(e){$('nsbody').innerHTML='<p style="color:var(--bad)">'+esc(e.message)+'</p>'}
+}
+document.addEventListener('click',e=>{
+  if(e.target.id==='nsPassed')openNorth('passed');
+  if(e.target.id==='nsStuck'&&confirm('Open the solution? This attempt will stop earning credit and Anki gets “Again”.'))openNorth('stuck');
+  if(e.target.id==='ankisend')ankiSend();
+});
+async function ankiSuggest(){
+  try{const s=await jget(`/api/attempts/${attempt}/anki`);
+    $('ankibox').innerHTML=`<div class="fix" style="border-color:var(--acc)"><b>Anki:</b> suggested rating <b>${esc(s.label)}</b> (${esc(s.why)}) ${s.queries.length?'<button class="btn" id="ankisend" style="margin-left:8px">Send to Anki</button>':'<span class="note">(no Anki card linked)</span>'}<div id="ankires" class="note"></div></div>`}catch{}
+}
+async function ankiSend(){
+  try{const r=await post(`/api/attempts/${attempt}/anki`,{});$('ankires').textContent=r.message}catch(e){$('ankires').textContent=e.message}
+}
+
+/* ---------- interview mode ---------- */
+let iv=null,ivLast=Date.now(),ivTick=null;
+const ivMin=()=>(Date.now()-iv.t0)/60000;
+function ivSay(who,t){if(!t)return;$('ivlog').insertAdjacentHTML('beforeend',`<div class="bub ${who}">${esc(t)}</div>`);$('ivlog').scrollTop=1e9}
+function ivBar(){if(!iv)return;const T=iv.total_min;$('bar').innerHTML=iv.phases.map(p=>`<i title="${esc(p.name)}" style="left:${p.start/T*100}%;width:${(p.end-p.start)/T*100}%"></i>`).join('')+`<b style="left:${Math.min(ivMin()/T,1)*100}%"></b>`}
+async function ivTurn(msg){
+  if(!iv)return;
+  try{const r=await post(`/api/interview/${iv.id}/turn`,{message:msg,code:editor?editor.getValue():'',elapsed_min:ivMin(),silence_s:(Date.now()-ivLast)/1000});
+    ivSay('iv',r.reply);$('ivphase').textContent=`phase: ${r.phase} · hints used: ${r.hints_used}`}catch(e){ivSay('iv','[error] '+e.message)}
+}
+$('ivstart').onclick=async()=>{
+  if(!problem){alert('Pick a problem first');return}
+  try{const r=await post('/api/interview/start',{problem_id:problem.id,format:$('ivfmt').value});
+    iv={id:r.session_id,t0:Date.now(),total_min:r.total_min,phases:r.phases};ivLast=Date.now();
+    $('ivlog').innerHTML='';$('ivsum').innerHTML='';ivSay('iv',r.opening);$('ivfinish').disabled=false;activeMs=0;lastTick=Date.now();
+    clearInterval(ivTick);ivTick=setInterval(()=>{ivBar();ivTurn('')},10000);ivBar()}catch(e){alert(e.message)}
+};
+$('ivform').onsubmit=e=>{e.preventDefault();const m=$('ivin').value.trim();if(!m||!iv)return;$('ivin').value='';ivLast=Date.now();ivSay('me',m);ivTurn(m)};
+$('ivfinish').onclick=async()=>{
+  if(!iv)return;clearInterval(ivTick);
+  const s=await post(`/api/interview/${iv.id}/finish`,{elapsed_min:ivMin(),passed:!!$('out').querySelector('.pill.ok')});
+  const ease=['','Again','Hard','Good','Easy'][s.ease]||s.ease;
+  $('ivsum').innerHTML=`<h3>Summary</h3><ul><li>Elapsed: <b>${s.elapsed_min.toFixed(1)} min</b> (final phase: ${esc(s.final_phase)})</li><li>First approach: ${s.first_approach_min==null?'never stated':s.first_approach_min.toFixed(1)+' min'} · first code: ${s.first_code_min==null?'none':s.first_code_min.toFixed(1)+' min'} (planned ${s.planned_first_code_min} min)</li><li>Hints used: <b>${s.hints_used}</b> · interjections: ${esc(JSON.stringify(s.interjections))}</li><li>Anki rating: <b>${esc(ease)}</b></li><li>Est. API cost: $${s.usage.est_cost_usd}</li></ul>`;
+  lastIv={approach_min:s.first_approach_min,first_code_min:s.first_code_min,hints_used:s.hints_used};renderScore();
+  iv=null;$('ivfinish').disabled=true};
+document.addEventListener('keydown',()=>{ivLast=Date.now()});
+
+
+/* ---------- resizable / collapsible panes (persisted) ---------- */
+const layout=Object.assign({cs:272,cm:460,ch:null,c1:false,c2:false,c3:false},(()=>{try{return JSON.parse(store.get('layout')||'{}')}catch{return {}}})());
+const MIN={cs:180,cm:300};
+if(new URLSearchParams(location.search).get('focus'))layout.c1=layout.c2=true;
+function sane(){
+  const H=innerHeight;
+  if(!Number.isFinite(layout.cs)||layout.cs<MIN.cs)layout.cs=272;
+  if(!Number.isFinite(layout.cm)||layout.cm<MIN.cm)layout.cm=460;
+  layout.cs=Math.min(layout.cs,innerWidth*.4);layout.cm=Math.min(layout.cm,innerWidth*.6);
+  if(layout.ch!=null&&(!Number.isFinite(layout.ch)||layout.ch<120))layout.ch=null;   // output never shrinks below a usable size unless explicitly collapsed
+  if(layout.ch!=null)layout.ch=Math.min(layout.ch,H-220);
+}
+function applyLayout(){
+  sane();
+  const m=document.querySelector('main');
+  m.style.setProperty('--cs',layout.c1?'0px':layout.cs+'px');
+  m.style.setProperty('--cm',layout.c2?'0px':layout.cm+'px');
+  if(layout.ch)$('outwrap').style.setProperty('--ch',layout.ch+'px');else $('outwrap').style.removeProperty('--ch');
+  $('outwrap').classList.toggle('mini',layout.c3);$('b3').textContent=layout.c3?'⌃':'⌄';
+  document.querySelector('aside').classList.toggle('collapsed',layout.c1);
+  $('mid').classList.toggle('collapsed',layout.c2);
+  $('b1').textContent=layout.c1?'›':'‹';$('b2').textContent=layout.c2?'›':'‹';
+  store.set('layout',JSON.stringify(layout));
+  if(editor)editor.layout();
+}
+function drag(gutter,onMove,rowMode){
+  gutter.addEventListener('pointerdown',e=>{
+    if(e.target.closest('.gbtn'))return;
+    e.preventDefault();gutter.setPointerCapture(e.pointerId);gutter.classList.add('drag');
+    document.body.classList.add('dragging');document.body.classList.toggle('rowdrag',!!rowMode);
+    const mv=ev=>onMove(ev);
+    const up=()=>{gutter.classList.remove('drag');document.body.classList.remove('dragging','rowdrag');gutter.removeEventListener('pointermove',mv);gutter.removeEventListener('pointerup',up);applyLayout()};
+    gutter.addEventListener('pointermove',mv);gutter.addEventListener('pointerup',up);
+  });
+}
+const mainEl=()=>document.querySelector('main').getBoundingClientRect();
+drag($('g1'),ev=>{layout.c1=false;layout.cs=Math.max(MIN.cs,Math.min(520,ev.clientX-mainEl().left));applyLayout()});
+drag($('g2'),ev=>{layout.c2=false;const left=layout.c1?0:layout.cs;layout.cm=Math.max(MIN.cm,Math.min(mainEl().width-left-340,ev.clientX-mainEl().left-left-8));applyLayout()});
+drag($('g3'),ev=>{const r=$('right').getBoundingClientRect();layout.c3=false;layout.ch=Math.max(120,Math.min(r.height-120,r.bottom-ev.clientY));applyLayout()},true);
+$('b1').onclick=()=>{layout.c1=!layout.c1;applyLayout()};
+$('b2').onclick=()=>{layout.c2=!layout.c2;applyLayout()};
+$('g1').ondblclick=e=>{if(!e.target.closest('.gbtn')){layout.c1=!layout.c1;applyLayout()}};
+$('g2').ondblclick=e=>{if(!e.target.closest('.gbtn')){layout.c2=!layout.c2;applyLayout()}};
+$('g3').ondblclick=e=>{if(e.target.closest('.gbtn'))return;layout.ch=null;layout.c3=false;applyLayout()};
+$('b3').onclick=()=>{layout.c3=!layout.c3;applyLayout()};
+function resetLayout(){Object.assign(layout,{cs:272,cm:460,ch:null,c1:false,c2:false,c3:false});applyLayout()}
+$('resetlayout').onclick=resetLayout;
+function toggleFocus(){const on=layout.c1&&layout.c2;layout.c1=layout.c2=!on;applyLayout()}
+$('focus').onclick=toggleFocus;
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='\\'){e.preventDefault();e.shiftKey?resetLayout():toggleFocus()}});
+addEventListener('resize',()=>{applyLayout()});
+applyLayout();
+
+jget('/api/problems').then(ps=>{problems=ps;renderFilters();renderList();tryLast()}).then(refreshProgress);
+</script></body></html>

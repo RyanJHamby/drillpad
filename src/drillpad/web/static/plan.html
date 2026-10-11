@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>DrillPad · Plan</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f7f7f5;--surface:#fff;--fg:#1c1c1a;--mut:#6b6b66;--bd:#e4e3de;--acc:#3b5bdb;--acc-bg:#edf0fd;--ok:#198754;--ok-bg:#e7f5ee;--bad:#c92a2a;--warn:#b7791f;--code:#f1f0ec;--r:12px}
+@media(prefers-color-scheme:dark){:root{--bg:#0e0f11;--surface:#16181b;--fg:#e8e8e6;--mut:#93938d;--bd:#26292d;--acc:#7c95ff;--acc-bg:#1b2140;--ok:#4cc38a;--ok-bg:#12281e;--bad:#ff7b7b;--warn:#e0b252;--code:#1d2024}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:2}
+.logo{font-weight:700;font-size:16px}.logo span{color:var(--acc)}a{color:var(--acc)}
+.btn{border:1px solid var(--bd);background:var(--surface);border-radius:8px;padding:6px 12px;text-decoration:none;color:var(--fg);cursor:pointer;font:inherit}.btn:hover{background:var(--code)}.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.wrap{max-width:1240px;margin:0 auto;padding:24px;display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px;margin-bottom:16px}
+.card h2{margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}.sub{color:var(--mut);font-size:12px;margin:0 0 10px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{border:1px solid var(--bd);background:none;border-radius:99px;padding:3px 11px;font-size:12px;cursor:pointer;color:var(--fg)}.chip:hover,.chip.on{background:var(--acc-bg);border-color:var(--acc);color:var(--acc)}
+.k{margin:12px 0}.k .t{display:flex;justify-content:space-between;font-weight:600}.k .t b{color:var(--acc)}.k small{color:var(--mut);display:flex;justify-content:space-between}
+input[type=range]{width:100%;accent-color:var(--acc)}
+select,input[type=date]{padding:5px 8px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);border-radius:8px;font:inherit;max-width:100%}
+.firmrow{display:grid;grid-template-columns:1fr auto;gap:6px 8px;padding:10px 0;border-bottom:1px solid var(--bd)}.firmrow:last-of-type{border:0}
+.firmrow .full{grid-column:1/3;display:flex;gap:8px;align-items:center}.x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:16px}
+.seg{display:flex;gap:4px}.seg button{flex:1}
+.tog{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+.pick{display:grid;grid-template-columns:1fr auto;gap:6px 14px;padding:14px 0;border-bottom:1px solid var(--bd)}.pick:last-child{border:0}
+.pick .ttl{font-weight:600;font-size:15px}.tag{font-size:12px;padding:1px 8px;border-radius:99px;background:var(--code);color:var(--mut);margin-right:4px}.tag.lv{background:var(--acc-bg);color:var(--acc);font-weight:600}.tag.f{background:var(--ok-bg);color:var(--ok)}
+.why{margin:6px 0 0;padding-left:18px;color:var(--mut);font-size:13px}.sbar{height:6px;border-radius:99px;background:var(--code);overflow:hidden;width:90px;margin-top:6px}.sbar i{display:block;height:100%;background:var(--acc)}
+.banner{border-left:3px solid var(--warn);background:var(--code);padding:10px 14px;border-radius:8px;margin-bottom:16px}
+.fc{display:grid;grid-template-columns:1fr 80px 56px;gap:10px;align-items:center;margin:8px 0}.pbar{height:8px;border-radius:99px;background:var(--code);overflow:hidden}.pbar i{display:block;height:100%;background:var(--acc)}
+.cat{display:grid;grid-template-columns:170px 1fr 90px;gap:10px;align-items:center;margin:6px 0}.mut{color:var(--mut)}
+details{margin-top:10px}summary{cursor:pointer;color:var(--mut)}
+</style></head><body>
+<header><div class="logo">Drill<span>Pad</span></div><a class="btn" href="/">← Practice</a><a class="btn" href="/learn">Learn</a><a class="btn" href="/questions">Questions</a><a class="btn" href="/progress">Progress</a><b>Plan</b></header>
+<div class="wrap">
+  <div id="knobs"></div>
+  <div id="today"><div class="mut">Loading…</div></div>
+</div>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let S=null,P=null,t=null;
+const put=(u,m,b)=>fetch(u,{method:m,headers:{'content-type':'application/json'},body:b?JSON.stringify(b):undefined}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.detail);return j});
+async function load(){P=await fetch('/api/plan').then(r=>r.json());S=P.settings;renderKnobs();renderToday()}
+function save(){clearTimeout(t);t=setTimeout(async()=>{try{P=await put('/api/plan/settings','PUT',S);S=P.settings;renderToday()}catch(e){alert(e.message)}},250)}
+function slider(key,label,lo,hi,get,set){const v=get();return `<div class="k"><div class="t"><span>${label}</span><b id="v_${key}">${v}</b></div><input type="range" min="0" max="100" value="${v}" data-k="${key}"><small><span>${lo}</span><span>${hi}</span></small></div>`}
+function renderKnobs(){
+  const cats=Object.entries(P.category_labels).map(([c,l])=>slider('cat_'+c,l,'skip','heavy',()=>S.categories[c],()=>0)).join('');
+  const firms=S.firms.map((f,i)=>`<div class="firmrow"><select data-fi="${i}" data-f="id">${P.firm_options.map(o=>`<option value="${esc(o.id)}" ${o.id===f.id?'selected':''}>${esc(o.name)}</option>`).join('')}</select><button class="x" data-rm="${i}" title="Remove">✕</button>
+   <div class="full"><input type="date" data-fi="${i}" data-f="date" value="${esc(f.date||'')}"><label class="mut"><input type="checkbox" data-fi="${i}" data-f="active" ${f.active?'checked':''}> active</label></div>
+   <div class="full"><span class="mut" style="width:70px">priority</span><input type="range" min="0" max="100" value="${f.weight}" data-fi="${i}" data-f="weight"><b id="fw${i}" style="width:28px;text-align:right">${f.weight}</b></div></div>`).join('');
+  $('knobs').innerHTML=`
+  <div class="card"><h2>Presets</h2><div class="chips">${Object.entries(P.presets).map(([id,l])=>`<button class="chip" data-p="${id}">${esc(l)}</button>`).join('')}</div></div>
+  <div class="card"><h2>Firm pipeline</h2><p class="sub">Add every firm you have in motion. Closer dates automatically weigh more.</p>${firms||'<p class="mut">No firms yet.</p>'}<button class="btn" id="addfirm">+ Add firm</button>
+    ${slider('fvp','Firm-first ↔ pattern-first','pattern-first','firm-first',()=>S.firm_vs_pattern,()=>0)}</div>
+  <div class="card"><h2>Category levers</h2><p class="sub">Used when you want to tune a style regardless of firm.</p>${cats}</div>
+  <div class="card"><h2>Language exposure</h2><p class="sub">Python is the default. Dial C++ and Rust up as interviews approach.</p>${Object.entries(P.language_labels).map(([k,l])=>slider('lang_'+k,l,'rarely','often',()=>S.languages[k],()=>0)).join('')}</div>
+  <div class="card"><h2>Session</h2>
+    <div class="seg">${[30,45,60,90,120].map(m=>`<button class="chip ${S.session_minutes===m?'on':''}" data-min="${m}">${m} min</button>`).join('')}</div>
+    ${slider('gaps','Chase gaps','steady coverage','hammer weak spots',()=>S.chase_gaps,()=>0)}
+    <div class="tog"><span>Auto-ramp firm priority near its date</span><input type="checkbox" data-t="urgency" ${S.urgency?'checked':''}></div>
+    <div class="tog"><span>Interleave patterns (avoid back-to-back repeats)</span><input type="checkbox" data-t="interleave" ${S.interleave?'checked':''}></div>
+    <div class="tog"><span>Boost problems whose Anki card is due</span><input type="checkbox" data-t="use_anki" ${S.use_anki?'checked':''}></div></div>`;
+}
+document.addEventListener('input',e=>{
+  const el=e.target;
+  if(el.dataset.k){const k=el.dataset.k,v=+el.value;$('v_'+k).textContent=v;
+    if(k==='fvp')S.firm_vs_pattern=v;else if(k==='gaps')S.chase_gaps=v;else if(k.startsWith('cat_'))S.categories[k.slice(4)]=v;else if(k.startsWith('lang_'))S.languages[k.slice(5)]=v;save()}
+  if(el.dataset.fi!==undefined){const f=S.firms[+el.dataset.fi],k=el.dataset.f;
+    f[k]=k==='active'?el.checked:k==='weight'?+el.value:el.value||null;if(k==='weight')$('fw'+el.dataset.fi).textContent=el.value;save()}
+  if(el.dataset.t){S[el.dataset.t]=el.checked;save()}
+});
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.p){P=await put('/api/plan/preset','POST',{id:b.dataset.p});S=P.settings;renderKnobs();renderToday()}
+  if(b.dataset.min){S.session_minutes=+b.dataset.min;renderKnobs();save()}
+  if(b.id==='addfirm'){const used=new Set(S.firms.map(f=>f.id));const o=P.firm_options.find(o=>!used.has(o.id))||P.firm_options[0];S.firms.push({id:o.id,date:null,weight:70,active:true,stage:'screen'});renderKnobs();save()}
+  if(b.dataset.rm!==undefined){S.firms.splice(+b.dataset.rm,1);renderKnobs();save()}
+});
+function renderToday(){
+  const m=P.mock?`<div class="banner"><b>Mock screen recommended.</b> ${esc(P.mock.why)} <a href="/?p=${encodeURIComponent((P.picks[0]||{}).problem_id||'')}&mock=${encodeURIComponent(P.mock.format)}">Start with ${esc(P.mock.format)}</a></div>`:'';
+  const firms=P.firms.length?`<div class="card"><h2>Firms in motion</h2>${P.firms.map(f=>`<div class="fc"><span><b>${esc(f.name)}</b><br><span class="mut">${f.days==null?'no date':f.days+' day(s) to go'}</span></span><div class="pbar"><i style="width:${Math.round(f.effective*100)}%"></i></div><span class="mut">×${f.urgency}</span></div>`).join('')}<p class="sub">Bar = effective priority after the urgency ramp. <a href="/progress">Readiness per firm →</a></p></div>`:'';
+  const picks=P.picks.map((p,i)=>`<div class="pick"><div><div class="ttl">${i+1}. ${esc(p.title)}</div>
+    <div style="margin-top:4px"><span class="tag lv">L${p.level}</span><span class="tag">${p.minutes} min</span>${p.categories.map(c=>`<span class="tag">${esc(c)}</span>`).join('')}${p.forced?'<span class="tag f">recall</span>':''}</div>
+    <ul class="why">${p.reasons.map(r=>`<li>${esc(r)}</li>`).join('')}</ul></div>
+    <div style="text-align:right"><a class="btn pri" href="/?p=${encodeURIComponent(p.problem_id)}">Start</a><div class="sbar" style="margin-left:auto"><i style="width:${Math.min(100,p.score*100)}%"></i></div></div></div>`).join('');
+  const cats=P.categories.map(c=>`<div class="cat"><span>${esc(P.category_labels[c.id])}</span><div class="pbar"><i style="width:${c.problems?c.passing/c.problems*100:0}%"></i></div><span class="mut">${c.passing}/${c.problems} passing</span></div>`).join('');
+  const due=(P.due_reviews||[]).length?`<div class="card"><h2>Due for spaced review · ${P.due_reviews.length}</h2><p class="sub">Estimated recall has fallen under 90%. Do these before new problems.</p>${P.due_reviews.slice(0,8).map(d=>`<div class="fc" style="grid-template-columns:1fr 80px 56px"><a href="/?p=${encodeURIComponent(d.problem_id)}">${esc(d.title)}</a><div class="pbar"><i style="width:${Math.round(d.recall*100)}%;background:var(--bad)"></i></div><span class="mut">${Math.round(d.recall*100)}%</span></div>`).join('')}</div>`:'';
+  $('today').innerHTML=m+due+`<div class="card"><h2>Today's queue · ${P.planned_minutes} of ${P.budget} min</h2>${picks||'<p class="mut">Nothing to schedule: adjust the knobs.</p>'}
+    ${P.anki.connected===false?'<p class="sub">Anki not reachable: due cards not used.</p>':''}
+    <details><summary>How picks are scored</summary><p class="sub" style="margin-top:8px">score = ${P.weights.base}×(firm·mix + category·(1−mix)) + ${P.weights.need}×need + ${P.weights.weak}×weak-edge. Firm priority = relevance × your priority × urgency (up to 3× in the final 14 days). Need = gap to the bar, or staleness of a problem you already passed. Problems you gave up on are forced to the top for a closed-book retry. Interleaving down-weights back-to-back repeats of a pattern.</p></details></div>`+firms+`<div class="card"><h2>Coverage by category</h2>${cats}</div>`;
+}
+load();
+</script></body></html>

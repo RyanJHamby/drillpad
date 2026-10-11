@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>DrillPad · Progress</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f7f7f5;--surface:#fff;--fg:#1c1c1a;--mut:#6b6b66;--bd:#e4e3de;--acc:#3b5bdb;--acc-bg:#edf0fd;--ok:#198754;--ok-bg:#e7f5ee;--bad:#c92a2a;--bad-bg:#fdecec;--warn:#b7791f;--code:#f1f0ec;--r:12px}
+@media(prefers-color-scheme:dark){:root{--bg:#0e0f11;--surface:#16181b;--fg:#e8e8e6;--mut:#93938d;--bd:#26292d;--acc:#7c95ff;--acc-bg:#1b2140;--ok:#4cc38a;--ok-bg:#12281e;--bad:#ff7b7b;--bad-bg:#2d1618;--warn:#e0b252;--code:#1d2024}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:2}
+.logo{font-weight:700;font-size:16px}.logo span{color:var(--acc)}a{color:var(--acc)}
+select{padding:7px 10px;border:1px solid var(--bd);background:var(--bg);color:var(--fg);border-radius:8px;font:inherit}
+.btn{border:1px solid var(--bd);background:var(--surface);border-radius:8px;padding:6px 12px;text-decoration:none;color:var(--fg)}
+.wrap{max-width:1180px;margin:0 auto;padding:24px;display:grid;gap:20px}
+.grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.card{background:var(--surface);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px}
+.card h2{margin:0 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.sub{color:var(--mut);font-size:12px;margin:0 0 12px}
+.hero{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center}
+.gauge{width:150px;height:150px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--code) 0)}
+.gauge div{width:116px;height:116px;border-radius:50%;background:var(--surface);display:grid;place-items:center;text-align:center;line-height:1.1}
+.gauge b{font-size:32px}.gauge small{color:var(--mut)}
+.badge{display:inline-block;padding:3px 12px;border-radius:99px;font-weight:700;font-size:13px}.badge.ok{background:var(--ok-bg);color:var(--ok)}.badge.bad{background:var(--bad-bg);color:var(--bad)}
+ul.rs{margin:8px 0 0;padding-left:18px;color:var(--mut)}
+.row{display:grid;grid-template-columns:130px 1fr 54px;gap:10px;align-items:center;margin:7px 0}
+.pbar{height:9px;border-radius:99px;background:var(--code);overflow:hidden}.pbar i{display:block;height:100%;background:var(--acc);border-radius:99px}
+.pbar i.bad{background:var(--bad)}.pbar i.ok{background:var(--ok)}.pbar i.warn{background:var(--warn)}
+.mut{color:var(--mut)}.firm{display:grid;grid-template-columns:1fr 70px 76px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);cursor:pointer}.firm:last-child{border:0}.firm.sel{background:var(--acc-bg);margin:0 -10px;padding:8px 10px;border-radius:8px}
+.heat{display:flex;gap:4px}.heat i{flex:1;height:30px;border-radius:5px;background:var(--code)}
+.act{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:9px 0;border-bottom:1px solid var(--bd)}.act:last-child{border:0}
+.tag{font-size:12px;padding:1px 8px;border-radius:99px;background:var(--code);color:var(--mut)}
+.defn{font-size:13px;color:var(--mut)}.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}.cols h3{margin:0 0 4px;font-size:13px}.cols ul{margin:0;padding-left:18px}
+@media(max-width:700px){.hero{grid-template-columns:1fr}.cols{grid-template-columns:1fr}}
+</style></head><body>
+<header><div class="logo">Drill<span>Pad</span></div><a class="btn" href="/">← Practice</a><a class="btn" href="/learn">Learn</a><a class="btn" href="/questions">Questions</a><a class="btn" href="/plan">Plan</a><b>Progress</b>
+<span style="flex:1"></span><label class="mut">Target</label><select id="firm"></select></header>
+<div class="wrap" id="app"><div class="mut">Loading…</div></div>
+<script>
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const DIM={correctness:'Correctness',edge_cases:'Edge cases',complexity:'Big-O',pace:'Pace',communication:'Communication',extensions:'Extensions',quality:'First-try quality'};
+const q=new URLSearchParams(location.search);let firm=q.get('firm')||'generic',firms=[];
+const pct=x=>Math.round(x*100);
+async function load(){
+  const [p,fs]=await Promise.all([fetch('/api/progress?firm='+encodeURIComponent(firm)).then(r=>r.json()),fetch('/api/firms').then(r=>r.json())]);
+  firms=fs;$('firm').innerHTML=fs.map(f=>`<option value="${esc(f.id)}" ${f.id===p.selected?'selected':''}>${esc(f.name)}</option>`).join('');
+  render(p,fs.find(f=>f.id===p.selected)||fs[0]);
+}
+const $=id=>document.getElementById(id);
+$('firm').onchange=e=>{firm=e.target.value;history.replaceState(null,'','?firm='+encodeURIComponent(firm));load()};
+function spark(tl){
+  if(tl.length<2)return '<p class="mut">Need at least 2 evaluations for a trend.</p>';
+  const W=420,H=90,xs=i=>i/(tl.length-1)*(W-10)+5,ys=v=>H-8-(v/100)*(H-16);
+  const pts=tl.map((t,i)=>`${xs(i)},${ys(t.total)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Score trend"><polyline fill="none" stroke="var(--acc)" stroke-width="2" points="${pts}"/>${tl.map((t,i)=>`<circle cx="${xs(i)}" cy="${ys(t.total)}" r="3" fill="var(--acc)"><title>${esc(t.problem_id)}: ${t.total}</title></circle>`).join('')}</svg>`;
+}
+function render(p,f){
+  const fv=p.firm,shown=fv.evaluated?fv.mean_attempted:0,c=fv.ready?'var(--ok)':shown>=fv.pass_score?'var(--warn)':'var(--bad)';
+  const edge=p.edge_map.length?p.edge_map.map(e=>`<div class="row"><span>${esc(e.tag)}</span><div class="pbar"><i class="${e.first_run_miss>.4?'bad':e.first_run_miss>.15?'warn':'ok'}" style="width:${pct(e.first_run_miss)}%"></i></div><span class="mut">${pct(e.first_run_miss)}%</span></div>`).join('')+'<p class="sub" style="margin-top:8px">Share of tagged tests failed on your <b>first run</b>. Final-miss rate is lower once you debug; live, the first run is what counts.</p>':'<p class="mut">No evaluations yet. Solve a problem, then use the Score tab.</p>';
+  const skill=Object.entries(DIM).map(([d,n])=>{const v=p.skill[d];const w=fv.weights[d];return `<div class="row"><span>${n} <small class="mut">(${w})</small></span><div class="pbar"><i class="${v==null?'':v<.6?'bad':v<.8?'warn':'ok'}" style="width:${pct(v||0)}%"></i></div><span class="mut">${v==null?'n/a':pct(v)+'%'}</span></div>`}).join('');
+  const days=[...Array(14)].map((_,i)=>{const d=new Date(Date.now()-(13-i)*864e5).toISOString().slice(0,10);return [d,p.activity[d]||0]});
+  const mx=Math.max(1,...days.map(d=>d[1]));
+  $('app').innerHTML=`
+  <div class="card"><h2>${esc(fv.name)} — bar ${fv.pass_score}</h2>
+    <div class="hero"><div class="gauge" style="--p:${Math.min(100,shown)};--c:${c}"><div><span><b>${fv.evaluated?Math.round(shown):"–"}</b><br><small>avg of evaluated<br>bar ${fv.pass_score}</small></span></div></div>
+    <div><span class="badge ${fv.ready?'ok':'bad'}">${fv.ready?'READY':'NOT READY'}</span>
+      <p style="margin:10px 0 0"><b>${fv.evaluated}/${fv.problems}</b> problems evaluated · <b>${fv.passing}</b> at or above the bar · average on evaluated: <b>${fv.mean_attempted}</b></p>
+      ${fv.reasons.length?'<ul class="rs">'+fv.reasons.map(r=>`<li>${esc(r)}</li>`).join('')+'</ul>':''}
+      <p class="defn" style="margin-top:12px">${esc(p.definition)}</p></div></div></div>
+  <div class="grid">
+    <div class="card"><h2>Do this next</h2><p class="sub">Largest gap to the bar first, for this target.</p>${p.next.length?p.next.map(a=>`<div class="act"><div><a href="/?p=${encodeURIComponent(a.problem_id)}"><b>${esc(a.title)}</b></a><br><span class="mut">${a.fix?esc(a.fix.dimension==='all'?a.fix.why:DIM[a.fix.dimension]+': '+a.fix.why):''}</span></div><div style="text-align:right"><b>${a.score==null?'–':a.score}</b><br><span class="tag">-${a.gap}</span></div></div>`).join(''):'<p class="mut">Every problem for this target is at or above the bar.</p>'}</div>
+    <div class="card"><h2>Skill by rubric dimension</h2><p class="sub">Average across your latest evaluation of each problem. (weight)</p>${skill}</div>
+    <div class="card"><h2>Edge-case misses</h2>${edge}</div>
+    <div class="card"><h2>Big-O misses</h2><p class="sub">Time/space you got wrong in your latest evaluations.</p>${p.complexity_misses.length?p.complexity_misses.map(m=>`<div class="act"><div><b>${esc(m.problem_id)}</b> · ${esc(m.op)}<br><span class="mut">expected time ${esc(m.expected[0])}, space ${esc(m.expected[1])}</span></div><div>${m.time_ok?'':'<span class="tag">time</span> '}${m.space_ok?'':'<span class="tag">space</span>'}</div></div>`).join(''):'<p class="mut">None recorded.</p>'}</div>
+    <div class="card"><h2>Trend</h2><p class="sub">Score per evaluation under this profile${p.trend.delta_last10_vs_prev10==null?'':` · last 10 vs previous 10: <b>${p.trend.delta_last10_vs_prev10>0?'+':''}${p.trend.delta_last10_vs_prev10}</b>`}</p>${spark(p.trend.timeline)}<h2 style="margin-top:14px">Reps, last 14 days</h2><div class="heat">${days.map(([d,n])=>`<i title="${d}: ${n} attempts" style="${n?`background:var(--acc);opacity:${.3+.7*n/mx}`:''}"></i>`).join('')}</div></div>
+    <div class="card"><h2>Targets</h2><p class="sub">Click to switch. Shows your average on evaluated problems; readiness also needs 80% coverage.</p>${p.firms.map(x=>`<div class="firm ${x.id===p.selected?'sel':''}" data-f="${esc(x.id)}"><span><b>${esc(x.name)}</b><br><small class="mut">${x.evaluated}/${x.problems} evaluated</small></span><b>${x.evaluated?Math.round(x.mean_attempted):"–"}</b><span class="badge ${x.ready?'ok':'bad'}" style="text-align:center">${x.ready?'READY':'NOT YET'}</span></div>`).join('')}</div>
+  </div>
+  <div class="card"><h2>What ${esc(f.name)} rewards</h2><div class="cols"><div><h3>Earns points</h3><ul>${(f.earns.length?f.earns:['(no profile detail yet)']).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><div><h3>Loses points</h3><ul>${(f.loses.length?f.loses:['—']).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div></div>
+    ${f.red_flags.length?`<h3 style="margin:14px 0 4px">Red flags</h3><ul>${f.red_flags.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+    ${f.missing_problems.length?`<h3 style="margin:14px 0 4px">Asked there, not yet in DrillPad</h3><ul>${f.missing_problems.map(x=>`<li>${esc(typeof x==='string'?x:JSON.stringify(x))}</li>`).join('')}</ul>`:''}
+    ${f.rubric_confidence!=='documented'?`<p class="sub" style="margin-top:12px;padding:8px 10px;border-left:3px solid var(--warn);background:var(--code)"><b>Inferred rubric.</b> Weights, pass score and pace targets are DrillPad's own calibration for this firm (format evidence: ${esc(f.format_confidence||'thin')}); the firm has not published them. Treat the bar as a conservative training target, not a prediction.</p>`:''}<p class="sub" style="margin-top:12px">Weights: ${Object.entries(f.weights).map(([k,v])=>`${DIM[k]} ${v}`).join(' · ')} · floors: ${Object.entries(f.floors).map(([k,v])=>`${DIM[k]||k} ≥${pct(v)}%`).join(', ')||'none'}</p></div>`;
+  document.querySelectorAll('[data-f]').forEach(e=>e.onclick=()=>{firm=e.dataset.f;history.replaceState(null,'','?firm='+encodeURIComponent(firm));load()});
+}
+load();
+</script></body></html>

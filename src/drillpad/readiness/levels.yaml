@@ -1,0 +1,99 @@
+# Readiness config. ALL numbers in `heuristics` are INITIAL HEURISTICS, not calibrated.
+# They are meant to be recalibrated from Ryan's own results (pow `results/` captures). This is the
+# single place the thresholds live; readiness/model.py has no hidden defaults.
+heuristics:
+  mastery_threshold: 0.75     # pattern counts as "at mastery" at or above this (INITIAL HEURISTIC)
+  level_ready_threshold: 0.85 # level "ready" when readiness fraction >= this (INITIAL HEURISTIC)
+  window: 3                   # last N timed solves considered; fewer solves => proportionally lower mastery
+  hint_penalty: 0.25          # per hint used, subtracted from a solve's score (INITIAL HEURISTIC)
+  overrun_limit: 2.0          # elapsed >= target * this => time factor hits time_floor
+  time_floor: 0.3             # time factor at/after overrun_limit (linear from 1.0 at target)
+  retrievability_weight: 0.3  # share of mastery from Anki retrievability when it is supplied
+  rep_score: 0.9              # assumed score of each future clean timed rep, for gap estimates
+
+# Pattern weights per level: relative importance within the level (normalised at runtime).
+# Slugs: existing pack patterns (amortized-analysis, array-resize), my drill pattern set, and items from
+# the author's private notes (item numbers in comments).
+levels:
+  L1:
+    name: Core data structures fluent
+    patterns:   # slugs match patterns used in content/packs/core-ds
+      amortized-analysis: 2   # pack: dynamic-array, stack
+      array-resize: 2         # pack: dynamic-array (#1)
+      linked-list: 2          # #2, #3
+      circular-buffer: 2      # #4, deque
+      modular-indexing: 1     # ring buffer / deque
+      stack: 2                # #5
+      queue: 2                # #6, #7
+      hash-table: 3           # #8
+      chaining: 2             # #8
+      open-addressing: 2      # #9
+      set: 1                  # #10
+      heap: 3                 # #11
+      priority-queue: 1       # #11
+      bst-basics: 2           # #37
+      graph-bfs-dfs: 2        # #40
+  L2:
+    name: Medium DSA at pace
+    patterns:
+      two-pointers-sliding-window: 3
+      sliding-window: 2
+      hash-counting-grouping: 2
+      prefix-sums: 2
+      binary-search: 2
+      binary-search-on-answer: 2
+      bfs: 3
+      dfs-grid-graph: 2
+      topological-sort: 2
+      union-find: 2           # #101
+      heap-top-k: 3
+      heap-top-k-intervals: 2
+      monotonic-stack: 2
+      dp-1d-2d: 3
+      backtracking: 2
+      trie: 2                 # #100
+  L3:
+    name: Systems implementation under follow-ups
+    patterns:
+      lru-cache: 3            # #16
+      token-bucket: 3         # #17
+      sliding-window-rate-limiter: 2  # #29
+      thread-pool: 3          # #12
+      bounded-queue-producer-consumer: 3  # #13
+      mutex-condvar-correctness: 2  # #14, #15
+      circuit-breaker: 1      # #18
+      retry-backoff-jitter: 1 # #21
+      consistent-hashing: 2   # #19
+      dynamic-batching: 2     # #22, #27
+      lfu-cache: 1            # #23
+      kv-store-transactions: 2  # practical round
+      idempotent-ledger: 2    # practical round
+  L4:
+    name: Hard + concurrency/memory-model + live follow-ups
+    patterns:
+      memory-model-happens-before: 3  # #33
+      lock-free-cas: 3        # #24
+      aba-hazard-pointers: 2  # #34
+      double-checked-locking: 2  # #35
+      false-sharing: 1        # #32
+      work-stealing-pool: 2   # #70
+      deadlock-avoidance: 2   # #81
+      raft-leader-election: 2 # #25
+      write-ahead-log: 1      # #49
+      paged-allocator: 2      # #50
+      live-follow-up-handling: 3  # communication-flavoured; practised in timed/mock mode
+
+# Language tracks (separate from the L1-L4 ladder). STUB: starts at zero; Ryan's C++ is L0 per
+# my C++ practice plan. Patterns follow that plan's phases. Not wired to packs yet.
+tracks:
+  cpp:
+    name: C++ language track (stub, starts at zero)
+    patterns:
+      raii-ownership: 3
+      smart-pointers: 2
+      move-semantics: 3
+      stl-internals: 2
+      templates-constexpr: 1
+      atomics-memory-order: 3
+      spsc-lock-free-queue: 2
+      custom-allocator: 1

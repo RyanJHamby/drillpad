@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>DrillPad · Guide</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f7f7f5;--surface:#fff;--fg:#1c1c1a;--mut:#6b6b66;--bd:#e4e3de;--acc:#3b5bdb;--acc-bg:#edf0fd;--ok:#198754;--ok-bg:#e7f5ee;--bad:#c92a2a;--warn:#b7791f;--code:#f1f0ec;--r:12px}
+@media(prefers-color-scheme:dark){:root{--bg:#0e0f11;--surface:#16181b;--fg:#e8e8e6;--mut:#93938d;--bd:#26292d;--acc:#7c95ff;--acc-bg:#1b2140;--ok:#4cc38a;--ok-bg:#12281e;--bad:#ff7b7b;--warn:#e0b252;--code:#1d2024}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:3}
+.logo{font-weight:700;font-size:16px}.logo span{color:var(--acc)}a{color:var(--acc)}
+.btn{border:1px solid var(--bd);background:var(--surface);border-radius:8px;padding:6px 12px;text-decoration:none;color:var(--fg);cursor:pointer;font:inherit;white-space:nowrap}.btn:hover{background:var(--code)}
+main{padding:28px 40px;max-width:900px;margin:0 auto}
+.md h1{font-size:28px;margin:0 0 .6em;line-height:1.25}.md h2{font-size:18px;margin:1.8em 0 .4em;border-bottom:1px solid var(--bd);padding-bottom:8px}.md h3{font-size:15px;margin:1.4em 0 .4em}
+.md p,.md li{margin:.5em 0}.md code{background:var(--code);padding:1px 5px;border-radius:5px;font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+.md pre{background:var(--code);padding:12px 14px;border-radius:var(--r);overflow:auto;border:1px solid var(--bd);line-height:1.45}.md pre code{background:none;padding:0}
+.md table{border-collapse:collapse;margin:.8em 0}.md td,.md th{border:1px solid var(--bd);padding:5px 10px;text-align:left}
+.md blockquote{margin:.6em 0;padding:.1em 1em;border-left:3px solid var(--bd);color:var(--mut)}
+.md ul,.md ol{margin:.8em 0;padding-left:20px}
+.md li{margin:.3em 0}
+.empty{color:var(--mut);padding:60px 0;text-align:center}
+@media(max-width:900px){main{padding:20px}}
+</style></head><body>
+<header><a href="/home" style="text-decoration: none; display: flex; align-items: center; gap: 10px; color: inherit;">
+  <div class="logo">Drill<span>Pad</span></div>
+</a><span style="color: var(--mut); font-size: 12px;" id="guide-title">Guide</span></header>
+<main id="guide" class="md empty">Loading guide...</main>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" media="(prefers-color-scheme: dark)">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+async function load(){
+  const q=new URLSearchParams(location.search),guide=q.get('g');
+  if(!guide){
+    $('guide').innerHTML='<p style="color:var(--mut)">No guide specified. Use ?g=guide-name</p>';
+    return;
+  }
+  try{
+    const r=await fetch(`/api/guides/${guide}`);
+    if(!r.ok)throw new Error('Guide not found');
+    const{markdown}=await r.json();
+    let html=marked.parse(markdown,{gfm:true});
+    html=DOMPurify.sanitize(html,{ADD_TAGS:['div'],ADD_ATTR:['class']});
+    $('guide').className='md';
+    $('guide').innerHTML=html;
+    $('guide-title').textContent=guide.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');
+    document.querySelectorAll('#guide pre code').forEach(c=>{try{hljs.highlightElement(c)}catch{}});
+    scrollTo(0,0);
+  }catch(e){
+    $('guide').className='';
+    $('guide').innerHTML=`<p style="color:var(--bad)">Error loading guide: ${e.message}</p>`;
+  }
+}
+load();
+</script></body></html>

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interview Prep Guides - DrillPad</title>
+  <style>
+    :root {
+      --bg: #f7f7f5;
+      --surface: #fff;
+      --fg: #1c1c1a;
+      --mut: #6b6b66;
+      --bd: #e4e3de;
+      --acc: #3b5bdb;
+      --acc-bg: #edf0fd;
+      --ok: #198754;
+      --ok-bg: #e7f5ee;
+      --r: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e0f11;
+        --surface: #16181b;
+        --fg: #e8e8e6;
+        --mut: #93938d;
+        --bd: #26292d;
+        --acc: #7c95ff;
+        --acc-bg: #1b2140;
+        --ok: #4cc38a;
+        --ok-bg: #12281e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 20px;
+    }
+    header {
+      max-width: 1200px;
+      margin: 0 auto 40px;
+    }
+    .logo {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .logo span { color: var(--acc); }
+    header > p {
+      color: var(--mut);
+      margin: 10px 0 0;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .section {
+      margin-bottom: 50px;
+    }
+    .section > h2 {
+      font-size: 20px;
+      margin: 0 0 20px;
+      color: var(--fg);
+      border-bottom: 2px solid var(--acc);
+      padding-bottom: 10px;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--bd);
+      border-radius: var(--r);
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+    }
+    .card:hover {
+      border-color: var(--acc);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
+    }
+    .card-title {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 8px;
+      color: var(--acc);
+    }
+    .card-desc {
+      font-size: 13px;
+      color: var(--mut);
+      margin-bottom: 12px;
+      flex: 1;
+    }
+    .card-meta {
+      font-size: 12px;
+      color: var(--mut);
+      display: flex;
+      gap: 12px;
+    }
+    .tag {
+      background: var(--code);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .code { color: #999; }
+    .start-here {
+      background: linear-gradient(135deg, var(--acc-bg) 0%, rgba(123, 149, 255, 0.05) 100%);
+      border: 2px solid var(--acc);
+      border-radius: var(--r);
+      padding: 30px;
+      margin-bottom: 40px;
+    }
+    .start-here h2 {
+      margin: 0 0 15px;
+      color: var(--acc);
+      font-size: 22px;
+    }
+    .start-here ol {
+      margin: 15px 0;
+      padding-left: 20px;
+    }
+    .start-here li {
+      margin: 10px 0;
+      line-height: 1.6;
+    }
+    .btn {
+      display: inline-block;
+      background: var(--acc);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      margin-top: 15px;
+      transition: background 0.2s;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn:hover {
+      filter: brightness(1.1);
+    }
+    .section-desc {
+      color: var(--mut);
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+    .nav-top {
+      background: var(--surface);
+      border-bottom: 1px solid var(--bd);
+      padding: 12px 20px;
+      display: flex;
+      gap: 20px;
+      margin: -20px -20px 30px;
+    }
+    .nav-top a {
+      color: var(--fg);
+      text-decoration: none;
+      font-weight: 500;
+      padding: 8px 0;
+      border-bottom: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .nav-top a:hover,
+    .nav-top a.active {
+      border-bottom-color: var(--acc);
+      color: var(--acc);
+    }
+  </style>
+</head>
+<body>
+  <header style="border-bottom: 1px solid var(--bd); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between;">
+    <a href="/home" style="text-decoration: none; display: flex; align-items: center; color: inherit;">
+      <div class="logo" style="font-size: 20px; font-weight: 700; margin: 0;">Drill<span>Pad</span></div>
+    </a>
+    <span style="color: var(--mut); font-size: 12px;">Guides</span>
+  </header>
+
+  <div style="max-width: 1200px; margin: 0 auto; padding: 0 20px;">
+    <header style="padding: 30px 0; border: none;">
+      <div class="logo" style="font-size: 24px;">Interview Prep Guides</div>
+      <p style="color: var(--mut); margin: 10px 0 0;">Everything you need to understand the system</p>
+    </header>
+  </div>
+
+  <div class="container">
+
+    <!-- START HERE -->
+    <div class="start-here">
+      <h2>🚀 START HERE</h2>
+      <p>New to interview prep? Follow this path:</p>
+      <ol>
+        <li><strong>Read INTERVIEW_PREP_MASTER_PLAN.md</strong> — 20 min overview of everything</li>
+        <li><strong>Pick your role:</strong>
+          <ul>
+            <li>Trading → Read TRACKS.md for the Trading path</li>
+            <li>AI Infra → Read TRACKS.md for the AI Infra path</li>
+            <li>AWS SDE II → Read TRACKS.md for AWS path</li>
+            <li>Other role → Use ROLE_CUSTOMIZATION_GUIDE.md to create custom path</li>
+          </ul>
+        </li>
+        <li><strong>Study the curriculum</strong> — Go to "Learn" tab, follow your path (40-50 hours)</li>
+        <li><strong>Practice interviews</strong> — Read BEHAVIORAL_AND_STORYTELLING.md, then do mocks</li>
+        <li><strong>Interview day</strong> — Use TECHNICAL_INTERVIEW_TACTICS.md as reference</li>
+      </ol>
+      <button class="btn" onclick="document.getElementById('resume-prep').scrollIntoView({ behavior: 'smooth' })">Jump to Interview Prep →</button>
+    </div>
+
+    <!-- INTERVIEW PREP (CRITICAL) -->
+    <div class="section" id="resume-prep">
+      <h2>📋 Interview Prep (If Interviewing Soon)</h2>
+      <p class="section-desc"><strong>Read these first if you have an interview in the next 4 weeks.</strong> Deep dives on your actual resume claims + firm-specific scoring rubrics.</p>
+      <div class="card-grid">
+        <a href="/guide?g=resume-claims" class="card" style="border-left: 4px solid var(--ok); background: linear-gradient(135deg, var(--ok-bg) 0%, transparent 100%);">
+          <div class="card-title">🏆 RESUME_CLAIM_WALKTHROUGHS.md</div>
+          <div class="card-desc"><strong>Prepare for "Tell me about X on your resume."</strong> OrderBook (P50 0.21µs, lock-free queue, real bottleneck), Payment Adapter (6 days→5min, batching+idempotency), Inference System (continuous batching, prefill vs decode), FlowState (honest benchmarks). Each has 4-6 likely interview questions with model answers grounded in your actual code.</div>
+          <div class="card-meta">
+            <span class="tag">Resume defense</span>
+            <span class="tag">27 KB</span>
+            <span class="tag">~30 min</span>
+          </div>
+        </a>
+        <a href="/guide?g=firm-rubrics" class="card" style="border-left: 4px solid var(--ok); background: linear-gradient(135deg, var(--ok-bg) 0%, transparent 100%);">
+          <div class="card-title">⭐ FIRM_SPECIFIC_INTERVIEW_RUBRICS.md</div>
+          <div class="card-desc"><strong>Score yourself like the real interview.</strong> Trading: 30pts latency reasoning + 30pts correctness. AI Infra: 25pts GPU fundamentals + 25pts distributed systems. Cloud/payments: 30pts system design + 30pts reliability. Record yourself, grade against rubric, aim for 75+ before interview day.</div>
+          <div class="card-meta">
+            <span class="tag">Self-scoring</span>
+            <span class="tag">12 KB</span>
+            <span class="tag">Rubrics</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- CAREER & WEALTH STRATEGY -->
+    <div class="section">
+      <h2>Career & Wealth Strategy</h2>
+      <p class="section-desc">Long-term positioning, wealth creation paths, and how to build leverage over your career.</p>
+      <div class="card-grid">
+        <a href="/guide?g=positioning" class="card">
+          <div class="card-title">🎯 CANDIDATE_POSITIONING_STRATEGY.md</div>
+          <div class="card-desc">The winning formula: how to become the candidate companies seek out. Build inbound interest, develop referral network, maintain signals aligned with your thesis (AI-infra). Three pillars: visibility, referrals, cross-industry checkmarks.</div>
+          <div class="card-meta">
+            <span class="tag">Career strategy</span>
+            <span class="tag">Positioning</span>
+          </div>
+        </a>
+        <a href="/guide?g=wealth" class="card">
+          <div class="card-title">💰 WEALTH_CREATION_PATHS.md</div>
+          <div class="card-desc">Five paths to wealth in tech: W2 salaries, startup equity, founder, specialist, product creation. Expected values, mechanics, pitfalls, success rates. Portfolio approach for best risk-adjusted returns. Projections for AI future and 5-30 year wealth compounding.</div>
+          <div class="card-meta">
+            <span class="tag">Wealth creation</span>
+            <span class="tag">Long-term planning</span>
+          </div>
+        </a>
+        <a href="/guide?g=pmf-shapes" class="card">
+          <div class="card-title">🎯 SIDE_PROJECT_PMF_SHAPES.md</div>
+          <div class="card-desc">Five PMF shapes for side projects with limited time: Thin Slice (fast PMF, small market), Increasing Return (slow→fast growth), AI Leverage (low effort, crowded), Data Product (defensible moat), Micro-Community (network effects). Decision framework, execution playbooks, AI era considerations.</div>
+          <div class="card-meta">
+            <span class="tag">Side projects</span>
+            <span class="tag">Product strategy</span>
+          </div>
+        </a>
+        <a href="/guide?g=durable-skills" class="card">
+          <div class="card-title">🚀 DURABLE_SKILLS_NEXT_5_YEARS.md</div>
+          <div class="card-desc">20 durable skills to build extraordinary outcomes (not just happy-path Amazon/Google): Foundation skills (systems thinking, problem finding, taste), Product skills (design, distribution, unit economics), Business skills (fundraising, financial modeling, hiring), Meta-skills (storytelling, pattern recognition, decision-making). Development timeline: 5 years to master.</div>
+          <div class="card-meta">
+            <span class="tag">Skill development</span>
+            <span class="tag">Founder skills</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- LEARNING GUIDES -->
+    <div class="section" id="learning">
+      <h2>Learning & Curriculum (Guides)</h2>
+      <p class="section-desc">Complete curriculum guides with learning paths, time estimates, and role-specific customization.</p>
+      <div class="card-grid">
+        <a href="/guide?g=curriculum" class="card">
+          <div class="card-title">📚 CURRICULUM_GUIDE.md</div>
+          <div class="card-desc">Complete learning paths for Trading, AI Infra, and AWS tracks. Includes Foundation (4 hrs), 3 tiers per track, time estimates, and resume defense mapping.</div>
+          <div class="card-meta">
+            <span class="tag">7500+ words</span>
+            <span class="tag">All roles</span>
+          </div>
+        </a>
+        <a href="/guide?g=tracks" class="card">
+          <div class="card-title">🗺️ TRACKS.md</div>
+          <div class="card-desc">Visual quick reference. Which modules per track, what to skip, direct links to Learn page, cross-track combinations, readiness benchmarks.</div>
+          <div class="card-meta">
+            <span class="tag">Quick ref</span>
+            <span class="tag">Bookmarkable</span>
+          </div>
+        </a>
+        <a href="/guide?g=roles" class="card">
+          <div class="card-title">💼 ROLES.md</div>
+          <div class="card-desc">Role-specific paths. Template for adding new roles. How to customize the curriculum for any job.</div>
+          <div class="card-meta">
+            <span class="tag">Role paths</span>
+            <span class="tag">Extensible</span>
+          </div>
+        </a>
+        <a href="/guide?g=role-customization" class="card">
+          <div class="card-title">⚙️ ROLE_CUSTOMIZATION_GUIDE.md</div>
+          <div class="card-desc">Step-by-step process to analyze any job posting and create a custom curriculum path. 7-step framework, template, automation roadmap.</div>
+          <div class="card-meta">
+            <span class="tag">Process</span>
+            <span class="tag">Extensible</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- INTERVIEW MECHANICS -->
+    <div class="section">
+      <h2>Interview Mechanics (Guides)</h2>
+      <p class="section-desc">Scoring rubrics, storytelling frameworks, technical tactics, and everything you need to pass interviews.</p>
+      <div class="card-grid">
+        <a href="/guide?g=interview-success" class="card">
+          <div class="card-title">✅ INTERVIEW_SUCCESS_CRITERIA.md</div>
+          <div class="card-desc">What "passing" means for each interview round. Scoring rubrics, red flags, green lights, what interviewers are thinking. Know exactly what success looks like.</div>
+          <div class="card-meta">
+            <span class="tag">Scoring</span>
+            <span class="tag">All rounds</span>
+          </div>
+        </a>
+        <a href="/guide?g=behavioral" class="card">
+          <div class="card-title">🎯 BEHAVIORAL_AND_STORYTELLING.md</div>
+          <div class="card-desc">STAR method, story building, delivery, firm-specific customization. Build 5-7 compelling stories, practice delivery, ask excellent questions. The soft skills guide.</div>
+          <div class="card-meta">
+            <span class="tag">STAR method</span>
+            <span class="tag">Storytelling</span>
+          </div>
+        </a>
+        <a href="/guide?g=technical" class="card">
+          <div class="card-title">🔧 TECHNICAL_INTERVIEW_TACTICS.md</div>
+          <div class="card-desc">Using AI tools in interviews, debugging unknown code, system design patterns, coding interview approach. Patterns for every technical round, momentum tips.</div>
+          <div class="card-meta">
+            <span class="tag">Tactics</span>
+            <span class="tag">Technical rounds</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- MASTER PLAN -->
+    <div class="section">
+      <h2>Complete System (Master Plan)</h2>
+      <p class="section-desc">The complete 10-week interview prep plan tying everything together.</p>
+      <div class="card-grid">
+        <a href="/guide?g=master-plan" class="card">
+          <div class="card-title">🎯 INTERVIEW_PREP_MASTER_PLAN.md</div>
+          <div class="card-desc">Complete 10-week plan. How to use each guide. 3 pillars of success. Red flags to avoid. Green lights to emphasize. Day-of checklist. Everything integrated.</div>
+          <div class="card-meta">
+            <span class="tag">Complete</span>
+            <span class="tag">10-week</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- LEARN TAB (Lessons) -->
+    <div class="section">
+      <h2>Lessons & Content (Learn Tab)</h2>
+      <p class="section-desc">Go to the "Learn" tab above to access the 129 lessons across 40 modules. Start with Foundation + Fundamentals, then Execution Playbook, then your track.</p>
+      <div style="background: var(--surface); border: 1px solid var(--bd); border-radius: var(--r); padding: 20px; text-align: center;">
+        <p style="color: var(--mut); margin: 0;">
+          <strong>40 Modules • 129 Lessons</strong><br/>
+          Foundation + Fundamentals + Execution Playbook + Critical Path + Modern C++ + AI Skills (12 deep lessons) + Specialized Tracks<br/>
+          Comprehensive interview prep for Trading, AI-Infra, and Systems roles
+        </p>
+        <button class="btn" onclick="window.location.href = '/learn'">Go to Learn Tab →</button>
+      </div>
+    </div>
+
+    <!-- NAVIGATION GUIDE -->
+    <div class="section" style="background: var(--surface); border: 1px solid var(--bd); border-radius: var(--r); padding: 30px;">
+      <h2>Navigation Guide: What Each Button Means</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+        <div>
+          <h3 style="color: var(--acc); margin: 0 0 10px;">Learn</h3>
+          <p style="margin: 0; color: var(--mut); font-size: 14px;">
+            <strong>129 lessons</strong> organized by module. Start with Foundation (5) → Fundamentals (30) → Execution Playbook (6) → Critical Path (13) → AI Skills (12: agents, models, context, evals, systems code, MCP, safety, training, RAG, team scaling), then your track. ~20-28 hours comprehensive prep.
+          </p>
+        </div>
+        <div>
+          <h3 style="color: var(--acc); margin: 0 0 10px;">Practice</h3>
+          <p style="margin: 0; color: var(--mut); font-size: 14px;">
+            <strong>Interview-style problems</strong> attached to lessons. Use these for practice after learning the concept. Start here only after finishing relevant lessons.
+          </p>
+        </div>
+        <div>
+          <h3 style="color: var(--acc); margin: 0 0 10px;">Plan</h3>
+          <p style="margin: 0; color: var(--mut); font-size: 14px;">
+            <strong>Interview prep planner</strong>. Schedule your 10-week prep, track your progress, set study goals. Updates Progress tracker.
+          </p>
+        </div>
+        <div>
+          <h3 style="color: var(--acc); margin: 0 0 10px;">Progress</h3>
+          <p style="margin: 0; color: var(--mut); font-size: 14px;">
+            <strong>Track what you've done</strong>. Lessons completed, practice problems solved, readiness score. Check here to see your progress.
+          </p>
+        </div>
+        <div>
+          <h3 style="color: var(--acc); margin: 0 0 10px;">Guides</h3>
+          <p style="margin: 0; color: var(--mut); font-size: 14px;">
+            <strong>This page.</strong> Links to all 7 master guides. Read these for frameworks, storytelling, tactics, success criteria.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div style="margin-top: 60px; padding-top: 30px; border-top: 1px solid var(--bd); color: var(--mut); font-size: 13px; text-align: center;">
+      <p>
+        <strong>Quick Start:</strong> Read INTERVIEW_PREP_MASTER_PLAN.md (20 min) → Pick your track → Go to Learn tab → Follow 10-week plan
+      </p>
+    </div>
+
+  </div>
+</body>
+</html>

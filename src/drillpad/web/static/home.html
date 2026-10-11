@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DrillPad - Interview Prep</title>
+  <style>
+    :root {
+      --bg: #f7f7f5;
+      --surface: #fff;
+      --fg: #1c1c1a;
+      --mut: #6b6b66;
+      --bd: #e4e3de;
+      --acc: #3b5bdb;
+      --acc-bg: #edf0fd;
+      --ok: #198754;
+      --ok-bg: #e7f5ee;
+      --r: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e0f11;
+        --surface: #16181b;
+        --fg: #e8e8e6;
+        --mut: #93938d;
+        --bd: #26292d;
+        --acc: #7c95ff;
+        --acc-bg: #1b2140;
+        --ok: #4cc38a;
+        --ok-bg: #12281e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--bd);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .logo span { color: var(--acc); }
+    header .subtext {
+      font-size: 12px;
+      color: var(--mut);
+      margin-left: 20px;
+    }
+    main {
+      flex: 1;
+      padding: 40px 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .hero {
+      margin-bottom: 60px;
+    }
+    .hero h1 {
+      font-size: 32px;
+      margin: 0 0 10px;
+      color: var(--fg);
+    }
+    .hero p {
+      font-size: 16px;
+      color: var(--mut);
+      margin: 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-bottom: 60px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--bd);
+      border-radius: var(--r);
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+    }
+    .card:hover {
+      border-color: var(--acc);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
+    }
+    .card-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-weight: 600;
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: var(--fg);
+    }
+    .card-desc {
+      font-size: 13px;
+      color: var(--mut);
+      margin: 0;
+      flex: 1;
+      margin-bottom: 12px;
+    }
+    .card-meta {
+      font-size: 12px;
+      color: var(--acc);
+      font-weight: 500;
+    }
+    .section-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 50px 0 20px;
+      color: var(--fg);
+      border-bottom: 2px solid var(--acc);
+      padding-bottom: 10px;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+    .feature {
+      background: var(--acc-bg);
+      border: 1px solid var(--acc);
+      border-radius: var(--r);
+      padding: 16px;
+      text-align: center;
+    }
+    .feature-num {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--acc);
+      margin-bottom: 4px;
+    }
+    .feature-text {
+      font-size: 13px;
+      color: var(--fg);
+      margin: 0;
+    }
+    .start-section {
+      background: linear-gradient(135deg, var(--acc-bg) 0%, rgba(123, 149, 255, 0.05) 100%);
+      border: 2px solid var(--acc);
+      border-radius: var(--r);
+      padding: 30px;
+      margin-bottom: 40px;
+    }
+    .start-section h2 {
+      color: var(--acc);
+      margin: 0 0 20px;
+      font-size: 20px;
+    }
+    .start-section ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .start-section li {
+      margin: 12px 0;
+      line-height: 1.6;
+    }
+    .start-section strong {
+      color: var(--fg);
+    }
+    @media (max-width: 768px) {
+      header {
+        flex-wrap: wrap;
+      }
+      header .subtext {
+        margin-left: 0;
+        margin-top: 8px;
+        flex-basis: 100%;
+      }
+      main {
+        padding: 24px 16px;
+      }
+      .hero h1 {
+        font-size: 24px;
+      }
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="logo">Drill<span>Pad</span></div>
+      <div class="subtext">Complete Interview Prep System</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>Interview Prep for Top Tech Firms</h1>
+      <p>65 lessons, 7 master guides, complete system to land offers at trading firms, AI infrastructure companies, and AWS.</p>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature">
+        <div class="feature-num">65</div>
+        <div class="feature-text">Lessons</div>
+      </div>
+      <div class="feature">
+        <div class="feature-num">22</div>
+        <div class="feature-text">Modules</div>
+      </div>
+      <div class="feature">
+        <div class="feature-num">50+</div>
+        <div class="feature-text">Hours</div>
+      </div>
+      <div class="feature">
+        <div class="feature-num">3</div>
+        <div class="feature-text">Tracks</div>
+      </div>
+    </div>
+
+    <div class="start-section">
+      <h2>🚀 Quick Start (5 steps)</h2>
+      <ol>
+        <li><strong>Read the guides</strong> — Click "Guides" to understand the system</li>
+        <li><strong>Pick your role</strong> — Trading, AI Infra, AWS, or custom</li>
+        <li><strong>Follow your learning path</strong> — Click "Learn", follow your track (40-50 hours)</li>
+        <li><strong>Practice interviews</strong> — Use "Practice" tab for interview problems</li>
+        <li><strong>Track progress</strong> — Use "Progress" tab to see what you've completed</li>
+      </ol>
+    </div>
+
+    <div class="section-title">Sections</div>
+    <div class="grid">
+      <a href="/guides" class="card">
+        <div class="card-icon">📖</div>
+        <div class="card-title">Guides</div>
+        <p class="card-desc">Master guides with frameworks, storytelling, tactics, scoring rubrics. Start here to understand the system.</p>
+        <div class="card-meta">7 comprehensive guides</div>
+      </a>
+
+      <a href="/learn" class="card">
+        <div class="card-icon">📚</div>
+        <div class="card-title">Learn</div>
+        <p class="card-desc">65 lessons across 22 modules. Foundation + 3 tracks (Trading, AI Infra, AWS). Follow your learning path.</p>
+        <div class="card-meta">40-50 hours of learning</div>
+      </a>
+
+      <a href="/practice" class="card">
+        <div class="card-icon">💻</div>
+        <div class="card-title">Practice</div>
+        <p class="card-desc">Interview-style problems. Use after learning each concept. Build muscle memory for real interviews.</p>
+        <div class="card-meta">Problem sets per lesson</div>
+      </a>
+
+      <a href="/plan" class="card">
+        <div class="card-icon">📋</div>
+        <div class="card-title">Plan</div>
+        <p class="card-desc">10-week prep schedule. Plan your learning, set milestones, track your pace.</p>
+        <div class="card-meta">Customizable 10-week plan</div>
+      </a>
+
+      <a href="/progress" class="card">
+        <div class="card-icon">📊</div>
+        <div class="card-title">Progress</div>
+        <p class="card-desc">Track what you've completed. See readiness score, lessons done, practice problems solved.</p>
+        <div class="card-meta">Your progress dashboard</div>
+      </a>
+    </div>
+
+    <div class="section-title">How to Navigate</div>
+    <p style="color: var(--mut); font-size: 15px; line-height: 1.8;">
+      <strong>This is your main hub.</strong> Click any card above to go to that section. From any section, you can click the logo to return here, or click "Home" if available.
+    </p>
+    <p style="color: var(--mut); font-size: 15px; line-height: 1.8;">
+      <strong>Recommended flow:</strong> Guides → Learn (follow your track) → Practice (do problems) → Plan (schedule) → Progress (track)
+    </p>
+
+  </main>
+</body>
+</html>
