@@ -21,7 +21,7 @@ main{padding:28px 40px;max-width:900px}
 .md table{border-collapse:collapse;margin:.8em 0}.md td,.md th{border:1px solid var(--bd);padding:5px 10px;text-align:left}
 .md blockquote{margin:.6em 0;padding:.1em 1em;border-left:3px solid var(--bd);color:var(--mut)}
 details{border:1px solid var(--bd);border-radius:8px;padding:8px 12px;margin:8px 0;background:var(--surface)}summary{cursor:pointer;font-weight:500}
-.tag{font-size:12px;padding:1px 8px;border-radius:99px;background:var(--code);color:var(--mut);margin-right:4px}.tag.lang{background:var(--acc-bg);color:var(--acc);font-weight:600}
+.tag{font-size:12px;padding:1px 8px;border-radius:99px;background:var(--code);color:var(--mut);margin-right:4px}.tag.unv{color:var(--warn);font-weight:600}.tag.lang{background:var(--acc-bg);color:var(--acc);font-weight:600}
 .prac{display:grid;grid-template-columns:18px 1fr auto auto;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--bd);border-radius:8px;margin:6px 0;background:var(--surface);text-decoration:none;color:var(--fg)}
 .prac:hover{background:var(--code)}.dot{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--bd)}.dot.passing{background:var(--ok);border-color:var(--ok)}.dot.attempted{background:var(--warn);border-color:var(--warn)}.dot.missing{border-style:dashed}
 .nav2{display:flex;justify-content:space-between;margin-top:28px}
@@ -151,7 +151,7 @@ async function open_(mid,lid){
   const pr=les.practice.length?`<h2>Practice</h2>`+les.practice.map(p=>p.status==='missing'?`<div class="prac"><span class="dot missing"></span><span>${esc(p.id)} <small>not yet authored</small></span><span></span><span></span></div>`:`<a class="prac" href="/?p=${encodeURIComponent(p.id)}"><span class="dot ${p.status}"></span><span>${esc(p.title)}</span><span class="tag lang">${esc(LANG[p.language]||p.language)}</span><span class="tag">L${p.level}</span></a>`).join(''):'';
   const prev=idx>0?mod.lessons[idx-1]:null,next=idx<mod.lessons.length-1?mod.lessons[idx+1]:null;
   $('lesson').className='md';
-  $('lesson').innerHTML=`<div style="margin-bottom:8px"><span class="tag lang">${esc(LANG[mod.language]||mod.language)}</span><span class="tag">${esc(mod.title)} · lesson ${idx+1}/${mod.lessons.length}</span></div>${html}${pr}
+  $('lesson').innerHTML=`<div style="margin-bottom:8px"><span class="tag lang">${esc(LANG[mod.language]||mod.language)}</span><span class="tag">${esc(mod.title)} · lesson ${idx+1}/${mod.lessons.length}</span>${les.written?`<span class="tag ${les.verified?'':'unv'}" title="${les.verified?'Checked against primary sources on this date':'Drafted but not yet checked against primary sources. Treat as study notes, not a source.'}">${les.verified?'verified '+esc(les.verified):'unverified draft'}</span>`:''}</div>${html}${pr}
    <div style="margin-top:22px"><button class="btn ${les.done?'':'pri'}" id="done">${les.done?'✓ Done (click to undo)':'Mark lesson done'}</button></div>
    <div class="wbp" id="wbpanel"></div>
    <div class="nav2">${prev?`<a class="btn" href="#" data-m="${mod.id}" data-l="${prev.id}">← ${esc(prev.title)}</a>`:'<span></span>'}${next?`<a class="btn" href="#" data-m="${mod.id}" data-l="${next.id}">${esc(next.title)} →</a>`:''}</div>`;

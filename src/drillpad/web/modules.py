@@ -1,6 +1,7 @@
 """Learning modules (lessons as markdown) with progress and links into practice problems."""
 
 import logging
+import re
 from pathlib import Path
 
 import yaml
@@ -17,6 +18,17 @@ MODULES_DIR = Path(__file__).resolve().parent.parent / "content" / "modules"
 PATHS_FILE = Path(__file__).resolve().parent.parent / "content" / "paths.yaml"
 PRIVATE_STAGE = {"stage_id": "99-private", "stage_title": "Private (local only)"}
 log = logging.getLogger(__name__)
+_VERIFIED = re.compile(r"Last verified:\s*(\d{4}-\d{2}-\d{2})")
+
+
+def _verified(path: Path) -> str | None:
+    """The date from a `Last verified: YYYY-MM-DD` line near the top of a lesson, or None if it has not been checked against sources."""
+    try:
+        with path.open(errors="ignore") as f:
+            m = _VERIFIED.search(f.read(1500))
+    except OSError:
+        return None
+    return m.group(1) if m else None
 
 
 def _load_paths() -> dict:
@@ -129,7 +141,9 @@ def make_router(problems: dict, conn) -> APIRouter:
             for ls in m["lessons"]:
                 practice = [ps.get(i, {"id": i, "title": i, "language": "?", "level": 0, "status": "missing"})
                             for i in ls.get("practice", [])]
-                lessons.append({"id": ls["id"], "title": ls["title"], "written": (m["_dir"] / "lessons" / f"{ls['id']}.md").exists(),
+                lf = m["_dir"] / "lessons" / f"{ls['id']}.md"
+                written = lf.exists()
+                lessons.append({"id": ls["id"], "title": ls["title"], "written": written, "verified": _verified(lf) if written else None,
                                 "done": (m["id"], ls["id"]) in done, "practice": practice})
 
             module_entry = {"id": m["id"], "title": m["title"], "language": m["language"], "description": m["description"],
@@ -205,7 +219,7 @@ def make_router(problems: dict, conn) -> APIRouter:
             raise HTTPException(404, "unknown lesson")
         f = mods[mid]["_dir"] / "lessons" / f"{lid}.md"
         text = f.read_text() if f.exists() else "_This lesson has not been written yet._"
-        return {"module": mid, "lesson": lid, "markdown": text, "written": f.exists()}
+        return {"module": mid, "lesson": lid, "markdown": text, "written": f.exists(), "verified": _verified(f) if f.exists() else None}
 
     @router.post("/modules/{mid}/{lid}/done")
     def mark(mid: str, lid: str, done: bool = True):
