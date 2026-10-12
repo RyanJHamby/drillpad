@@ -47,6 +47,7 @@ exclude:
   - docs/HANDOFF.md
   - docs/problem-bank-plan.md
   - docs/COURSE_BACKLOG.md
+  - docs/CTO_FOUNDER_GAP_MAP.md
   - docs/PUBLISHING.md
   # Firm profiles: they cite local paths and screening history; only the generic family defaults ship
   - src/drillpad/content/firms/*.yaml

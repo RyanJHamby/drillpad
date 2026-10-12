@@ -1,0 +1,88 @@
+// Static-site stand-in for the DrillPad API. Lessons come from data/*.json; progress and whiteboard sessions
+// live in this browser's localStorage. Scheduling is a simplified approximation of the Mac app's FSRS.
+(() => {
+  const KEY = "drillpad.static.v1";
+  const base = new URL(".", document.currentScript.src).href;
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || { done: [], sessions: [], next: 1 }; } catch { return { done: [], sessions: [], next: 1 }; } };
+  const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
+  const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
+  const getJ = (p) => fetch(base + p).then((r) => r.json());
+  const DAY = 864e5;
+
+  function state(rows, now) {
+    let iv = 0, due = 0, t = 0;
+    for (const r of rows) {
+      t = Date.parse(r.at);
+      iv = r.score <= 3 ? 1 : r.score === 4 ? Math.max(3, iv * 2.2) : Math.max(5, iv * 3.5);
+      iv = Math.min(45, iv); due = t + iv * DAY;
+    }
+    const last = rows[rows.length - 1], recent = rows.slice(-3).map((r) => r.score);
+    return { sessions: rows.length, last_score: last.score, last_at: last.at,
+      recent_avg: Math.round(recent.reduce((a, b) => a + b, 0) / recent.length * 100) / 100,
+      due: new Date(due).toISOString(), due_now: due <= now,
+      retrievability: Math.round(Math.pow(0.9, (now - t) / DAY / iv) * 1000) / 1000 };
+  }
+  const forLesson = (s, m, l) => s.sessions.filter((x) => x.m === m && x.l === l).sort((a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : a.id - b.id);
+  const detail = (s, m, l) => { const rows = forLesson(s, m, l);
+    return { module: m, lesson: l, state: rows.length ? state(rows, Date.now()) : null,
+      history: rows.map((r) => ({ id: r.id, score: r.score, notes: r.notes, at: r.at })).reverse() }; };
+
+  async function overview(s) {
+    const mods = await getJ("data/modules.json"), now = Date.now(), by = {};
+    s.sessions.forEach((r) => (by[r.m + "/" + r.l] = by[r.m + "/" + r.l] || []).push(r));
+    const lessons = {}, due = [];
+    for (const [k, rows] of Object.entries(by)) {
+      rows.sort((a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : a.id - b.id);
+      const [m, l] = k.split("/"), mod = mods.find((x) => x.id === m); if (!mod) continue;
+      const les = mod.lessons.find((x) => x.id === l), st = state(rows, now); lessons[k] = st;
+      if (st.due_now) due.push({ module: m, lesson: l, module_title: mod.title, title: les ? les.title : l, ...st });
+    }
+    due.sort((a, b) => a.due < b.due ? -1 : 1);
+    const vals = Object.values(lessons);
+    return { lessons, due, summary: { total_lessons: mods.reduce((n, m) => n + m.lessons.length, 0), whiteboarded: vals.length, due_now: due.length,
+      mean_last_score: vals.length ? Math.round(vals.reduce((a, v) => a + v.last_score, 0) / vals.length * 100) / 100 : null } };
+  }
+
+  async function modules(s) {
+    const mods = await getJ("data/modules.json"), d = new Set(s.done);
+    mods.forEach((m) => { let n = 0; m.lessons.forEach((l) => { l.done = d.has(m.id + "/" + l.id); n += l.done; }); m.done = n; });
+    return mods;
+  }
+  async function curricula(s) {
+    const [cs, mods] = await Promise.all([getJ("data/curricula.json"), modules(s)]), by = Object.fromEntries(mods.map((m) => [m.id, m]));
+    cs.forEach((c) => { let tot = 0; c.levels.forEach((lv) => lv.units.forEach((u) => { const m = by[u.module_id]; if (m) { u.done = m.done; tot += m.done; } }));
+      if (c.progress) c.progress.done = tot; });
+    return cs;
+  }
+
+  const real = window.fetch.bind(window);
+  window.fetch = async (input, init = {}) => {
+    const url = new URL(typeof input === "string" ? input : input.url, location.href);
+    if (!url.pathname.includes("/api/")) return real(input, init);
+    const p = url.pathname.slice(url.pathname.indexOf("/api/") + 5).split("/"), method = (init.method || "GET").toUpperCase(), s = load();
+    try {
+      if (p[0] === "modules" && p.length === 1) return json(await modules(s));
+      if (p[0] === "curricula") return json(await curricula(s));
+      if (p[0] === "modules" && p.length === 3 && p[2] !== "done") return json(await getJ(`data/lessons/${p[1]}__${p[2]}.json`));
+      if (p[0] === "modules" && p[3] === "done") {
+        const k = p[1] + "/" + p[2], on = url.searchParams.get("done") !== "false";
+        s.done = s.done.filter((x) => x !== k); if (on) s.done.push(k); save(s); return json({ done: on });
+      }
+      if (p[0] === "whiteboard") {
+        if (p.length === 1) return json(await overview(s));
+        if (p[1] === "sessions" && method === "DELETE") {
+          const row = s.sessions.find((x) => x.id === +p[2]); if (!row) return json({ detail: "unknown session" }, 404);
+          s.sessions = s.sessions.filter((x) => x.id !== row.id); save(s); return json(detail(s, row.m, row.l));
+        }
+        if (method === "POST") {
+          const b = JSON.parse(init.body), now = new Date(), when = b.at ? new Date(b.at) : now;
+          if (isNaN(when) || when > now.getTime() + 3e5) return json({ detail: "at cannot be in the future" }, 422);
+          s.sessions.push({ id: s.next++, m: p[1], l: p[2], score: b.score, notes: (b.notes || "").trim(), at: when.toISOString() });
+          save(s); return json(detail(s, p[1], p[2]));
+        }
+        return json(detail(s, p[1], p[2]));
+      }
+    } catch (e) { return json({ detail: String(e) }, 500); }
+    return json({ detail: "not available in the static site" }, 404);
+  };
+})();
