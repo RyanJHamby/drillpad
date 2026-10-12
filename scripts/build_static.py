@@ -59,7 +59,7 @@ def main() -> int:
     html = (STATIC / "learn.html").read_text()
     html = re.sub(r'(<meta name="viewport"[^>]*>)', r'\1<script src="shim.js"></script>', html, count=1)
     html = html.replace('href="/static/', 'href="static/').replace('src="/static/', 'src="static/')
-    html = html.replace('href="/static/manifest.webmanifest"', 'href="manifest.webmanifest"')
+    html = html.replace('href="static/manifest.webmanifest"', 'href="manifest.webmanifest"')
     html = html.replace('href="/home"', 'href="./"')
     html = html.replace("</body>", "<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')</script></body>")
     (dest / "index.html").write_text(html)
