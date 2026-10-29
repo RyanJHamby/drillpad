@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>DrillPad · Learn</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><script src="shim.js"></script><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="DrillPad"><meta name="theme-color" content="#0f172a">
+<link rel="stylesheet" href="static/app.css">
 <style>
 :root{--bg:#f7f7f5;--surface:#fff;--fg:#1c1c1a;--mut:#6b6b66;--bd:#e4e3de;--acc:#3b5bdb;--acc-bg:#edf0fd;--ok:#198754;--ok-bg:#e7f5ee;--bad:#c92a2a;--warn:#b7791f;--code:#f1f0ec;--r:12px}
 @media(prefers-color-scheme:dark){:root{--bg:#0e0f11;--surface:#16181b;--fg:#e8e8e6;--mut:#93938d;--bd:#26292d;--acc:#7c95ff;--acc-bg:#1b2140;--ok:#4cc38a;--ok-bg:#12281e;--bad:#ff7b7b;--warn:#e0b252;--code:#1d2024}}
@@ -9,7 +10,7 @@ header{display:flex;align-items:center;gap:10px;padding:12px 24px;background:var
 .logo{font-weight:700;font-size:16px}.logo span{color:var(--acc)}a{color:var(--acc)}
 .btn{border:1px solid var(--bd);background:var(--surface);border-radius:8px;padding:6px 12px;text-decoration:none;color:var(--fg);cursor:pointer;font:inherit;white-space:nowrap}.btn:hover{background:var(--code)}.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}
 .layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:0;min-height:calc(100vh - 57px)}
-nav{background:var(--surface);border-right:1px solid var(--bd);padding:12px 0;overflow:auto;max-height:calc(100vh - 57px);position:sticky;top:57px}
+#nav{background:var(--surface);border-right:1px solid var(--bd);padding:12px 0;overflow:auto;max-height:calc(100vh - 57px);position:sticky;top:57px}
 .mod{padding:10px 18px 4px}.mod h3{margin:0;font-size:14px}.mod small{color:var(--mut)}
 .pbar{height:6px;border-radius:99px;background:var(--code);overflow:hidden;margin:6px 0 4px}.pbar i{display:block;height:100%;background:var(--ok)}
 .les{display:flex;gap:8px;align-items:flex-start;padding:5px 18px 5px 24px;cursor:pointer;border-left:3px solid transparent;font-size:13px}.les:hover{background:var(--bg)}.les.sel{background:var(--acc-bg);border-left-color:var(--acc)}
@@ -26,9 +27,14 @@ details{border:1px solid var(--bd);border-radius:8px;padding:8px 12px;margin:8px
 .prac:hover{background:var(--code)}.dot{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--bd)}.dot.passing{background:var(--ok);border-color:var(--ok)}.dot.attempted{background:var(--warn);border-color:var(--warn)}.dot.missing{border-style:dashed}
 .nav2{display:flex;justify-content:space-between;margin-top:28px}
 .empty{color:var(--mut);padding:60px 0;text-align:center}
-.mermaid{background:var(--surface);border:1px solid var(--bd);border-radius:var(--r);padding:12px;margin:1em 0;display:flex;justify-content:center}
+.mermaid{overflow-x:auto;background:var(--surface);border:1px solid var(--bd);border-radius:var(--r);padding:12px;margin:1em 0;display:flex;justify-content:center}
 .wbm{margin-left:auto;flex:none;width:10px;height:10px;border-radius:2px;border:1.5px solid var(--bd);margin-top:5px}.wbm.ok{background:var(--acc);border-color:var(--acc)}.wbm.due{background:var(--warn);border-color:var(--warn)}
 .wbbar{padding:0 18px 8px}.wbbar .btn{width:100%;text-align:left;font-size:13px}
+.qz,.fin{border:1px solid var(--bd);border-radius:var(--r);background:var(--surface);padding:14px 16px;margin-top:22px}.qz h2,.fin h2{margin:0 0 4px!important}
+.qz .stem{font-weight:600;margin:10px 0 8px;line-height:1.4}.qz .ch{display:block;width:100%;text-align:left;white-space:normal;min-height:44px;margin:6px 0;line-height:1.35}
+.qz .ch.right{border-color:var(--ok);background:var(--ok-bg)}.qz .ch.wrong{border-color:var(--bad)}.qz .why{margin:8px 0;padding:10px 12px;background:var(--code);border-radius:10px;font-size:14px}
+.qz .miss{margin:10px 0;padding-top:8px;border-top:1px solid var(--bd);font-size:14px}.qz small,.fin small{color:var(--mut)}
+.fin .row,.qz .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.fin .btn,.qz .btn{min-height:44px}.fin .btn.on{background:var(--acc-bg);border-color:var(--acc);color:var(--acc);font-weight:600}
 .wbp{border:1px solid var(--bd);border-radius:var(--r);background:var(--surface);padding:14px 16px;margin-top:22px}.wbp h2{margin:0 0 4px!important}
 .wbs{color:var(--mut);margin:2px 0 10px}.wbs b{color:var(--fg)}.wbs .dueb{color:var(--warn);font-weight:600}
 .wbrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}.wbrow input{font:inherit;border:1px solid var(--bd);border-radius:8px;padding:6px 10px;background:var(--bg);color:var(--fg)}.wbrow input[type=text]{flex:1;min-width:200px}
@@ -41,23 +47,45 @@ details{border:1px solid var(--bd);border-radius:8px;padding:8px 12px;margin:8px
 .badge{display:inline-block;font-size:11px;padding:0 7px;border-radius:99px;background:var(--code);color:var(--mut);margin-right:4px}.badge.draft{background:var(--acc-bg);color:var(--acc)}
 .mod.planned{opacity:.6}.mod.planned h3::after{content:" · planned";font-weight:400;color:var(--mut);font-size:12px}.mod.missing h3{color:var(--bad)}
 .lvl{padding:12px 18px 4px;margin-top:8px;border-top:1px solid var(--bd);font-size:11px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
-@media(max-width:900px){.layout{grid-template-columns:1fr}nav{position:static;max-height:none}main{padding:20px}}
+.dgm{display:flex;flex-direction:column;margin:1em 0}.dgm pre,.dgm .mermaid{margin:0;min-width:0}.dgx{order:-1;align-self:flex-end;min-height:36px;padding:0 12px;font-size:13px;margin-bottom:6px}
+#dgv{display:none;position:fixed;inset:0;z-index:20;background:var(--bg);flex-direction:column}#dgv.open{display:flex}
+#dgv .bar{display:flex;gap:8px;align-items:center;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:var(--surface);border-bottom:1px solid var(--bd)}
+#dgv .bar .btn{min-height:44px;min-width:44px}#dgv .bar span{margin-left:auto;color:var(--mut);font-size:12px}
+#dgv .body{flex:1;overflow:auto;padding:12px;touch-action:pan-x pan-y pinch-zoom;-webkit-overflow-scrolling:touch}
+#dgv pre{margin:0;white-space:pre;line-height:1.35;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--fg)}#dgv svg{max-width:none;height:auto}
+#navbtn,#scrim{display:none}
+@media(max-width:900px){
+header{padding:10px 14px;padding-top:calc(10px + env(safe-area-inset-top))}
+#navbtn{display:inline-flex;align-items:center;margin-left:auto;min-height:44px}
+.layout{grid-template-columns:minmax(0,1fr);min-height:0}
+main{min-width:0}
+#nav{position:fixed;top:0;bottom:0;left:0;width:min(88vw,360px);max-height:none;z-index:6;transform:translateX(-102%);transition:transform .2s;
+  padding:env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom))}
+body.navopen #nav{transform:none;box-shadow:0 0 40px #0006}
+body.navopen #scrim{display:block;position:fixed;inset:0;background:#0006;z-index:5}
+main{padding:16px 14px calc(84px + env(safe-area-inset-bottom))}
+.nav2{flex-direction:column;gap:8px}.nav2 .btn{white-space:normal;height:auto;min-height:44px;padding:8px 12px}
+.les{padding:11px 18px 11px 24px}.wbq-item{min-height:44px}.md pre{font-size:12px}.md table{display:block;overflow-x:auto}
+}
 </style></head><body>
 <header><a href="./" style="text-decoration: none; display: flex; align-items: center; gap: 10px; color: inherit;">
   <div class="logo">Drill<span>Pad</span></div>
-</a><span style="color: var(--mut); font-size: 12px;">Learn</span></header>
+</a><span style="color: var(--mut); font-size: 12px;">Learn</span><button class="btn" id="navbtn" aria-controls="nav" aria-expanded="false">Lessons</button></header><div id="scrim"></div>
+<div id="dgv" role="dialog" aria-modal="true" aria-label="Diagram"><div class="bar"><button class="btn" id="dgclose">Close</button><button class="btn" id="dgfit">Fit</button><button class="btn" id="dgdown" aria-label="Smaller">A&minus;</button><button class="btn" id="dgup" aria-label="Larger">A+</button><span id="dgcap"></span></div><div class="body" id="dgbody"></div></div>
 <div class="layout"><nav id="nav"></nav><main><div id="lesson" class="empty">Pick a lesson to begin.</div></main></div>
 <link rel="stylesheet" href="static/vendor/atom-one-light.min.css">
 <link rel="stylesheet" href="static/vendor/atom-one-dark.min.css" media="(prefers-color-scheme: dark)">
 <script src="static/vendor/marked.min.js"></script>
 <script src="static/vendor/purify.min.js"></script>
 <script src="static/vendor/highlight.min.js"></script>
+<script src="static/app.js"></script>
 <script>
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // ---- resilience: libraries are bundled under /static/vendor, but never fail silently if one is missing
+const DARK=matchMedia('(prefers-color-scheme: dark)');
 let _mm=null;
-function ensureMermaid(){return _mm||(_mm=new Promise((ok,no)=>{if(window.mermaid)return ok();const s=document.createElement('script');s.src='/static/vendor/mermaid.min.js';s.onload=()=>{try{mermaid.initialize({startOnLoad:false})}catch{}ok()};s.onerror=()=>no(new Error('mermaid failed to load'));document.head.appendChild(s)}))}
+function ensureMermaid(){return _mm||(_mm=new Promise((ok,no)=>{if(window.mermaid)return ok();const s=document.createElement('script');s.src='/static/vendor/mermaid.min.js';s.onload=()=>{try{mermaid.initialize({startOnLoad:false,theme:DARK.matches?'dark':'default'})}catch{}ok()};s.onerror=()=>no(new Error('mermaid failed to load'));document.head.appendChild(s)}))}
 function renderMd(text){
   if(typeof marked==='undefined'||typeof DOMPurify==='undefined')return `<p style="color:var(--warn)">The markdown renderer did not load, so this lesson is shown as plain text.</p><pre style="white-space:pre-wrap">${esc(text)}</pre>`;
   let html=marked.parse(text,{gfm:true});
@@ -111,7 +139,7 @@ function showCurriculum(){
 }
 function wbMark(m,l){const s=WB.lessons[m+'/'+l];return `<span class="wbm ${s?(s.due_now?'due':'ok'):''}" title="${s?`Whiteboarded ${s.sessions}x · last ${s.last_score}/5 · next ${s.due_now?'due now':when(s.due)}`:'Never whiteboarded'}"></span>`}
 function showQueue(){
-  cur=null;history.replaceState(null,'',`?c=${encodeURIComponent(curSel)}`);renderNav();
+  setNav(false);cur=null;history.replaceState(null,'',`?c=${encodeURIComponent(curSel)}`);renderNav();
   const rows=WB.due.map(d=>`<div class="wbq-item" data-m="${d.module}" data-l="${d.lesson}"><span>${esc(d.title)} <small style="color:var(--mut)">· ${esc(d.module_title)}</small></span><span class="tag">last ${d.last_score}/5 · ${ago(d.last_at)}</span><span class="tag lang">due</span></div>`).join('');
   $('lesson').className='md';
   $('lesson').innerHTML=`<h1>Whiteboard queue</h1><p>${WB.summary.due_now} due now · ${WB.summary.whiteboarded} of ${WB.summary.total_lessons} lessons practiced`+(WB.summary.mean_last_score!=null?` · mean latest score ${WB.summary.mean_last_score}/5`:'')+`</p>`+
@@ -143,7 +171,7 @@ function renderNav(){
   const c=CURS.find(x=>x.id===curSel)||CURS[0];
   if(!c){$('nav').innerHTML='';return}
   const byId={};MODS.forEach(m=>byId[m.id]=m);
-  const wbs=WB.summary,bar=`<div class="wbbar"><button class="btn" id="wbq">Whiteboard queue · <b>${wbs.due_now}</b> due · ${wbs.whiteboarded}/${wbs.total_lessons} practiced</button></div>`;
+  const wbs=WB.summary,bar=`<div class="wbbar"><button class="btn pri" id="wbt">Today</button> <button class="btn" id="wbq">Whiteboard queue · <b>${wbs.due_now}</b> due · ${wbs.whiteboarded}/${wbs.total_lessons} practiced</button></div>`;
   const sel=`<div class="cursel"><select id="cursel" title="Curriculum">${CURS.map(x=>`<option value="${esc(x.id)}" ${x.id===c.id?'selected':''}>${esc(x.title)}${x.source==='private'?' (private)':''}</option>`).join('')}</select></div>`;
   const rq=[...(c.requires.curricula||[]).map(id=>(CURS.find(x=>x.id===id)||{title:id}).title),...(c.requires.modules||[]).map(id=>(MODS.find(m=>m.id===id)||{title:id}).title)];
   const info=`<div class="curinfo">${esc(c.summary)}<div class="row">${c.status?`<span class="badge ${c.status}">${esc(c.status)}</span>`:''}${c.level?`<span class="badge">${esc(c.level)}</span>`:''}<span class="badge">${c.progress.done}/${c.progress.lessons} lessons done</span>${c.progress.planned_units?`<span class="badge">${c.progress.planned_units} planned</span>`:''}</div>${rq.length?`<div class="row">Recommended first: ${rq.map(esc).join(', ')}</div>`:''}</div>`;
@@ -163,7 +191,7 @@ async function open_(mid,lid){
   const mm=MODS.find(m=>m.id===mid);
   const here=CURS.find(c=>c.id===curSel);
   if(mm&&!(here&&here.levels.some(lv=>lv.units.some(u=>u.module_id===mid)))){curSel=(mm.curriculum_ids&&mm.curriculum_ids[0])||curSel}
-  cur={m:mid,l:lid};history.replaceState(null,'',`?c=${encodeURIComponent(curSel)}&m=${mid}&l=${lid}`);renderNav();
+  setNav(false);cur={m:mid,l:lid};history.replaceState(null,'',`?c=${encodeURIComponent(curSel)}&m=${mid}&l=${lid}`);renderNav();
   const mod=MODS.find(m=>m.id===mid),idx=mod.lessons.findIndex(l=>l.id===lid),les=mod.lessons[idx];
   const r=await fetch(`/api/modules/${mid}/${lid}`).then(x=>x.json());
   const html=renderMd(r.markdown);
@@ -171,16 +199,160 @@ async function open_(mid,lid){
   const prev=idx>0?mod.lessons[idx-1]:null,next=idx<mod.lessons.length-1?mod.lessons[idx+1]:null;
   $('lesson').className='md';
   $('lesson').innerHTML=`<div style="margin-bottom:8px"><span class="tag lang">${esc(LANG[mod.language]||mod.language)}</span><span class="tag">${esc(mod.title)} · lesson ${idx+1}/${mod.lessons.length}</span>${les.written?`<span class="tag ${les.verified?'':'unv'}" title="${les.verified?'Checked against primary sources on this date':'Drafted but not yet checked against primary sources. Treat as study notes, not a source.'}">${les.verified?'verified '+esc(les.verified):'unverified draft'}</span>`:''}</div>${html}${pr}
-   <div style="margin-top:22px"><button class="btn ${les.done?'':'pri'}" id="done">${les.done?'✓ Done (click to undo)':'Mark lesson done'}</button></div>
+   <div class="qz" id="quiz" hidden></div>
+   <div class="fin" id="fin"></div>
    <div class="wbp" id="wbpanel"></div>
    <div class="nav2">${prev?`<a class="btn" href="#" data-m="${mod.id}" data-l="${prev.id}">← ${esc(prev.title)}</a>`:'<span></span>'}${next?`<a class="btn" href="#" data-m="${mod.id}" data-l="${next.id}">${esc(next.title)} →</a>`:''}</div>`;
-  document.querySelectorAll('#lesson pre code').forEach(c=>{try{hljs.highlightElement(c)}catch{}});
-  if(document.querySelector('#lesson .mermaid'))ensureMermaid().then(()=>mermaid.contentLoaded()).catch(()=>{});
+  decorateDiagrams();
+  document.querySelectorAll('#lesson pre:not(.dp-diagram) code').forEach(c=>{try{hljs.highlightElement(c)}catch{}});
+  if(document.querySelector('#lesson .mermaid'))ensureMermaid().then(renderMermaid).then(decorateMermaid).catch(()=>{});
   renderWb(mid,lid);
-  $('done').onclick=async()=>{await fetch(`/api/modules/${mid}/${lid}/done?done=${!les.done}`,{method:'POST'});await load({m:mid,l:lid})};
+  renderQuiz(mid,lid);renderFinish(mid,lid,les);
   scrollTo(0,0);
+}
+// ---- end of lesson: a short quiz, then "finish and continue" that picks what to study next
+const dpwNow=()=>{try{return +localStorage.getItem('dp_dpw')||5}catch{return 5}};
+const post=(url,body)=>fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+async function renderQuiz(mid,lid){
+  const box=$('quiz');if(!box)return;
+  let g;try{g=await fetch(`/api/modules/${mid}/${lid}/quiz`).then(r=>r.ok?r.json():{questions:[]})}catch{return}
+  if(!g.questions||!g.questions.length||cur.l!==lid)return;
+  const qs=g.questions;let i=0,right=0;const missed=[];
+  const last=g.last?` <small>Last time: ${g.last.correct}/${g.last.total}</small>`:'';
+  const start=()=>{box.hidden=false;box.innerHTML=`<h2>Check yourself</h2><div>${qs.length} questions, about 3 minutes.${last}</div><div class="row"><button class="btn pri" id="qstart">Start quiz</button></div>`;$('qstart').onclick=()=>{i=0;right=0;missed.length=0;ask()}};
+  const ask=()=>{
+    const q=qs[i];
+    box.innerHTML=`<small>Question ${i+1} of ${qs.length}</small><div class="stem">${esc(q.q)}</div>`+q.choices.map((c,n)=>`<button class="btn ch" data-n="${n}">${esc(c)}</button>`).join('')+`<div id="qfb"></div>`;
+    box.querySelectorAll('.ch').forEach(b=>b.onclick=()=>{
+      const n=+b.dataset.n,ok=n===q.answer;if(ok)right++;else missed.push(i);
+      box.querySelectorAll('.ch').forEach(x=>{x.disabled=true;if(+x.dataset.n===q.answer)x.classList.add('right')});if(!ok)b.classList.add('wrong');
+      $('qfb').innerHTML=`<div class="why"><b>${ok?'Right.':'Not quite.'}</b> ${esc(q.why)}</div><div class="row"><button class="btn pri" id="qnext">${i+1<qs.length?'Next question':'See result'}</button></div>`;
+      $('qnext').onclick=()=>{i++;i<qs.length?ask():done()};
+    });
+  };
+  const done=()=>{
+    post(`/api/modules/${mid}/${lid}/quiz`,{correct:right,total:qs.length,missed}).catch(()=>{});
+    const pct=right/qs.length,msg=pct>=0.8?'Solid. Move on.':pct>=0.6?'Mostly there. Skim the ones you missed.':'Shaky. Reread the lesson, then try again tomorrow.';
+    box.innerHTML=`<h2>${right} of ${qs.length}</h2><div>${msg}</div>`+missed.map(n=>`<div class="miss"><b>${esc(qs[n].q)}</b><br>Answer: ${esc(qs[n].choices[qs[n].answer])}<br><small>${esc(qs[n].why)}</small></div>`).join('')+`<div class="row"><button class="btn" id="qagain">Try again</button></div>`;
+    $('qagain').onclick=()=>{i=0;right=0;missed.length=0;ask()};
+  };
+  start();
+}
+function renderFinish(mid,lid,les){
+  const fin=$('fin');
+  const mins=[15,30,45,60,90];
+  fin.innerHTML=les.done?`<h2>Finished</h2><div><button class="btn" id="fnext">What is next?</button> <button class="btn" id="fundo">Undo done</button></div><div id="fres"></div>`
+    :`<h2>Finished reading?</h2><small>How long did it take? Optional, it makes the plan more honest.</small><div class="row" id="fmins">${mins.map(m=>`<button class="btn" data-min="${m}">${m} min</button>`).join('')}</div><div class="row"><button class="btn pri" id="fgo">Finish and continue</button></div><div id="fres"></div>`;
+  let took=0;
+  const chips=$('fmins');if(chips)chips.onclick=e=>{const b=e.target.closest('[data-min]');if(!b)return;took=+b.dataset.min;chips.querySelectorAll('.btn').forEach(x=>x.classList.toggle('on',x===b))};
+  const go=async()=>{
+    if(!les.done){await fetch(`/api/modules/${mid}/${lid}/done`,{method:'POST'});les.done=true;if(took)await post(`/api/modules/${mid}/${lid}/minutes`,{minutes:took}).catch(()=>{})}
+    await showNext(mid,lid);
+  };
+  const g=$('fgo')||$('fnext');if(g)g.onclick=go;
+  const u=$('fundo');if(u)u.onclick=async()=>{await fetch(`/api/modules/${mid}/${lid}/done?done=false`,{method:'POST'});await load({m:mid,l:lid})};
+}
+async function showNext(mid,lid){
+  const res=$('fres');res.innerHTML='<small>Working out what is next…</small>';
+  let n;try{n=await fetch(`/api/next?module=${encodeURIComponent(mid)}&lesson=${encodeURIComponent(lid)}&days_per_week=${dpwNow()}`).then(r=>r.json())}catch{res.innerHTML='<small>Could not reach the server. Your lesson is saved as done if you were online.</small>';return}
+  if(n.kind==='lesson'){
+    res.innerHTML=`<div class="stem" style="margin-top:12px"><b>Next:</b> ${esc(n.title)}</div><small>${esc(n.module_title)} · ${esc(n.reason)}</small><div class="row"><button class="btn pri" id="fopen">Start next lesson</button><a class="btn" href="/today#rep">Draw this one tonight</a></div>`;
+    $('fopen').onclick=()=>load({m:n.module,l:n.lesson});
+  }else if(n.kind==='rate_depth'){
+    const D=n.depths;
+    res.innerHTML=`<div class="stem" style="margin-top:12px">You finished the lessons ${esc(n.module_title)} needs for L${n.target_depth} ${esc(D[n.target_depth])}. How deep are you now?</div><div class="row">${[1,2,3,4].map(d=>`<button class="btn" data-d="${d}">L${d} ${esc(D[d])}</button>`).join('')}</div>`;
+    res.onclick=async e=>{const b=e.target.closest('[data-d]');if(!b)return;await post(`/api/depth/${encodeURIComponent(n.module)}`,{depth:+b.dataset.d});res.onclick=null;await showNext(mid,lid)};
+  }else res.innerHTML='<div class="stem" style="margin-top:12px">Nothing left on your plan. Rep what you have learned.</div><div class="row"><a class="btn pri" href="/today#rep">Go to reps</a></div>';
 }
 document.addEventListener('change',e=>{if(e.target.id==='cursel'){curSel=e.target.value;try{localStorage.setItem('dp_cur',curSel)}catch{}showCurriculum()}});
 document.addEventListener('click',e=>{if(e.target.closest('#wbq')){showQueue();return}const t=e.target.closest('[data-m][data-l]');if(t){e.preventDefault();open_(t.dataset.m,t.dataset.l)}});
-load();
-</script><script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')</script></body></html>
+// ---- diagram viewer: tap Expand for a fullscreen view that can fit, shrink or enlarge the diagram
+const BOXY=/[─│┌┐└┘├┤┬┴┼═║╔╗╚╝▲▼◄►→←↑↓]|\+-{2,}|-{2,}\+|-->|==>/;  // keep in step with scripts/course.py
+const WIDE=60;  // keep in step with DIAGRAM_COLS in scripts/course.py
+const dg={scale:1,cols:1};
+function wrapDiagram(node,kind){
+  const w=document.createElement('div');w.className='dgm';node.replaceWith(w);w.appendChild(node);
+  const b=document.createElement('button');b.className='btn dgx';b.type='button';b.textContent='Expand';b.setAttribute('aria-label','Expand diagram');
+  b.onclick=()=>openDiagram(node,kind);w.appendChild(b);
+}
+function decorateDiagrams(){
+  document.querySelectorAll('#lesson pre').forEach(pre=>{
+    const code=pre.querySelector('code');
+    if(!code||[...code.classList].some(c=>c.startsWith('language-')&&!/^language-(text|txt|ascii)$/.test(c))||!(BOXY.test(code.textContent)||Math.max(...code.textContent.split('\n').map(l=>l.length))>WIDE))return;
+    pre.classList.add('dp-diagram');wrapDiagram(pre,'ascii');
+  });
+}
+// mermaid.contentLoaded() does nothing once startOnLoad is false, so render the lesson's diagrams explicitly
+function renderMermaid(){
+  const nodes=[...document.querySelectorAll('#lesson .mermaid')];
+  return mermaid.run?mermaid.run({nodes,suppressErrors:true}):Promise.resolve(mermaid.init(undefined,nodes));
+}
+// Mermaid's own width is the size at which its text reads (about 16px); fitting a wide graph to a phone makes it unreadable
+function svgNatural(svg){const v=svg.viewBox&&svg.viewBox.baseVal;return v&&v.width?v.width:svg.getBoundingClientRect().width||300}
+function sizeInlineMermaid(el){
+  const svg=el.querySelector('svg');if(!svg)return;
+  const w=svgNatural(svg)*0.75;
+  if(w>el.clientWidth-24){svg.style.maxWidth='none';svg.style.width=Math.round(w)+'px';el.style.justifyContent='flex-start'}
+}
+function decorateMermaid(){
+  document.querySelectorAll('#lesson .mermaid').forEach(el=>{
+    let tries=0;const t=setInterval(()=>{
+      if(!el.isConnected||el.parentElement.classList.contains('dgm')||++tries>40){clearInterval(t);return}
+      if(el.querySelector('svg')){clearInterval(t);sizeInlineMermaid(el);wrapDiagram(el,'mermaid')}
+    },200);
+  });
+}
+function dgAdjust(how){
+  const pre=$('dgbody').querySelector('pre'),svg=$('dgbody').querySelector('svg');
+  if(pre){
+    const px=how==='fit'?($('dgbody').clientWidth-24)/(dg.cols*0.6):parseFloat(pre.style.fontSize)*(how==='up'?1.25:0.8);
+    pre.style.fontSize=Math.min(28,Math.max(5,px))+'px';
+  }else if(svg){
+    dg.scale=how==='fit'?1:Math.min(4,Math.max(.4,dg.scale*(how==='up'?1.3:1/1.3)));svg.style.width=Math.round(svgNatural(svg)*dg.scale)+'px';
+  }
+}
+function openDiagram(node,kind){
+  const body=$('dgbody');body.innerHTML='';
+  if(kind==='ascii'){
+    const pre=document.createElement('pre');pre.textContent=node.querySelector('code').textContent;body.appendChild(pre);
+    dg.cols=Math.max(1,...pre.textContent.split('\n').map(l=>l.length));$('dgcap').textContent=dg.cols+' columns';
+  }else{
+    body.appendChild(node.querySelector('svg').cloneNode(true));$('dgcap').textContent='';
+  }
+  $('dgv').classList.add('open');document.body.style.overflow='hidden';dg.scale=1;dgAdjust('fit');$('dgclose').focus();
+}
+function closeDiagram(){$('dgv').classList.remove('open');document.body.style.overflow='';$('dgbody').innerHTML=''}
+$('dgclose').onclick=closeDiagram;$('dgfit').onclick=()=>dgAdjust('fit');$('dgup').onclick=()=>dgAdjust('up');$('dgdown').onclick=()=>dgAdjust('down');
+DARK.addEventListener('change',()=>{try{if(window.mermaid)mermaid.initialize({startOnLoad:false,theme:DARK.matches?'dark':'default'})}catch{}if(cur)open_(cur.m,cur.l)});
+function setNav(open){document.body.classList.toggle('navopen',open);$('navbtn').setAttribute('aria-expanded',open)}
+$('navbtn').onclick=()=>setNav(!document.body.classList.contains('navopen'));
+$('scrim').onclick=()=>setNav(false);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDiagram();setNav(false)}});
+const wantNav=new URLSearchParams(location.search).get('nav')==='1'; // read before load(): opening a lesson rewrites the URL
+load().then(()=>{if(wantNav)setNav(true)});
+</script><script>
+// Static-site "Today" screen: what to study now, from the shim's /api/today. Reuses the app's $ / esc / open_ helpers.
+(function(){
+  const per=()=>{try{return Math.max(1,Math.min(6,+localStorage.getItem('dp_per')||2))}catch{return 2}};
+  const row=(x,tag)=>`<div class="wbq-item" data-m="${x.module}" data-l="${x.lesson}"><span>${esc(x.title)} <small style="color:var(--mut)">· ${esc(x.module_title)}</small></span><span class="tag">${tag}</span><span></span></div>`;
+  async function showToday(){
+    setNav(false);cur=null;history.replaceState(null,'','?');renderNav();
+    const t=await fetch('/api/today?per='+per()).then(r=>r.json());
+    const due=t.due.length?`<h2>Review due</h2>`+t.due.map(d=>row({module:d.module,lesson:d.lesson,title:d.title,module_title:d.module_title},'review')).join(''):'';
+    const up=t.upcoming.map((c,i)=>`<h3>Day ${t.day+i+1}</h3>`+c.map(x=>row(x,'later')).join('')).join('');
+    $('lesson').className='md';
+    $('lesson').innerHTML=`<h1>Today</h1><p>Day ${t.day} (started ${esc(t.start)}) · ${t.remaining} lessons left · <label>lessons per day <select id="dpper">${[1,2,3,4,5,6].map(n=>`<option ${n===t.per?'selected':''}>${n}</option>`).join('')}</select></label></p>`+
+      (t.today.length?`<h2>Study now</h2>`+t.today.map(x=>row(x,'today')).join(''):'<div class="empty">Every written lesson is done.</div>')+due+(up?`<h2>Coming up</h2>`+up:'')+
+      `<p style="color:var(--mut);margin-top:18px">Order follows the course stages. After a lesson, close it and whiteboard it from memory, then score yourself; low scores come back for review. Progress is stored in this browser only.</p>`;
+  }
+  // Phones: the sidebar is a drawer, so keep a Today button in the header and open Today when no lesson is requested.
+  const nb=document.getElementById('navbtn');
+  if(nb){nb.insertAdjacentHTML('beforebegin','<button class="btn pri" id="wbt2" style="margin-left:auto">Today</button>');nb.style.marginLeft='8px'}
+  if(!new URLSearchParams(location.search).get('m')){
+    let n=0;const w=setInterval(()=>{if(++n>100)clearInterval(w);else if(typeof MODS!=='undefined'&&MODS.length&&typeof WB!=='undefined'){clearInterval(w);setTimeout(showToday,700)}},100);
+  }
+  document.addEventListener('click',e=>{if(e.target.closest('#wbt,#wbt2')){e.stopPropagation();showToday()}},true);
+  document.addEventListener('change',e=>{if(e.target.id==='dpper'){try{localStorage.setItem('dp_per',e.target.value)}catch{}showToday()}});
+})();
+</script>
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js')</script></body></html>

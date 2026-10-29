@@ -1,0 +1,12 @@
+/* Shared shell for the live app: colour tokens and the phone tab bar. Pages keep their own page-specific CSS. */
+:root{--bg:#f7f7f5;--surface:#fff;--fg:#1c1c1a;--mut:#6b6b66;--bd:#e4e3de;--acc:#3b5bdb;--acc-bg:#edf0fd;--ok:#198754;--ok-bg:#e7f5ee;--bad:#c92a2a;--warn:#b7791f;--code:#f1f0ec;--r:12px}
+@media(prefers-color-scheme:dark){:root{--bg:#0e0f11;--surface:#16181b;--fg:#e8e8e6;--mut:#93938d;--bd:#26292d;--acc:#7c95ff;--acc-bg:#1b2140;--ok:#4cc38a;--ok-bg:#12281e;--bad:#ff7b7b;--warn:#e0b252;--code:#1d2024}}
+
+.tabbar{display:none}
+@media(max-width:900px){
+  .tabbar{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:7;background:var(--surface);
+    border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+  .tabbar a{display:flex;align-items:center;justify-content:center;min-height:56px;font:600 13px/1 -apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;
+    text-decoration:none;color:var(--mut);border-top:3px solid transparent}
+  .tabbar a.on{color:var(--acc);border-top-color:var(--acc)}
+}

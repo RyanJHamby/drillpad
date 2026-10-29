@@ -55,6 +55,33 @@
     return cs;
   }
 
+  // Lessons in learning order: the core curriculum's stage order, written lessons only.
+  async function ordered(s) {
+    const [cs, mods] = await Promise.all([getJ("data/curricula.json"), getJ("data/modules.json")]);
+    const by = Object.fromEntries(mods.map((m) => [m.id, m])), done = new Set(s.done), seen = new Set(), out = [];
+    const core = cs.find((c) => c.id === "core") || cs[0];
+    const ids = core ? core.levels.flatMap((lv) => lv.units.map((u) => u.module_id)) : [];
+    for (const id of [...ids, ...mods.map((m) => m.id)]) {
+      const m = by[id]; if (!m || seen.has(id)) continue; seen.add(id);
+      for (const l of m.lessons) if (l.written) out.push({ module: m.id, lesson: l.id, title: l.title, module_title: m.title, done: done.has(m.id + "/" + l.id) });
+    }
+    return out;
+  }
+  // "Next lesson": first unfinished lesson after the one just finished, else the first unfinished anywhere.
+  async function nextLesson(s, m, l) {
+    const all = await ordered(s), i = all.findIndex((x) => x.module === m && x.lesson === l);
+    const n = all.slice(i + 1).find((x) => !x.done) || all.find((x) => !x.done && !(x.module === m && x.lesson === l));
+    return n ? { kind: "lesson", module: n.module, lesson: n.lesson, title: n.title, module_title: n.module_title, reason: "next unfinished lesson in the course order" } : { kind: "none" };
+  }
+  // "Today": the next `per` unfinished lessons, plus a preview of the following days at the same pace.
+  async function today(s, per) {
+    const todo = (await ordered(s)).filter((x) => !x.done), start = s.start || (s.start = new Date().toISOString().slice(0, 10));
+    save(s);
+    const days = Math.floor((Date.now() - Date.parse(start + "T00:00:00")) / DAY) + 1;
+    const chunks = []; for (let i = 0; i < todo.length && chunks.length < 4; i += per) chunks.push(todo.slice(i, i + per));
+    return { start, day: days, per, remaining: todo.length, today: chunks[0] || [], upcoming: chunks.slice(1), due: (await overview(s)).due };
+  }
+
   const real = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url, location.href);
@@ -63,6 +90,9 @@
     try {
       if (p[0] === "modules" && p.length === 1) return json(await modules(s));
       if (p[0] === "curricula") return json(await curricula(s));
+      if (p[0] === "next") return json(await nextLesson(s, url.searchParams.get("module"), url.searchParams.get("lesson")));
+      if (p[0] === "today") return json(await today(s, Math.max(1, Math.min(6, +url.searchParams.get("per") || 2))));
+      if (p[0] === "start" && method === "POST") { s.start = JSON.parse(init.body).start; save(s); return json({ start: s.start }); }
       if (p[0] === "modules" && p.length === 3 && p[2] !== "done") return json(await getJ(`data/lessons/${p[1]}__${p[2]}.json`));
       if (p[0] === "modules" && p[3] === "done") {
         const k = p[1] + "/" + p[2], on = url.searchParams.get("done") !== "false";
