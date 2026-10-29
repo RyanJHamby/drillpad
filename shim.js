@@ -73,13 +73,17 @@
     const n = all.slice(i + 1).find((x) => !x.done) || all.find((x) => !x.done && !(x.module === m && x.lesson === l));
     return n ? { kind: "lesson", module: n.module, lesson: n.lesson, title: n.title, module_title: n.module_title, reason: "next unfinished lesson in the course order" } : { kind: "none" };
   }
-  // "Today": the next `per` unfinished lessons, plus a preview of the following days at the same pace.
+  // "Today": the unfinished lessons in course order, dealt out `per` a day starting today, one row per calendar date.
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   async function today(s, per) {
-    const todo = (await ordered(s)).filter((x) => !x.done), start = s.start || (s.start = new Date().toISOString().slice(0, 10));
-    save(s);
-    const days = Math.floor((Date.now() - Date.parse(start + "T00:00:00")) / DAY) + 1;
-    const chunks = []; for (let i = 0; i < todo.length && chunks.length < 4; i += per) chunks.push(todo.slice(i, i + per));
-    return { start, day: days, per, remaining: todo.length, today: chunks[0] || [], upcoming: chunks.slice(1), due: (await overview(s)).due };
+    const todo = (await ordered(s)).filter((x) => !x.done), now = new Date();
+    if (!s.start) { s.start = ymd(now); save(s); }
+    const schedule = [];
+    for (let i = 0, d = 0; i < todo.length; i += per, d++) {
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d);
+      schedule.push({ date: ymd(day), lessons: todo.slice(i, i + per) });
+    }
+    return { start: s.start, per, remaining: todo.length, schedule, due: (await overview(s)).due };
   }
 
   const real = window.fetch.bind(window);

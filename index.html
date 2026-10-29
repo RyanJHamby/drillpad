@@ -339,11 +339,15 @@ load().then(()=>{if(wantNav)setNav(true)});
     setNav(false);cur=null;history.replaceState(null,'','?');renderNav();
     const t=await fetch('/api/today?per='+per()).then(r=>r.json());
     const due=t.due.length?`<h2>Review due</h2>`+t.due.map(d=>row({module:d.module,lesson:d.lesson,title:d.title,module_title:d.module_title},'review')).join(''):'';
-    const up=t.upcoming.map((c,i)=>`<h3>Day ${t.day+i+1}</h3>`+c.map(x=>row(x,'later')).join('')).join('');
+    const label=(iso,i)=>i===0?'Today':i===1?'Tomorrow':new Date(iso+'T12:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+    const day=(d,i)=>`<h3>${label(d.date,i)}${i>1?'':` <small style="color:var(--mut)">${esc(new Date(d.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'}))}</small>`}</h3>`+d.lessons.map(x=>row(x,i===0?'today':'later')).join('');
+    const SHOW=14,s=t.schedule,end=s.length?new Date(s[s.length-1].date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'';
     $('lesson').className='md';
-    $('lesson').innerHTML=`<h1>Today</h1><p>Day ${t.day} (started ${esc(t.start)}) · ${t.remaining} lessons left · <label>lessons per day <select id="dpper">${[1,2,3,4,5,6].map(n=>`<option ${n===t.per?'selected':''}>${n}</option>`).join('')}</select></label></p>`+
-      (t.today.length?`<h2>Study now</h2>`+t.today.map(x=>row(x,'today')).join(''):'<div class="empty">Every written lesson is done.</div>')+due+(up?`<h2>Coming up</h2>`+up:'')+
-      `<p style="color:var(--mut);margin-top:18px">Order follows the course stages. After a lesson, close it and whiteboard it from memory, then score yourself; low scores come back for review. Progress is stored in this browser only.</p>`;
+    $('lesson').innerHTML=`<h1>Your schedule</h1><p>${t.remaining} lessons left · <label>lessons per day <select id="dpper">${[1,2,3,4,5,6].map(n=>`<option ${n===t.per?'selected':''}>${n}</option>`).join('')}</select></label>`+(end?`<br>At ${t.per} a day you finish on <b>${esc(end)}</b>.`:'')+`</p>`+
+      (s.length?s.slice(0,SHOW).map(day).join(''):'<div class="empty">Every written lesson is done.</div>')+
+      (s.length>SHOW?`<div class="row"><button class="btn" id="dpall">Show the other ${s.length-SHOW} days</button></div>`:'')+due+
+      `<p style="color:var(--mut);margin-top:18px">Lessons are dealt out in course order, starting today, one calendar date per row. If you skip a day, tap Today again and the schedule restarts from today. Progress is stored in this browser only.</p>`;
+    const more=$('dpall');if(more)more.onclick=()=>{more.outerHTML=s.slice(SHOW).map((d,i)=>day(d,i+SHOW)).join('')};
   }
   // Phones: the sidebar is a drawer, so keep a Today button in the header and open Today when no lesson is requested.
   const nb=document.getElementById('navbtn');
