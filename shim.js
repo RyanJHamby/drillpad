@@ -56,14 +56,15 @@
   }
 
   // Lessons in learning order: the core curriculum's stage order, written lessons only.
-  async function ordered(s) {
+  async function ordered(s, want) {
     const [cs, mods] = await Promise.all([getJ("data/curricula.json"), getJ("data/modules.json")]);
     const by = Object.fromEntries(mods.map((m) => [m.id, m])), done = new Set(s.done), seen = new Set(), out = [];
-    const core = cs.find((c) => c.id === "core") || cs[0];
-    const ids = core ? core.levels.flatMap((lv) => lv.units.map((u) => u.module_id)) : [];
+    const core = cs.find((c) => c.id === want) || cs.find((c) => c.id === "core") || cs[0];
+    ordered.title = core ? core.title : "";
+    const ids = core ? core.levels.flatMap((lv) => lv.units.map((u) => u.module_id)) : [], focus = new Set(ids);
     for (const id of [...ids, ...mods.map((m) => m.id)]) {
       const m = by[id]; if (!m || seen.has(id)) continue; seen.add(id);
-      for (const l of m.lessons) if (l.written) out.push({ module: m.id, lesson: l.id, title: l.title, module_title: m.title, done: done.has(m.id + "/" + l.id) });
+      for (const l of m.lessons) if (l.written) out.push({ module: m.id, lesson: l.id, title: l.title, module_title: m.title, done: done.has(m.id + "/" + l.id), focus: focus.has(m.id) });
     }
     return out;
   }
@@ -75,15 +76,16 @@
   }
   // "Today": the unfinished lessons in course order, dealt out `per` a day starting today, one row per calendar date.
   const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  async function today(s, per) {
-    const todo = (await ordered(s)).filter((x) => !x.done), now = new Date();
+  async function today(s, per, cur) {
+    const todo = (await ordered(s, cur)).filter((x) => !x.done), now = new Date();
     if (!s.start) { s.start = ymd(now); save(s); }
     const schedule = [];
     for (let i = 0, d = 0; i < todo.length; i += per, d++) {
       const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d);
       schedule.push({ date: ymd(day), lessons: todo.slice(i, i + per) });
     }
-    return { start: s.start, per, remaining: todo.length, schedule, due: (await overview(s)).due };
+    const lastFocus = todo.map((x) => x.focus).lastIndexOf(true), focusDay = schedule.length && lastFocus >= 0 ? schedule[Math.floor(lastFocus / per)].date : null;
+    return { start: s.start, curriculum: ordered.title, focusEnd: focusDay, per, remaining: todo.length, schedule, due: (await overview(s)).due };
   }
 
   const real = window.fetch.bind(window);
@@ -95,7 +97,7 @@
       if (p[0] === "modules" && p.length === 1) return json(await modules(s));
       if (p[0] === "curricula") return json(await curricula(s));
       if (p[0] === "next") return json(await nextLesson(s, url.searchParams.get("module"), url.searchParams.get("lesson")));
-      if (p[0] === "today") return json(await today(s, Math.max(1, Math.min(6, +url.searchParams.get("per") || 2))));
+      if (p[0] === "today") return json(await today(s, Math.max(1, Math.min(6, +url.searchParams.get("per") || 3)), url.searchParams.get("c")));
       if (p[0] === "start" && method === "POST") { s.start = JSON.parse(init.body).start; save(s); return json({ start: s.start }); }
       if (p[0] === "modules" && p.length === 3 && p[2] !== "done") return json(await getJ(`data/lessons/${p[1]}__${p[2]}.json`));
       if (p[0] === "modules" && p[3] === "done") {

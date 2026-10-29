@@ -106,7 +106,7 @@ const WBL={1:'blank',2:'shaky',3:'got there, gaps',4:'solid',5:'flawless, cold'}
 const ago=iso=>{const d=Math.floor((Date.now()-new Date(iso))/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago'};
 const when=iso=>{const d=new Date(iso),n=(d-Date.now())/864e5;return n<=0?'now':n<1?'today':new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'})};
 async function loadWb(){try{WB=await fetch('/api/whiteboard').then(r=>r.json())}catch{}}
-try{curSel=localStorage.getItem('dp_cur')||'core'}catch{}
+try{curSel=localStorage.getItem('dp_cur')||'data-plane-inference'}catch{}
 async function load(sel){
   [MODS,CURS]=await Promise.all([fetch('/api/modules').then(r=>r.json()),fetch('/api/curricula').then(r=>r.json()),loadWb()]);
   if(!Array.isArray(CURS)){ // an older server without /api/curricula: fall back to one course grouped by stage
@@ -333,17 +333,18 @@ load().then(()=>{if(wantNav)setNav(true)});
 </script><script>
 // Static-site "Today" screen: what to study now, from the shim's /api/today. Reuses the app's $ / esc / open_ helpers.
 (function(){
-  const per=()=>{try{return Math.max(1,Math.min(6,+localStorage.getItem('dp_per')||2))}catch{return 2}};
+  const per=()=>{try{return Math.max(1,Math.min(6,+localStorage.getItem('dp_per')||3))}catch{return 3}};
   const row=(x,tag)=>`<div class="wbq-item" data-m="${x.module}" data-l="${x.lesson}"><span>${esc(x.title)} <small style="color:var(--mut)">· ${esc(x.module_title)}</small></span><span class="tag">${tag}</span><span></span></div>`;
   async function showToday(){
     setNav(false);cur=null;history.replaceState(null,'','?');renderNav();
-    const t=await fetch('/api/today?per='+per()).then(r=>r.json());
+    const t=await fetch('/api/today?per='+per()+'&c='+encodeURIComponent(curSel)).then(r=>r.json());
     const due=t.due.length?`<h2>Review due</h2>`+t.due.map(d=>row({module:d.module,lesson:d.lesson,title:d.title,module_title:d.module_title},'review')).join(''):'';
     const label=(iso,i)=>i===0?'Today':i===1?'Tomorrow':new Date(iso+'T12:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
     const day=(d,i)=>`<h3>${label(d.date,i)}${i>1?'':` <small style="color:var(--mut)">${esc(new Date(d.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'}))}</small>`}</h3>`+d.lessons.map(x=>row(x,i===0?'today':'later')).join('');
+    const fmtLong=iso=>new Date(iso+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
     const SHOW=14,s=t.schedule,end=s.length?new Date(s[s.length-1].date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'';
     $('lesson').className='md';
-    $('lesson').innerHTML=`<h1>Your schedule</h1><p>${t.remaining} lessons left · <label>lessons per day <select id="dpper">${[1,2,3,4,5,6].map(n=>`<option ${n===t.per?'selected':''}>${n}</option>`).join('')}</select></label>`+(end?`<br>At ${t.per} a day you finish on <b>${esc(end)}</b>.`:'')+`</p>`+
+    $('lesson').innerHTML=`<h1>Your schedule</h1><p>${esc(t.curriculum)}<br>${t.remaining} lessons left · <label>lessons per day <select id="dpper">${[1,2,3,4,5,6].map(n=>`<option ${n===t.per?'selected':''}>${n}</option>`).join('')}</select></label>`+(t.focusEnd?`<br>This path is done by <b>${esc(fmtLong(t.focusEnd))}</b> at ${t.per} a day; the rest of the course follows.`:(end?`<br>At ${t.per} a day you finish on <b>${esc(end)}</b>.`:''))+`</p>`+
       (s.length?s.slice(0,SHOW).map(day).join(''):'<div class="empty">Every written lesson is done.</div>')+
       (s.length>SHOW?`<div class="row"><button class="btn" id="dpall">Show the other ${s.length-SHOW} days</button></div>`:'')+due+
       `<p style="color:var(--mut);margin-top:18px">Lessons are dealt out in course order, starting today, one calendar date per row. If you skip a day, tap Today again and the schedule restarts from today. Progress is stored in this browser only.</p>`;
