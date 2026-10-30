@@ -58,9 +58,15 @@
   // Lessons in learning order: the core curriculum's stage order, written lessons only.
   // The ramp (data/ramp.json, optional): a front-loaded order for its curriculum that comes before the course order.
   const getRamp = () => getJ("data/ramp.json").catch(() => null);
+  // data/due.json (optional, built at publish time from the goals): what is due next after the ramp, in due-date order. Public
+  // modules carry their lessons; private ones are dates only and show as one "Private lesson due" row each, from `window_days`
+  // before their date until you tap it done on this phone (this site cannot see private progress).
+  const getDue = () => getJ("data/due.json").catch(() => null);
+  const PRIV = "__private__";
+  const fmtDay = (iso) => new Date(iso + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const curSel = async () => { try { return localStorage.getItem("dp_cur"); } catch { return null; } };
   async function ordered(s, want) {
-    const [cs, mods, ramp] = await Promise.all([getJ("data/curricula.json"), getJ("data/modules.json"), getRamp()]);
+    const [cs, mods, ramp, due] = await Promise.all([getJ("data/curricula.json"), getJ("data/modules.json"), getRamp(), getDue()]);
     const by = Object.fromEntries(mods.map((m) => [m.id, m])), done = new Set(s.done), seen = new Set(), out = [];
     const rampOn = ramp && ramp.curriculum === want, inRamp = new Set();
     if (rampOn) for (const r of ramp.lessons) {
@@ -70,18 +76,38 @@
       out.push({ module: m, lesson: l, title: les.title, module_title: by[m].title, done: done.has(r.key), focus: true, ramp: true, stage: r.stage });
     }
     ordered.ramp = rampOn ? ramp : null;
+    const dueSeen = new Set();
+    if (rampOn && due) {
+      const now = Date.now(), win = (due.window_days || 14) * DAY, cur = [];
+      due.items.forEach((it, idx) => {
+        if (it.private) { it.milestones.forEach((m, j) => { const t = Date.parse(m.needed_by + "T12:00:00"); if (t - now <= win) cur.push({ idx, t, key: "p" + idx + "_" + j, by: m.needed_by }); }); return; }
+        if (!by[it.module]) return;
+        const ms = it.milestones.find((m) => it.lessons.some((l) => l.depth <= m.depth && !done.has(it.module + "/" + l.id)));
+        if (ms) cur.push({ idx, t: Date.parse(ms.needed_by + "T12:00:00"), it, ms });
+      });
+      cur.sort((a, b) => a.t - b.t || a.idx - b.idx);
+      for (const c of cur) {
+        if (!c.it) { out.push({ module: PRIV, lesson: c.key, title: "Private lesson due by " + fmtDay(c.by), module_title: "open the private app", done: done.has(PRIV + "/" + c.key), focus: false, private: true, needed_by: c.by }); continue; }
+        for (const l of c.it.lessons) {
+          const k = c.it.module + "/" + l.id, les = by[c.it.module].lessons.find((x) => x.id === l.id);
+          if (l.depth > c.ms.depth || inRamp.has(k) || dueSeen.has(k) || !les || !les.written) continue;
+          dueSeen.add(k);
+          out.push({ module: c.it.module, lesson: l.id, title: les.title, module_title: by[c.it.module].title, done: done.has(k), focus: false, due: c.ms.needed_by });
+        }
+      }
+    }
     const core = cs.find((c) => c.id === want) || cs.find((c) => c.id === "core") || cs[0];
     ordered.title = core ? core.title : "";
     const ids = core ? core.levels.flatMap((lv) => lv.units.map((u) => u.module_id)) : [], focus = new Set(ids);
     for (const id of [...ids, ...mods.map((m) => m.id)]) {
       const m = by[id]; if (!m || seen.has(id)) continue; seen.add(id);
-      for (const l of m.lessons) if (l.written && !inRamp.has(m.id + "/" + l.id)) out.push({ module: m.id, lesson: l.id, title: l.title, module_title: m.title, done: done.has(m.id + "/" + l.id), focus: focus.has(m.id) });
+      for (const l of m.lessons) if (l.written && !inRamp.has(m.id + "/" + l.id) && !dueSeen.has(m.id + "/" + l.id)) out.push({ module: m.id, lesson: l.id, title: l.title, module_title: m.title, done: done.has(m.id + "/" + l.id), focus: focus.has(m.id) });
     }
     return out;
   }
   // "Next lesson": first unfinished lesson after the one just finished, else the first unfinished anywhere.
   async function nextLesson(s, m, l) {
-    const all = await ordered(s, (await curSel()) || (await getRamp() || {}).curriculum), i = all.findIndex((x) => x.module === m && x.lesson === l);
+    const all = (await ordered(s, (await curSel()) || (await getRamp() || {}).curriculum)).filter((x) => !x.private), i = all.findIndex((x) => x.module === m && x.lesson === l);
     const n = all.slice(i + 1).find((x) => !x.done) || all.find((x) => !x.done && !(x.module === m && x.lesson === l));
     return n ? { kind: "lesson", module: n.module, lesson: n.lesson, title: n.title, module_title: n.module_title, reason: "next unfinished lesson in the course order" } : { kind: "none" };
   }
@@ -97,7 +123,8 @@
     }
     const lastFocus = todo.map((x) => x.focus).lastIndexOf(true), focusDay = schedule.length && lastFocus >= 0 ? schedule[Math.floor(lastFocus / per)].date : null;
     const lastRamp = todo.map((x) => x.ramp).lastIndexOf(true), rampEnd = schedule.length && lastRamp >= 0 ? schedule[Math.floor(lastRamp / per)].date : null;
-    return { storageOk: save(s), doneCount: s.done.length, start: s.start, curriculum: ordered.title, focusEnd: focusDay, rampEnd, per, remaining: todo.length, schedule, due: (await overview(s)).due };
+    const priv = todo.filter((x) => x.private).map((x) => x.needed_by);
+    return { storageOk: save(s), doneCount: s.done.filter((k) => !k.startsWith(PRIV + "/")).length, start: s.start, curriculum: ordered.title, focusEnd: focusDay, rampEnd, per, remaining: todo.length - priv.length, privateDue: priv, schedule, due: (await overview(s)).due };
   }
 
   const real = window.fetch.bind(window);

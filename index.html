@@ -335,7 +335,7 @@ load().then(()=>{if(wantNav)setNav(true)});
 (function(){
   const per=()=>{try{return Math.max(0,Math.min(6,+localStorage.getItem('dp_per')||0))}catch{return 0}};
   const chk=x=>`<button class="dpchk" data-m="${x.module}" data-l="${x.lesson}" aria-label="Mark done" title="Mark done" style="width:44px;height:44px;border-radius:50%;border:2px solid var(--bd);background:transparent;color:var(--ok);font-size:18px;cursor:pointer">&#10003;</button>`;
-  const row=(x,tag,box)=>`<div class="wbq-item" data-m="${x.module}" data-l="${x.lesson}"><span>${esc(x.title)} <small style="color:var(--mut)">· ${esc(x.module_title)}</small></span><span class="tag">${tag}</span>${box?chk(x):'<span></span>'}</div>`;
+  const row=(x,tag,box)=>`<div class="wbq-item" data-m="${x.module}" data-l="${x.lesson}"><span>${esc(x.title)} <small style="color:var(--mut)">· ${esc(x.module_title)}</small></span><span class="tag">${x.private?'private':tag}</span>${box?chk(x):'<span></span>'}</div>`;
   async function showToday(){
     setNav(false);cur=null;history.replaceState(null,'','?');renderNav();
     const t=await fetch('/api/today?'+(per()?'per='+per()+'&':'')+'c='+encodeURIComponent(curSel)).then(r=>r.json());
@@ -345,7 +345,7 @@ load().then(()=>{if(wantNav)setNav(true)});
     const fmtLong=iso=>new Date(iso+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
     const SHOW=14,s=t.schedule,end=s.length?new Date(s[s.length-1].date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'';
     $('lesson').className='md';
-    $('lesson').innerHTML=`<h1>Your schedule</h1><p>${esc(t.curriculum)}<br>${t.doneCount} marked done · ${t.remaining} lessons left · <label>lessons per day <select id="dpper">${[1,2,3,4,5,6].map(n=>`<option ${n===t.per?'selected':''}>${n}</option>`).join('')}</select></label>`+(t.rampEnd?`<br>The ramp is done by <b>${esc(fmtLong(t.rampEnd))}</b> at ${t.per} a day. After it, the rest of the course.`:'')+(t.focusEnd?`<br>This path is done by <b>${esc(fmtLong(t.focusEnd))}</b> at ${t.per} a day; the rest of the course follows.`:(end?`<br>At ${t.per} a day you finish on <b>${esc(end)}</b>.`:''))+`</p>`+(t.storageOk?'':'<p style="color:var(--bad)"><b>This browser is not saving your progress</b> (private browsing or blocked storage). Marks will be lost; open the site in a normal Safari tab.</p>')+
+    $('lesson').innerHTML=`<h1>Your schedule</h1><p>${esc(t.curriculum)}<br>${t.doneCount} marked done · ${t.remaining} lessons left · <label>lessons per day <select id="dpper">${[1,2,3,4,5,6].map(n=>`<option ${n===t.per?'selected':''}>${n}</option>`).join('')}</select></label>`+(t.rampEnd?`<br>The ramp is done by <b>${esc(fmtLong(t.rampEnd))}</b> at ${t.per} a day. After it, the rest of the course.`:'')+(t.focusEnd?`<br>This path is done by <b>${esc(fmtLong(t.focusEnd))}</b> at ${t.per} a day; the rest of the course follows.`:(end?`<br>At ${t.per} a day you finish on <b>${esc(end)}</b>.`:''))+`</p>`+(t.privateDue&&t.privateDue.length?`<p style="border:1px solid var(--bd);border-radius:8px;padding:10px"><b>Private lessons due</b> by ${[...new Set(t.privateDue)].map(d=>esc(new Date(d+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'}))).join(', ')}. Open the private app on your Mac (or over Tailscale). Tap &#10003; on its row here when you have done it; this site cannot see private progress.</p>`:'')+(t.storageOk?'':'<p style="color:var(--bad)"><b>This browser is not saving your progress</b> (private browsing or blocked storage). Marks will be lost; open the site in a normal Safari tab.</p>')+
       (s.length?s.slice(0,SHOW).map(day).join(''):'<div class="empty">Every written lesson is done.</div>')+
       (s.length>SHOW?`<div class="row"><button class="btn" id="dpall">Show the other ${s.length-SHOW} days</button></div>`:'')+due+
       `<p style="color:var(--mut);margin-top:18px">Lessons are dealt out in course order, starting today, one calendar date per row. If you skip a day, tap Today again and the schedule restarts from today. Progress is stored in this browser only.</p>`;
@@ -358,6 +358,7 @@ load().then(()=>{if(wantNav)setNav(true)});
     let n=0;const w=setInterval(()=>{if(++n>100)clearInterval(w);else if(typeof MODS!=='undefined'&&MODS.length&&typeof WB!=='undefined'){clearInterval(w);setTimeout(showToday,700)}},100);
   }
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch{}
+  document.addEventListener('click',e=>{const r=e.target.closest('.wbq-item');if(r&&r.dataset.m==='__private__'&&!e.target.closest('.dpchk')){e.stopPropagation();e.preventDefault()}},true);
   document.addEventListener('click',async e=>{const c=e.target.closest('.dpchk');if(c){e.stopPropagation();e.preventDefault();
     const r=await fetch(`/api/modules/${c.dataset.m}/${c.dataset.l}/done`,{method:'POST'}).then(x=>x.json()).catch(()=>({saved:false}));
     if(!r.saved)alert('Could not save in this browser. Progress is not being stored (private browsing or blocked storage).');
