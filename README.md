@@ -113,6 +113,9 @@ by AI models from my prompts and outlines, and have not yet had a systematic acc
 not sources. A lesson carries a `Last verified: YYYY-MM-DD` line only after it has been checked against primary sources,
 and unverified claims are tagged `[VERIFY]`.
 
+As of 2026-11-26, all 24 non-merge commits on `main` carry a `Co-Authored-By: Claude` trailer. I committed each one to
+`main` myself or merged it through a pull request; the course-content caveat above still applies.
+
 ## History
 
 This repository starts at its first public snapshot. Earlier development happened in a private working repository,
