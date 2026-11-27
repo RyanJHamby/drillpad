@@ -115,7 +115,7 @@ A 5 microsecond P99.9 order-match latency means:
 
 ---
 
-## Story Card: OrderBookEngine Benchmarking Lesson
+## Worked Example: OrderBookEngine Benchmarking Lesson
 
 **Setup:** Built a low-latency order book in C++20. Expected lock-free SPSC queue to beat mutex + queue, as textbooks say.
 

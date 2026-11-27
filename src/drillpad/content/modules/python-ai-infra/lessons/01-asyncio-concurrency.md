@@ -295,7 +295,7 @@ async def main():
 
 ---
 
-## Story Card: vLLM Async Request Batching
+## Worked Example: vLLM Async Request Batching
 
 **Setup:** vLLM inference server, 1000 concurrent requests arriving from voice-agent clients.
 

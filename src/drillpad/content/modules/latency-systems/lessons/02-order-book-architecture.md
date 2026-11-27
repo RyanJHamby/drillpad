@@ -205,7 +205,7 @@ Operation breakdown (measured):
 
 ---
 
-## Story Card: OrderBookEngine Matching Implementation
+## Worked Example: OrderBookEngine Matching Implementation
 
 **Setup:** Built order book in C++20 targeting sub-microsecond latency for the exchange. First attempt used `std::map` + `std::mutex`.
 

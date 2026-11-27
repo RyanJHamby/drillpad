@@ -237,7 +237,7 @@ instruments -t 'System Trace' ./app
 
 ---
 
-## Story Card: OrderBookEngine Lock-Free Move Semantics
+## Worked Example: OrderBookEngine Lock-Free Move Semantics
 
 **Setup:** High-frequency order book in C++, targeting P99.9 < 5 us.
 

@@ -198,7 +198,7 @@ Without pre-allocated pool (malloc per order):
 
 ---
 
-## Story Card: FlowState Temporal Join Memory
+## Worked Example: FlowState Temporal Join Memory
 
 **Setup:** Built FlowState temporal alignment engine in Rust. Data flow: read partitions → merge-join trades/quotes → output result. Early version used Rust's default allocator.
 

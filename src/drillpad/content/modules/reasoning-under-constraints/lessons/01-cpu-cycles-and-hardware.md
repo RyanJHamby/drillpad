@@ -247,7 +247,7 @@ graph TD
 
 ---
 
-## Story Card: OrderBookEngine P99.9 Spike
+## Worked Example: OrderBookEngine P99.9 Spike
 
 **Setup:** Order book latency budget is P50 < 1 µs, P99.9 < 5 µs.
 

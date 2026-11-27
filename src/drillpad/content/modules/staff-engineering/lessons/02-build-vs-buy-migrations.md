@@ -265,7 +265,7 @@ Best for: critical systems (payment, medical records).
 
 ---
 
-## Story Card: Failed Migration (Data Corruption)
+## Worked Example: Failed Migration (Data Corruption)
 
 **Setup:** Company is migrating from in-house database to managed PostgreSQL.
 

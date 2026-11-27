@@ -268,7 +268,7 @@ __global__ void softmax_kernel(
 
 ---
 
-## Story Card: vLLM KV-Cache Quantization CUDA Kernel
+## Worked Example: vLLM KV-Cache Quantization CUDA Kernel
 
 **Setup:** vLLM inference, KV-cache is 8 GB (float32), taking up 40% of GPU memory. Goal: Quantize to int8 per-token (1/4 memory).
 

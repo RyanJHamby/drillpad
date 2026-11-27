@@ -220,7 +220,7 @@ If any YES → Include only if it unblocks core feature
 
 ---
 
-## Story Card: The Pivoted Expense Tool
+## Worked Example: The Pivoted Expense Tool
 
 **Setup:** Team of 2 founders, $50K runway, 12 weeks to raise or die.
 

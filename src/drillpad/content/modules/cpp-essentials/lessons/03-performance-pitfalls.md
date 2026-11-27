@@ -358,7 +358,7 @@ Investigation:
 
 ---
 
-## Story Card: Data Race in KV-Cache Quantization
+## Worked Example: Data Race in KV-Cache Quantization
 
 **Setup:** vLLM inference, KV-cache is quantized in a background thread to save memory. Inference threads read from the cache.
 

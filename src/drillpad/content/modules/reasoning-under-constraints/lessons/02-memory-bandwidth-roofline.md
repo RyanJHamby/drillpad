@@ -278,7 +278,7 @@ Batch 32: 32 tokens, AI = 32, throughput = 64 GFLOPS (100% GPU)
 
 ---
 
-## Story Card: vLLM Continuous Batching
+## Worked Example: vLLM Continuous Batching
 
 **Setup:** vLLM serves Llama-70B. Decode is memory-bound (10% GPU utilization).
 

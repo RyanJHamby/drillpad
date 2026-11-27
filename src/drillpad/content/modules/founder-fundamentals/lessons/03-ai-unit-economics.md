@@ -261,7 +261,7 @@ Model choice becomes critical.
 
 ---
 
-## Story Card: The Chatbot That Lost Money
+## Worked Example: The Chatbot That Lost Money
 
 **Setup:** Founders built a customer service chatbot for small businesses. Pricing: $500/month.
 
