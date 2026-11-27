@@ -91,11 +91,9 @@ for message in consumer:
 
 ---
 
-## Zonevex Story: Redis Streams Exactly-Once
+## Example: Redis Streams Exactly-Once in a Document Pipeline (Illustrative)
 
-Your resume: "Built async LLM-OCR pipeline, 86% accuracy against 350 real ERCOT outcomes"
-
-**Setup:** Zonevex extracts financing terms from county records (PDF → OCR → LLM → DB).
+**Setup:** An illustrative document-extraction pipeline pulls terms from public records (PDF → OCR → LLM → DB). The code is a sketch, not production code.
 
 ```
 Architecture:

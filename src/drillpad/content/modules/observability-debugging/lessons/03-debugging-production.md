@@ -103,9 +103,9 @@ def should_trace_adaptive(request_id, latency_ms):
 
 ---
 
-## GPU Flight Recorder: Production Debugging Case Study
+## Distributed GPU Profiler: Debugging Case Study (Illustrative)
 
-**Your resume claim:** "Replaced per-collective thresholds (0/30 detected at 10% jitter) with clock-skew-free block-median lag tests; 30/30 detection and attribution across 9 injected fault types"
+*Illustrative example: replacing per-collective thresholds with clock-skew-free block-median lag tests to detect and attribute injected faults.*
 
 **Setup:** 30 fault injections, need to detect all.
 
@@ -166,7 +166,7 @@ print(f"Detection rate: {detected}/30 = {detected/30*100}%")
 # Output: 30/30 = 100%
 ```
 
-**Result:** (Your resume) 30/30 detection (vs 0/30 with naive approach).
+**Result:** In this illustrative setup, the block-median test detects the injected faults that the naive per-collective thresholds miss under jitter.
 
 ---
 

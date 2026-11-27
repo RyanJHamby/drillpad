@@ -69,9 +69,9 @@ with tracer.start_as_current_span("request") as request_span:
 
 ---
 
-## GPU Flight Recorder Example (Your Project)
+## Example: Straggler Attribution in a Distributed GPU Profiler (Illustrative)
 
-**Resume claim:** "Replaced per-collective thresholds (0/30 detected) with clock-skew-free block-median lag tests; 30/30 detection"
+*Illustrative example: per-collective lag thresholds miss stragglers under jitter, while a clock-skew-free block-median lag test catches them.*
 
 **Setup:** Distributed GPU training, 8 GPUs. One GPU is slow → entire training slow.
 

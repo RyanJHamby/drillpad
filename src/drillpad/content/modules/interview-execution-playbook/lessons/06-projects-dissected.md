@@ -1,5 +1,7 @@
 # Your Projects Dissected: Real Analysis & Interview Value
 
+*The projects below are illustrative examples of the kinds of projects candidates bring to interviews. Every number in them is illustrative, chosen to show how to talk about a result, not a measured claim.*
+
 ## What Interviewers Actually Care About
 
 ```
@@ -19,7 +21,7 @@ What separates good from great:
 - Big number + no analysis: 60 points (sounds good, but unsubstantiated)
 - Big number + real bottleneck + fix: 90 points (shows deep understanding)
 
-## OrderBook Engine (1.8M Orders/Sec)
+## Example: An Order Book Engine (High-Throughput Claim)
 
 **What matters:**
 
@@ -52,12 +54,12 @@ What interviewer learns:
 3. "What trade-offs did you make?" (Cache locality vs insertion speed)
 4. "What would break at 10M orders/sec?" (Sharding strategy)
 
-## Payment Adapter (6 Days → 5 Minutes)
+## Example: A Payments Adapter (Big Speedup Claim)
 
 **What matters:**
 
 ```
-Claim: 6 days → 5 min (1728x speedup)
+Claim: onboarding new sellers went from days to minutes
 
 Good interview answer:
   "Bottleneck: Synchronous API calls to payment processor.
@@ -69,7 +71,7 @@ Good interview answer:
    - Complexity: idempotency state, reconciliation job
    - Cost: additional storage for idempotency keys
    
-   Result: 1728x speedup from parallelization.
+   Result: the speedup came from taking slow calls off the critical path.
    
    Failure mode: If payment processor down, we queue.
    Recovery: Manual reconciliation daily."
@@ -87,7 +89,7 @@ What interviewer learns:
 2. "How do you prevent double-charge?" (Idempotency key)
 3. "What's your recovery time?" (Next reconciliation job)
 
-## vLLM Continuous Batching (2.4x Speedup)
+## Example: Continuous Batching in an Inference Server (Speedup Claim)
 
 **What matters:**
 
@@ -122,7 +124,7 @@ What interviewer learns:
 2. "When does continuous batching fail?" (High latency demand, small batches)
 3. "How would you debug low GPU utilization?" (Profiler, memory bottleneck check)
 
-## FlowState (Streaming Alignment, Honest Benchmark)
+## Example: A Streaming Join Library (Honest Benchmark)
 
 **What matters:**
 

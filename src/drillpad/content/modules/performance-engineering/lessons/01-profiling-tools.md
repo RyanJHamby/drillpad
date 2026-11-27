@@ -98,9 +98,9 @@ Analysis:
 
 ---
 
-## Real Example: GPU Flight Recorder
+## Example: A Distributed GPU Profiler (Illustrative)
 
-**Your resume claim:** "GPU Flight Recorder: distributed inference profiling with sub-microsecond precision, straggler detection via clock-skew-free block-median"
+*Illustrative example of a profiler for distributed inference that detects stragglers with a clock-skew-free block-median test.*
 
 **Problem:** 8 GPUs in parallel, but one straggler makes all wait.
 
