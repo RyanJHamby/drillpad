@@ -166,9 +166,11 @@ void deposit(string account, int amount) {
 
 ---
 
-## Story Card: Payment System in Two DCs
+## Worked Example: Payment System in Two DCs (Illustrative)
 
-**Setup:** AWS Marketplace Payment system across two DCs (primary DC and failover DC).
+*Fictional scenario; dollar amounts and timings are illustrative.*
+
+**Setup:** A payment system for an online marketplace runs across two DCs (primary DC and failover DC).
 
 **Incident:** Network link between DCs goes down.
 
@@ -202,7 +204,7 @@ T=600: Manual reconciliation
   Result: $200 unaccounted (manual investigation)
 ```
 
-**Prevention (your fix):**
+**Prevention:**
 1. **Faster detection:** 5s heartbeat (vs 60s) — catch partition sooner
 2. **Read-only on partition:** DC2 stops accepting writes when DC1 unreachable — prevents divergence
 3. **Quorum-based:** Use 3 DCs (or 2 + witness) — ensure only one has authority

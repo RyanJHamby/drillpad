@@ -474,9 +474,9 @@ Enterprise tier: Dedicated database per tenant
 
 ---
 
-## Story Card: Stripe Payment Processing During Fraud Storm
+## Worked Example: Payment Processing During a Fraud Storm (Hypothetical)
 
-**Context:** Stripe processes payments globally. One day, a wave of high-frequency fraud tests hit.
+**Context:** A payment processor serves merchants globally. One day, a wave of high-frequency card-testing fraud hits. Numbers are illustrative.
 
 **Scenario:**
 ```

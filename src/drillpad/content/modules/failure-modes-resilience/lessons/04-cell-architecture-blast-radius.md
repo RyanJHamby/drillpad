@@ -433,9 +433,9 @@ Blast radius:
 
 ---
 
-## Story Card: AWS Region Failure Handling
+## Worked Example: Cloud Region Failure Handling (Hypothetical)
 
-**Context:** AWS serves global customers. US-EAST-1 is the largest region. 2023 incident: power issue in one availability zone.
+**Context:** A service runs on a public cloud across several regions; US-EAST-1 carries the most traffic. Hypothetical incident: a power issue in one availability zone.
 
 **Scenario:**
 ```

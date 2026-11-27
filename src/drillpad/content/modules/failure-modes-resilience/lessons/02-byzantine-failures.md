@@ -23,9 +23,11 @@ Byzantine failure (hard):
 
 ---
 
-## Real Example: SiteWise ExternalId Uniqueness
+## Example: External-ID Uniqueness in a Device Registry
 
-**Setup:** AWS IoT SiteWise manages 100K+ IoT devices across accounts.
+*Fictional scenario: a multi-tenant device registry for industrial sensors. Numbers in this lesson are illustrative.*
+
+**Setup:** The registry stores a large number of devices across many customer accounts.
 
 **Invariant:** Each device has unique ExternalId per customer account. Two devices in same account can't have same ExternalId.
 
@@ -139,16 +141,16 @@ Causal consistency (middle ground):
   Lag: ~10ms, better throughput than strong
 ```
 
-**SiteWise design choice:** Causal consistency
+**Design choice in this example:** Causal consistency
 - Writes are causally ordered (if A writes X, then B writes Y, all readers see X before Y)
 - But replication lag can cause Byzantine failures (secondary returns stale external_id)
 - Mitigation: audit logs + periodic reconciliation
 
 ---
 
-## Story Card: SiteWise ExternalId System
+## Worked Example: Device Registry ExternalId System (Illustrative)
 
-**Setup:** You built ExternalId system ensuring uniqueness across 100K+ devices, 10K+ accounts.
+**Setup:** A team builds the ExternalId system for the fictional registry above, ensuring per-account uniqueness at high write volume.
 
 **Initial design:** Strong consistency (every write waits for replicas)
 - Problem: 10M writes/day * 50ms latency = 139 hours of waiting per day
@@ -160,10 +162,10 @@ Causal consistency (middle ground):
 - Audit: log every write for reconciliation
 - Reconciliation: batch job finds divergence, corrects nightly
 
-**Result:** (Resume claim: "cutting customer onboarding time 40%")
-- Reduced latency: 50ms → 5ms (strong → causal)
-- Fast device creation: 10x throughput improvement
-- Onboarding: 40% faster (devices created faster, fewer manual checks needed)
+**Expected effect:**
+- Lower write latency (writes no longer wait on replica confirmation)
+- Higher device-creation throughput
+- Faster customer onboarding (devices are created faster and fewer manual checks are needed)
 
 **Key insight:** You can't have perfect consistency and high throughput. Choose causal consistency, then add audit trails to detect Byzantine failures.
 
