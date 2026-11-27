@@ -55,11 +55,11 @@ HALF_OPEN (test recovery):
 
 ---
 
-## Real Example: Your Payment Adapter
+## Example: A Payments Adapter at a Mid-Size Marketplace
 
-**Claim:** "circuit breakers, idempotent retries, async callbacks, cutting Japanese seller onboarding from 6 days to 5 minutes"
+*Fictional scenario, used to illustrate the pattern. Thresholds and delays below are illustrative.*
 
-**Root cause:** Payment provider was slow. Payment Adapter kept retrying synchronously, blocking sellers.
+**Root cause:** Payment provider was slow. The payments adapter kept retrying synchronously, blocking sellers.
 
 **Solution:**
 1. **Async** - don't block seller on payment result
@@ -67,7 +67,7 @@ HALF_OPEN (test recovery):
 3. **Exponential backoff** - retry with 1s, 2s, 4s, 8s delays (with jitter)
 4. **Idempotency** - safe to retry (idempotency key)
 
-**Result:** Seller sees "accepted" in 5 min (vs 6 days waiting for provider to recover)
+**Result:** Sellers get an "accepted" response promptly and the payment result arrives asynchronously, instead of onboarding stalling until the provider recovers
 
 ---
 
@@ -160,7 +160,7 @@ class ExponentialBackoffRetry:
                 print(f"Attempt {attempt + 1}/{self.max_retries} failed: {e}. Retrying in {delay:.1f}s...")
                 time.sleep(delay)
 
-# Real usage pattern: payment adapter
+# Illustrative usage pattern: payments adapter
 class PaymentAdapter:
     def __init__(self):
         self.breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=30, name="PaymentProvider")

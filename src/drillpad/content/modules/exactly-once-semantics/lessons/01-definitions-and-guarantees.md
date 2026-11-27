@@ -160,11 +160,11 @@ Solution: Atomic compare-and-set
 
 ---
 
-## Story Card: Payment Adapter (Your Resume)
+## Worked Example: A Payments Adapter at a Mid-Size Marketplace (Illustrative)
 
-**Resume claim:** "Payment Adapter Service (idempotent retries, async callbacks), cutting Japanese seller onboarding from 6 days to 5 minutes"
+*Fictional scenario; the code below is an illustrative sketch, not production code.*
 
-**Setup:** AWS Marketplace, sellers submit orders via API.
+**Setup:** An online marketplace where sellers submit orders via API, and a payments adapter sits between the API and third-party payment providers.
 
 **Problem:** Without idempotency
 - Seller submits order, gets timeout
@@ -206,7 +206,7 @@ else:
 **Result:**
 - Seller doesn't see "error, please retry"
 - No manual reconciliation
-- Onboarding time: 6 days → 5 minutes (99% faster)
+- Onboarding no longer blocks on retries and reconciliation
 - Confidence: exactly-once guarantee = no double-charges
 
 ---

@@ -39,9 +39,9 @@ Send back on network
 
 ---
 
-## Real Design (OrderBookEngine from Your Resume)
+## Example Design (Illustrative)
 
-Your claim: "P50 0.21 µs, P99.9 3.1–3.2 µs, up to 1.8M orders/sec"
+*An illustrative single-threaded C++ order book design targeting sub-microsecond median latency.*
 
 ```
 Data structures:

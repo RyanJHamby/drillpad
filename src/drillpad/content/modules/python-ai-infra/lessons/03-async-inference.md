@@ -302,7 +302,7 @@ async def health_check():
 
 ---
 
-## Story Card: vLLM Batching in Production
+## Worked Example: vLLM Batching in Production
 
 **Setup:** vLLM serving Llama-70B, ~500 concurrent users (GPT API compatible).
 

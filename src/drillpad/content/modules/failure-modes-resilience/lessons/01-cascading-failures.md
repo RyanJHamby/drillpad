@@ -59,28 +59,30 @@ graph LR
 
 ---
 
-## Real Example: AWS Marketplace Payment Adapter
+## Example: A Payments Adapter at a Mid-Size Marketplace
+
+*Fictional scenario. The timeline numbers are illustrative, chosen to show the mechanism.*
 
 **Setup:** Payment flow for sellers.
 
 ```
 1. Seller submits order → API
-2. API calls Payment Adapter Service
-3. Adapter calls third-party payment provider (Stripe, etc.)
+2. API calls Payments Adapter Service
+3. Adapter calls third-party payment provider
 4. Payment provider responds (normally 50ms)
 5. Adapter returns result to API
 6. API confirms to seller
 ```
 
-**Incident: Stripe API starts timing out (500ms instead of 50ms)**
+**Incident: Provider API starts timing out (500ms instead of 50ms)**
 
 ```
 Timeline:
 
-T=0: Stripe API slow (network congestion on their end)
+T=0: Provider API slow (network congestion on their end)
   Adapter waiting 500ms for response (timeout threshold is 30s)
   
-T=1s: Stripe timeout affects 100 requests/s
+T=1s: Provider timeout affects 100 requests/s
   Adapter now has 100 in-flight requests, each waiting 500ms
   Queue accumulates: new requests arrive faster than old ones complete
   
@@ -89,7 +91,7 @@ T=5s: Adapter queue = 500 requests
   
 T=10s: Adapter queue = 1000 requests
   Adapter is now slow (100ms per request)
-  API detects: "Payment Adapter is slow, let me route around it"
+  API detects: "Payments Adapter is slow, let me route around it"
   But there's no alternate, so API queues requests internally
   
 T=15s: API queue grows
@@ -103,15 +105,15 @@ T=20s: Seller dashboard hammered by refreshes
   Dashboard timeouts propagate to UI
   
 T=30s: Cascading failure:
-  - Stripe slow
+  - Provider slow
   - Adapter queued
   - API queued
   - Dashboard slow
   - Sellers can't complete orders
-  - AWS Marketplace revenue drops
+  - Marketplace revenue drops
 ```
 
-**Cost:** Japanese seller onboarding drops from 5 minutes to error state (6 days lost productivity vs. resume claim "6 days → 5 minutes after fix").
+**Cost:** Onboarding new sellers, which depends on this payment path, stalls entirely until the dependency recovers and the backlog drains.
 
 ---
 
@@ -139,7 +141,7 @@ Client timeout:    0%  → 5%      ← FAIL RATE RISES
 ```
 
 **Root cause chain:**
-1. Stripe is slow → find Stripe metric (external)
+1. Provider is slow → find the provider metric (external)
 2. Adapter queue grows → find Adapter queue metric (internal)
 3. API queue grows → find API queue metric (internal)
 4. Clients timeout → find timeout metric (external)
@@ -155,21 +157,21 @@ Client timeout:    0%  → 5%      ← FAIL RATE RISES
 class PaymentAdapter {
   void process_payment(PaymentRequest req) {
     try {
-      // Set timeout: if Stripe doesn't respond in 5s, fail fast
-      response = stripe.charge(req.amount).wait_with_timeout(5 seconds);
+      // Set timeout: if the provider doesn't respond in 5s, fail fast
+      response = provider.charge(req.amount).wait_with_timeout(5 seconds);
       return response;
     } catch (TimeoutException e) {
       // Fail fast, don't queue forever
-      log_error("Stripe timeout, failing request");
+      log_error("Provider timeout, failing request");
       return FAILED;
     }
   }
   
-  // Circuit breaker: if Stripe fails 10 times in a row, stop trying
-  CircuitBreaker stripe_breaker;
+  // Circuit breaker: if the provider fails 10 times in a row, stop trying
+  CircuitBreaker provider_breaker;
   
-  if (stripe_breaker.is_open()) {
-    log_error("Stripe circuit open, failing fast");
+  if (provider_breaker.is_open()) {
+    log_error("Provider circuit open, failing fast");
     return FAILED;  // Don't wait
   }
 }
@@ -200,7 +202,7 @@ class PaymentAdapter {
     while (true) {
       req = queue.pop();  // Wait for request
       try {
-        response = stripe.charge(req.amount).wait(5s);
+        response = provider.charge(req.amount).wait(5s);
         send_result(req.id, response);
       } catch (TimeoutException e) {
         // Log failure, don't retry here
@@ -232,9 +234,9 @@ If High-value fills up to 50, they don't block Standard sellers.
 
 ---
 
-## Story Card: Payment Adapter Cascade (Your Resume)
+## Worked Example: Payments Adapter Cascade (Illustrative)
 
-**Setup:** AWS Marketplace Payment Adapter. Japanese seller onboarding was taking 6 days (before your fix).
+**Setup:** The same fictional payments adapter at a marketplace. Onboarding new sellers is slow and unreliable because payment verification keeps stalling.
 
 **Root cause investigation:**
 1. Seller submits order
@@ -247,7 +249,7 @@ If High-value fills up to 50, they don't block Standard sellers.
 8. Seller saw "Payment failed" but couldn't retry (system down)
 9. Manual intervention: restart, lose in-flight payments, reconcile later
 
-**Fix:** (Your claim: reduced from 6 days to 5 minutes)
+**Fix:**
 1. Add timeout (5s) on payment provider calls
 2. Add circuit breaker (if 10 failures, stop trying for 1 minute)
 3. Add bounded queue (max 100 requests)
@@ -258,7 +260,7 @@ If High-value fills up to 50, they don't block Standard sellers.
 - Timeout kicks in, fail fast (no queue buildup)
 - Circuit breaker prevents cascading retries
 - Async callbacks: seller notified later, API returns immediately
-- Onboarding time: 6 days → 5 minutes (99% faster)
+- Onboarding no longer stalls behind a slow provider: verification completes asynchronously instead of blocking
 
 **Key insight:** One slow dependency shouldn't take down the whole system. Timeouts, circuit breakers, and async patterns are non-negotiable.
 

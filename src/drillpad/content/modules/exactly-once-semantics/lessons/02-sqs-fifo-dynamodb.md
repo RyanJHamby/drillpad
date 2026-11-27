@@ -120,9 +120,9 @@ Architecture:
 
 ---
 
-## Real Example: Payment Adapter (AWS Marketplace)
+## Example: A Payments Adapter at a Mid-Size Marketplace
 
-Your implementation (Resume claim: "SQS FIFO + DynamoDB conditional writes"):
+*Fictional scenario. The code is an illustrative sketch of SQS FIFO + DynamoDB conditional writes, not production code:*
 
 ```python
 class PaymentAdapter:
@@ -181,7 +181,7 @@ class PaymentAdapter:
         return result
 ```
 
-**Result:** Japanese seller onboarding 6 days → 5 minutes (from resume).
+**Result:** Retries and redeliveries hit the conditional write and return the stored result, so a payment is charged at most once per idempotency key.
 
 ---
 

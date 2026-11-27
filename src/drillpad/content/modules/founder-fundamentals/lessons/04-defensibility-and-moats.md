@@ -354,7 +354,7 @@ Moat strength
 
 ---
 
-## Story Card: The Analytics Tool That Lost to Tableau
+## Worked Example: The Analytics Tool That Lost to Tableau
 
 **Setup:** 2012. Three founders build "AnalyticsGo," an analytics dashboard for SMBs.
 

@@ -178,7 +178,7 @@ BEST PRACTICE:
 
 ---
 
-## Story Card: Feature Launch During Low Error Budget
+## Worked Example: Feature Launch During Low Error Budget
 
 **Scenario:** It's end of month. Error budget is nearly empty.
 

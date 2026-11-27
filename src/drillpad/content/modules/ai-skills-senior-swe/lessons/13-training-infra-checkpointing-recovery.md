@@ -503,7 +503,7 @@ def resume(checkpoint):
 
 ---
 
-## Story Card: Scaling Llama Training
+## Worked Example: Scaling Llama Training
 
 **Context:** Training Llama 70B on 8x H100 cluster. Original plan: 30-day run.
 

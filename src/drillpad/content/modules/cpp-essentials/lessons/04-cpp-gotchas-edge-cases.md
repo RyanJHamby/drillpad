@@ -443,7 +443,7 @@ process(req);  // Safe: request still alive, even though HTTP closed
 
 ---
 
-## Story Card: Order Book Allocator Optimization
+## Worked Example: Order Book Allocator Optimization
 
 **Setup:** Trading-firm interview, design an order book for latency < 1 us P99.9.
 

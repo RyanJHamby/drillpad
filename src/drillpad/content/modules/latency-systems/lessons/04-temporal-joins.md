@@ -206,7 +206,7 @@ FlowState: Streaming merge-scan.
 
 ---
 
-## Story Card: FlowState Benchmark Lesson
+## Worked Example: FlowState Benchmark Lesson
 
 **Setup:** Built FlowState as a faster alternative to pandas `merge_asof`. Initial README claimed 1.8x speedup over Polars.
 

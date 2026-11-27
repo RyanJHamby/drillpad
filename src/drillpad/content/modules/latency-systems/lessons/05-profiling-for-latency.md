@@ -199,7 +199,7 @@ Top time consumers (cumulative, from the flame graph):
 
 ---
 
-## Story Card: OrderBookEngine Benchmark + Speedscope
+## Worked Example: OrderBookEngine Benchmark + Speedscope
 
 **Setup:** Built order book with sub-microsecond latency, claimed it publicly. But had only profiled locally; never published the flame graph.
 

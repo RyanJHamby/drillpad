@@ -312,9 +312,9 @@ Option 3: Reason from first principles (right)
 
 ---
 
-## Story Card: Leading Cross-Team Change
+## Worked Example: Leading Cross-Team Change
 
-**Scenario:** Payment team (your team) wants to change how transactions are logged. This affects 5 other teams (fraud, analytics, ops, compliance).
+**Scenario:** The payments team (the team you are on) wants to change how transactions are logged. This affects 5 other teams (fraud, analytics, ops, compliance).
 
 **Mistake: Not using influence**
 

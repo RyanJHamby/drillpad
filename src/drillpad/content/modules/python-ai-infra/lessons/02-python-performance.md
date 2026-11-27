@@ -228,7 +228,7 @@ print(counter)  # Expected: 4M. Actual: ~1.5M (GIL prevents true parallelism)
 
 ---
 
-## Story Card: Embedding Bottleneck in a Speech-Inference Server
+## Worked Example: Embedding Bottleneck in a Speech-Inference Server
 
 **Setup (illustrative numbers):** A speech-emotion inference server, ~1000 concurrent requests/sec. Each request encodes speech to embeddings (model.encode() is NumPy-based, takes ~100 ms per request).
 

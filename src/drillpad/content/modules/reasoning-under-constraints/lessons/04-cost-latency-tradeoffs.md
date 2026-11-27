@@ -306,9 +306,9 @@ Decision: H100 16 GPU (lower cost, still meets constraints)
 
 ---
 
-## Story Card: Infrastructure Scaling Decision at Anthropic
+## Worked Example: Infrastructure Scaling Decision at an AI Lab (Hypothetical)
 
-**Setup:** Training Claude. Initial model took 100 hours on 64 A100 GPUs ($19,200).
+**Setup:** A lab is training a large model; all figures are illustrative. Initial model took 100 hours on 64 A100 GPUs ($19,200).
 
 Next iteration needed 2x training time (200 hours). Options:
 

@@ -116,7 +116,7 @@ Speedup
 
 ---
 
-## Real Example: GPU Flight Recorder (Your Project)
+## Example: A Distributed GPU Profiler (Illustrative)
 
 **Setup:** Distributed GPU training. 8 GPUs, detecting stragglers using NCCL collective timings + NVML telemetry.
 
@@ -239,9 +239,9 @@ Insight: beyond some point (here, 4 GPUs), adding more doesn't help.
 
 ---
 
-## Story Card: GPU Flight Recorder Scaling Analysis
+## Worked Example: GPU Flight Recorder Scaling Analysis
 
-**Setup:** You built GPU Flight Recorder. Initially tested on 4 GPUs with 1.8x speedup. Scaled to 8 GPUs, expecting 3.6x. Got only 1.5x.
+**Setup:** A distributed GPU profiling tool (illustrative numbers). Initially tested on 4 GPUs with 1.8x speedup. Scaled to 8 GPUs, expecting 3.6x. Got only 1.5x.
 
 **Investigation:**
 

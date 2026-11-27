@@ -198,7 +198,7 @@ graph TD
 
 ---
 
-## Story Card: RFC Prevents Post-Launch Crisis
+## Worked Example: RFC Prevents Post-Launch Crisis
 
 **Setup:** Team is building a new orders API. One engineer starts coding, another reviews.
 

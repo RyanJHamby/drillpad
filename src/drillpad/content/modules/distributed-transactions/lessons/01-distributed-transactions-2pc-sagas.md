@@ -367,7 +367,7 @@ Timeline:
 
 ---
 
-## Story Card: Ride-Sharing Booking
+## Worked Example: Ride-Sharing Booking
 
 ```
 System: Book a ride (charge card, allocate driver, create booking, notify)

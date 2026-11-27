@@ -428,7 +428,7 @@ Quality gate:
 
 ---
 
-## Story Card: Customer Support RAG Failure
+## Worked Example: Customer Support RAG Failure
 
 **Context:** SaaS company builds customer support chatbot with RAG. Knowledge base: 10,000 help articles.
 

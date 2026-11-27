@@ -275,7 +275,7 @@ Expansion revenue contribution:
 
 ---
 
-## Story Card: The Overpriced Startup
+## Worked Example: The Overpriced Startup
 
 **Setup:** AI email tool for sales teams, $100K seed, 6-month runway.
 

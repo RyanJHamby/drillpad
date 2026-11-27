@@ -346,7 +346,7 @@ Derived data (current status):
 
 ---
 
-## Story Card: Payment Processor Bug
+## Worked Example: Payment Processor Bug
 
 ```
 System: Process payment, update order status, notify customer
@@ -450,7 +450,7 @@ Solution:
 
 ---
 
-## Story Card: E-commerce Payment Reconciliation
+## Worked Example: E-commerce Payment Reconciliation
 
 ```
 System: Order → Payment Service → Inventory Service

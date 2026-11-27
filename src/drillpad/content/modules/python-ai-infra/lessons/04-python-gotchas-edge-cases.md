@@ -383,7 +383,7 @@ C = A @ B  # C code, releases GIL
 
 ---
 
-## Story Card: Cache Deduplication Problem
+## Worked Example: Cache Deduplication Problem
 
 **Setup:** A phone-screen style problem. Implement a cache in front of a slow service. Multiple concurrent requests for the same key should be deduplicated (only one hits the backend; others wait for the result).
 

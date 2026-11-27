@@ -1,6 +1,6 @@
-# Payments: Payment Adapter (Exactly-Once, Idempotency, Reconciliation)
+# Payments: Payments Adapter (Exactly-Once, Idempotency, Reconciliation)
 
-## Firm Archetype: AWS, Stripe, Block, PayPal
+## Firm Archetype: Stripe, Block, PayPal
 
 **Problem:** Process payments safely:
 - No double-charges
@@ -113,9 +113,9 @@ def reconcile_payments():
 
 ---
 
-## Real Example (Your Resume Claim)
+## Example: A Payments Adapter at a Mid-Size Marketplace
 
-"Payment Adapter Service (parallel third-party verification, circuit breakers, idempotent retries, async callbacks), cutting Japanese seller onboarding from 6 days to 5 minutes"
+*Fictional scenario used to illustrate the design.*
 
 **Problem:** Sellers had to wait days for payment confirmation.
 
@@ -128,7 +128,7 @@ def reconcile_payments():
 - Circuit breaker: if payment provider down, fail fast (don't queue forever)
 - Parallel verification: check other payment methods in parallel
 
-**Result:** Seller sees "Payment accepted" in 5 minutes (vs 6 days waiting for confirmation).
+**Result:** Sellers get a prompt "Payment accepted" response and the final result arrives asynchronously, instead of waiting days for synchronous confirmation.
 
 ---
 

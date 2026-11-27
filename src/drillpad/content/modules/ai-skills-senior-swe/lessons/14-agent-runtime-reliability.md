@@ -514,7 +514,7 @@ Example dashboard:
 
 ---
 
-## Story Card: Slack Message Agent Gone Wrong
+## Worked Example: Slack Message Agent Gone Wrong
 
 **Context:** Agent sends messages to Slack via `send_message(channel, text)` tool.
 
